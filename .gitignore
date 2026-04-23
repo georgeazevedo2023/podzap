@@ -28,6 +28,9 @@ yarn-debug.log*
 # claude code local state
 .claude/
 
+# playwright mcp scratch
+.playwright-mcp/
+
 # supabase
 supabase/.temp/
 supabase/.branches/
