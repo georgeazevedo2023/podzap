@@ -175,15 +175,35 @@ Relatório consolidado: [`docs/MVP-COMPLETION.md`](./docs/MVP-COMPLETION.md).
 
 ---
 
-## 🧊 Pós-MVP
+## 🧹 Housekeeping pós-MVP
 
-- **Fase 12:** Personalização avançada (múltiplas vozes, estilos custom)
-- **Fase 13:** Dashboard analytics (métricas de uso, retenção)
-- **Fase 14:** Clips / highlights (cortes curtos do áudio)
-- **Fase 15:** Vídeo resumo
-- **Fase 16:** Memória de grupo (contexto entre resumos)
-- **Fase 17:** IA conversacional sobre resumos passados
-- **Fase 18:** Integração NotebookLM (opcional)
+### Fase 12 — Correção visual + superadmin + remove `/health` 🟡 (PASS WITH CONCERNS)
+
+Entregue em 2026-04-22. Ver [`docs/audits/fase-12-audit.md`](./docs/audits/fase-12-audit.md).
+
+- [x] Remover rota `/health` (healthcheck Docker agora em `/`)
+- [x] Tema **dark** aplicado em todas as rotas do route group `(app)` via `data-theme="dark"` no wrapper
+- [x] Migration `0007_superadmin.sql` + helper `public.is_superadmin()` + script `scripts/set-superadmin.mjs`
+- [x] Componentes visuais portados: `PodCover`, `PlayerWave`, `Waveform`, `MicMascot`, `StatCard` em `components/ui/`
+- [x] Service layer `lib/stats/service.ts` (`getHomeStats`) com 19 testes novos
+- [x] `/home` redesenhada 1:1 com `podZAP/screen_home.jsx` (hero player, stats row, grid últimos eps, 3 painéis sidebar)
+- [ ] 🧊 Criar `/settings` e migrar conteúdo do antigo `SettingsCard` (removido da home nesta fase)
+- [ ] 🧊 `HeroPlayer` refetch de signed URL antes de expirar (hoje `<audio>` quebra após 1h)
+- [ ] 🧊 GenerateQuickCard: avaliar modal inline vs link pra `/schedule` (hoje link)
+- [ ] 🧊 Expandir policies RLS relevantes com `or public.is_superadmin()` (tenants, whatsapp_instances, ai_calls)
+- [ ] 🧊 Admin panel `/admin` (pós-MVP — usa `is_superadmin()` gate server-side)
+
+---
+
+## 🧊 Pós-MVP (backlog PRD)
+
+- **Fase 13:** Personalização avançada (múltiplas vozes, estilos custom)
+- **Fase 14:** Dashboard analytics (métricas de uso, retenção)
+- **Fase 15:** Clips / highlights (cortes curtos do áudio)
+- **Fase 16:** Vídeo resumo
+- **Fase 17:** Memória de grupo (contexto entre resumos)
+- **Fase 18:** IA conversacional sobre resumos passados
+- **Fase 19:** Integração NotebookLM (opcional)
 
 ---
 

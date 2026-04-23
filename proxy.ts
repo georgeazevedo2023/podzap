@@ -42,7 +42,7 @@ function isProtectedPath(pathname: string): boolean {
  *      truth because it has tenant context), but catching it here avoids a
  *      pointless render pass + keeps the attack surface tighter.
  *
- * Intentionally NOT protected: `/`, `/login`, `/auth/*`, `/logout`, `/health`,
+ * Intentionally NOT protected: `/`, `/login`, `/auth/*`, `/logout`,
  * `/_next/*`, `/api/webhooks/*` (webhooks are excluded by the matcher below).
  */
 export async function proxy(request: NextRequest) {

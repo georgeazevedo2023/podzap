@@ -46,10 +46,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 USER nextjs
 EXPOSE 3000
 
-# Healthcheck bate em /health — retorna 200 se o Next subiu.
+# Healthcheck bate em / — landing retorna 200 se o Next subiu.
 # Portainer mostra o estado verde/vermelho no dashboard.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3000/health > /dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/ > /dev/null || exit 1
 
 # Standalone gera server.js na raiz — executa direto sem npm
 CMD ["node", "server.js"]

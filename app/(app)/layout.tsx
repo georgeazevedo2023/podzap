@@ -117,7 +117,12 @@ export default async function AppLayout({
   ]);
 
   return (
+    // `data-theme="dark"` flips the semantic tokens (--bg, --surface, --text,
+    // --stroke, shadow) declared in `app/globals.css`. Applying it on the
+    // wrapper (not <html>) keeps `/login`, `/auth/*`, and the landing page
+    // on the default light palette while every `(app)` route renders dark.
     <div
+      data-theme="dark"
       style={{
         display: 'flex',
         minHeight: '100vh',

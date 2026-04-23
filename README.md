@@ -59,4 +59,11 @@ Next.js 16 · TypeScript · Tailwind v4 · Supabase · Inngest · UAZAPI · Groq
 
 **Pendente validação humana** (não automatizável): escanear 1 QR real, gerar 1 resumo com custo real observado, receber 1 áudio real no WhatsApp.
 
-Ver também [`ROADMAP.md`](./ROADMAP.md), [`CLAUDE.md`](./CLAUDE.md) e os 11 audits em [`docs/audits/`](./docs/audits/).
+### Fase 12 (pós-MVP housekeeping) — 2026-04-22
+
+- Route `/health` removida (healthcheck Docker agora bate em `/`)
+- Tema **dark** forçado nas rotas do route group `(app)` (`/login` e landing seguem claros)
+- **Superadmin** (cross-tenant admin capability) — migration `0007_superadmin.sql` + helper `public.is_superadmin()` + script `scripts/set-superadmin.mjs` pra promoção via CLI. Ver [`docs/integrations/superadmin.md`](./docs/integrations/superadmin.md).
+- `/home` redesenhada 1:1 com o protótipo `podZAP/screen_home.jsx` — hero player com waveform animado, 4 stat cards, grid de últimos episódios, e 3 painéis laterais. Service `lib/stats/service.ts` alimenta o layout com dados reais. Débitos residuais em [`docs/audits/fase-12-audit.md`](./docs/audits/fase-12-audit.md).
+
+Ver também [`ROADMAP.md`](./ROADMAP.md), [`CLAUDE.md`](./CLAUDE.md) e os 12 audits em [`docs/audits/`](./docs/audits/).

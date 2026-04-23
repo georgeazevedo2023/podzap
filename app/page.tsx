@@ -31,8 +31,8 @@ export default function HomePage() {
         </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Link href="/health" className="btn btn-purple">
-            verificar conexão
+          <Link href="/login" className="btn btn-purple">
+            entrar
           </Link>
           <a
             href="https://github.com/georgeazevedo2023/podzap"
