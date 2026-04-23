@@ -206,7 +206,7 @@ export function Sidebar({
               marginTop: 2,
             }}
           >
-            {tenantName ? tenantName : 'zap → podcast'}
+            zap → podcast
           </div>
         </div>
       </div>

@@ -15,6 +15,11 @@ import { GroupCard } from './GroupCard';
  *  gets chatty on long lists. */
 const SEARCH_DEBOUNCE_MS = 150;
 
+/** Client-side page size. Fetching the full list (100-800 rows) is ~50-100KB
+ *  of JSON which is fine; rendering 700+ cards with handlers kills the tab.
+ *  25 per page keeps the DOM small and pagination instant (no round-trip). */
+const PAGE_SIZE = 25;
+
 export interface GroupsListProps {
   initial: GroupView[];
 }
@@ -50,6 +55,7 @@ export function GroupsList({ initial }: GroupsListProps) {
   const [monitoredOnly, setMonitoredOnly] = useState(false);
   const [toggling, setToggling] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
 
   // Keep `groups` in sync when the server re-renders this component with a
   // new `initial` prop (e.g. after `router.refresh()` post-sync). We only
@@ -85,6 +91,20 @@ export function GroupsList({ initial }: GroupsListProps) {
       return true;
     });
   }, [groups, debouncedSearch, monitoredOnly]);
+
+  // Reset to page 0 whenever the filter result set changes (search text or
+  // monitored-only toggle). Prevents "page 12 of 3" after narrowing.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, monitoredOnly]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageItems = useMemo(
+    () => filtered.slice(pageStart, pageStart + PAGE_SIZE),
+    [filtered, pageStart],
+  );
 
   const handleToggle = useCallback(
     async (groupId: string, nextOn: boolean) => {
@@ -309,25 +329,35 @@ export function GroupsList({ initial }: GroupsListProps) {
 
       {/* Grid */}
       {filtered.length > 0 ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit, minmax(320px, 1fr))',
-            gap: 16,
-          }}
-        >
-          {filtered.map((group) => (
-            <GroupCard
-              key={group.id}
-              group={group}
-              isToggling={toggling.has(group.id)}
-              onToggle={(on) => {
-                void handleToggle(group.id, on);
-              }}
-            />
-          ))}
-        </div>
+        <>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {pageItems.map((group) => (
+              <GroupCard
+                key={group.id}
+                group={group}
+                isToggling={toggling.has(group.id)}
+                onToggle={(on) => {
+                  void handleToggle(group.id, on);
+                }}
+              />
+            ))}
+          </div>
+
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={PAGE_SIZE}
+            onChange={setPage}
+          />
+        </>
       ) : (
         <FilterEmptyState
           hasQuery={debouncedSearch.length > 0}
@@ -344,6 +374,109 @@ export function GroupsList({ initial }: GroupsListProps) {
 }
 
 export default GroupsList;
+
+/* -------------------------------------------------------------------------- */
+/* Pagination                                                                 */
+/* -------------------------------------------------------------------------- */
+
+interface PaginationProps {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onChange: (page: number) => void;
+}
+
+function Pagination({
+  page,
+  totalPages,
+  totalItems,
+  pageSize,
+  onChange,
+}: PaginationProps) {
+  if (totalPages <= 1) return null;
+
+  const from = page * pageSize + 1;
+  const to = Math.min((page + 1) * pageSize, totalItems);
+  const canPrev = page > 0;
+  const canNext = page < totalPages - 1;
+
+  const scrollToTop = () => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '14px 20px',
+        background: 'var(--surface)',
+        border: '2.5px solid var(--stroke)',
+        borderRadius: 'var(--radius-lg)',
+        boxShadow: 'var(--shadow-chunk)',
+        flexWrap: 'wrap',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 600,
+          color: 'var(--text-dim)',
+        }}
+      >
+        <span style={{ color: 'var(--text)', fontWeight: 800 }}>
+          {from}–{to}
+        </span>{' '}
+        de <span style={{ color: 'var(--text)', fontWeight: 800 }}>{totalItems}</span>
+        {' · '}
+        página <span style={{ color: 'var(--text)', fontWeight: 800 }}>{page + 1}</span>
+        {' / '}
+        {totalPages}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={!canPrev}
+          onClick={() => {
+            onChange(Math.max(0, page - 1));
+            scrollToTop();
+          }}
+          aria-label="Página anterior"
+          style={{
+            opacity: canPrev ? 1 : 0.4,
+            cursor: canPrev ? 'pointer' : 'not-allowed',
+            padding: '8px 14px',
+          }}
+        >
+          ← anterior
+        </button>
+        <button
+          type="button"
+          className="btn btn-purple"
+          disabled={!canNext}
+          onClick={() => {
+            onChange(Math.min(totalPages - 1, page + 1));
+            scrollToTop();
+          }}
+          aria-label="Próxima página"
+          style={{
+            opacity: canNext ? 1 : 0.4,
+            cursor: canNext ? 'pointer' : 'not-allowed',
+            padding: '8px 14px',
+          }}
+        >
+          próxima →
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 /* Local components                                                           */
