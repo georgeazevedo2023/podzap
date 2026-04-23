@@ -1,23 +1,61 @@
+# Node / build artifacts
 node_modules
 .next
+out
+dist
+coverage
+.nyc_output
+*.tsbuildinfo
+
+# Env files — never ship secrets in the image
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Git / VCS
 .git
 .gitignore
+.gitattributes
+
+# Docker
 .dockerignore
 Dockerfile
 docker-compose.yml
 docker-compose.*.yml
+
+# IDE / editor
 .vscode
 .idea
+*.swp
+
+# Claude Code / AI tooling
 .claude
+.planning
 .playwright-mcp
-coverage
-.nyc_output
-*.log
-npm-debug.log*
+
+# Tests — não precisam rodar dentro da imagem
 tests
 vitest.config.ts
-podZAP/uploads
-docs/audits/screenshots
+playwright.config.*
+
+# Docs e protótipos — não são servidos em runtime
+docs
+podZAP
+podZAP*.html
+README.md
+CLAUDE.md
+ROADMAP.md
+*.md
+
+# Scripts de manutenção (rodam localmente, não dentro do container)
+scripts
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS junk
+.DS_Store
+Thumbs.db

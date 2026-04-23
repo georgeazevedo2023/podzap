@@ -1,0 +1,117 @@
+# ============================================================================
+# podZAP — Portainer Stack (Hetzner VPS + Traefik + Swarm)
+# ============================================================================
+#
+# HOW TO DEPLOY IN PORTAINER
+# --------------------------
+# 1. Portainer → Stacks → "Add stack" → Name: podzap
+# 2. Build method:
+#    - "Repository" (recommended): point at this repo, path = docker-compose.stack.yml,
+#      enable "Automatic updates" + "GitOps updates" polling (or use webhook below)
+#    - OR "Upload" this file directly
+# 3. Open "Environment variables" tab and fill in EVERY `${VAR}` below
+#    (use .env.production.example as a reference — do NOT drop a .env file on the host)
+# 4. Click "Deploy the stack"
+# 5. After first deploy, enable the Service webhook:
+#      Stacks → podzap → Service webhook → copy URL
+#      Paste into GitHub Actions (or a registry webhook) to trigger auto-redeploy
+#      whenever a new `:latest` image lands on GHCR.
+#
+# PREREQUISITES ON THE HOST
+# -------------------------
+# - Docker Swarm mode active (`docker swarm init` if not yet)
+# - Traefik already running on the host with entrypoint `websecure` (443/tcp)
+#   and cert resolver named `letsencryptresolver`
+# - External overlay network `wsmart` already created and shared with Traefik:
+#      docker network create --driver overlay --attachable wsmart
+# - DNS A record `podzap.wsmart.com.br → <VPS public IP>`
+# - GHCR pull access — if the image is private, add a registry credential in
+#   Portainer (Registries → Add → GitHub Container Registry) and select it
+#   when deploying the stack
+#
+# ============================================================================
+
+services:
+  podzap:
+    image: ghcr.io/georgeazevedo2023/podzap:latest
+    networks:
+      - wsmart
+
+    environment:
+      # --- App (hardcoded for prod) ---
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: https://podzap.wsmart.com.br
+      APP_URL: https://podzap.wsmart.com.br
+      PORT: "3000"
+
+      # --- Supabase ---
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+
+      # --- UAZAPI ---
+      UAZAPI_BASE_URL: ${UAZAPI_BASE_URL}
+      UAZAPI_ADMIN_TOKEN: ${UAZAPI_ADMIN_TOKEN}
+      UAZAPI_WEBHOOK_SECRET: ${UAZAPI_WEBHOOK_SECRET}
+
+      # --- Groq (STT) ---
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_STT_MODEL: ${GROQ_STT_MODEL}
+
+      # --- Gemini (Vision + LLM + TTS) ---
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL}
+      GEMINI_LLM_MODEL: ${GEMINI_LLM_MODEL}
+      GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL}
+
+      # --- OpenAI (fallback, optional) ---
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_LLM_MODEL: ${OPENAI_LLM_MODEL}
+
+      # --- Inngest Cloud (NEVER set INNGEST_DEV in prod) ---
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY}
+
+      # --- Security ---
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 0
+      update_config:
+        order: start-first
+        parallelism: 1
+        failure_action: rollback
+        delay: 10s
+      rollback_config:
+        order: start-first
+        parallelism: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=wsmart"
+        - "traefik.http.routers.podzap.rule=Host(`podzap.wsmart.com.br`)"
+        - "traefik.http.routers.podzap.entrypoints=websecure"
+        - "traefik.http.routers.podzap.tls.certresolver=letsencryptresolver"
+        - "traefik.http.services.podzap.loadbalancer.server.port=3000"
+
+networks:
+  wsmart:
+    external: true

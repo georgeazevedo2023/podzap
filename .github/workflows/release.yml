@@ -1,0 +1,112 @@
+# Workflow de release: build da imagem Docker, push pro GHCR
+# e disparo do webhook do Portainer pra redeploy na VPS Hetzner.
+#
+# Fluxo: push em main / tag vX.Y.Z / dispatch manual
+#   -> build linux/amd64 com cache GHA
+#   -> push pra ghcr.io/georgeazevedo2023/podzap
+#   -> (só em main) curl no webhook do Portainer pra pull+redeploy
+name: release
+
+on:
+  # Deploy contínuo em cada push pra main
+  push:
+    branches:
+      - main
+    tags:
+      # Releases versionadas (ex.: v1.2.3) -> gera tag semver na imagem
+      - 'v*.*.*'
+  # Permite disparar manualmente pela UI do GitHub Actions
+  workflow_dispatch:
+
+# Permissões mínimas: read no repo, write em packages pra empurrar no GHCR
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1) Checkout do código
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2) QEMU + Buildx: mesmo que só buildemos amd64, o Buildx habilita cache avançado
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3) Login no GitHub Container Registry usando o token efêmero do workflow
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 4) Gera tags e labels automaticamente:
+      #    - latest  (só em main)
+      #    - sha curto (7 chars) pra rastreabilidade
+      #    - semver quando for push de tag vX.Y.Z
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/georgeazevedo2023/podzap
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+
+      # 5) Build + push da imagem com cache do GitHub Actions
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Portainer (algumas versões) quebra com manifests de proveniência
+          provenance: false
+
+      # 6) Webhook do Portainer: só dispara em push pra main
+      #    (não em tag nem workflow_dispatch, pra evitar redeploy acidental).
+      #    Faz no-op silencioso se o secret não estiver configurado.
+      - name: Trigger Portainer redeploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          if [ -z "$PORTAINER_WEBHOOK_URL" ]; then
+            echo "PORTAINER_WEBHOOK_URL não configurado — pulando redeploy."
+            exit 0
+          fi
+          echo "Disparando webhook do Portainer..."
+          curl -fsS -X POST -m 30 "$PORTAINER_WEBHOOK_URL"
+          echo "Webhook disparado com sucesso."
+
+      # 7) Resumo visível na aba Summary do run
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## podZAP release"
+            echo ""
+            echo "**Event:** \`${{ github.event_name }}\`"
+            echo "**Ref:** \`${{ github.ref }}\`"
+            echo "**Commit:** \`${{ github.sha }}\`"
+            echo ""
+            echo "### Image tags"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo ""
+            echo "### Digest"
+            echo '`${{ steps.build.outputs.digest }}`'
+          } >> "$GITHUB_STEP_SUMMARY"
