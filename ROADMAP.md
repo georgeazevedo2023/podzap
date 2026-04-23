@@ -90,7 +90,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 6 — Filtro de relevância + agrupamento 🟡
+### Fase 6 — Filtro de relevância + agrupamento ✅
 **Objetivo:** remover ruído e agrupar mensagens em tópicos coerentes.
 
 - [ ] Filtro: remover "ok", "kkk", stickers, stopwords
@@ -102,7 +102,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 7 — Geração do resumo ⬜
+### Fase 7 — Geração do resumo 🟡
 **Objetivo:** LLM produz resumo narrativo estilo podcast.
 
 - [ ] Prompt engineering (tom leve, cita participantes, narrativa fluida)

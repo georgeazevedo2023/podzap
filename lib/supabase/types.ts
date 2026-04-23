@@ -14,6 +14,76 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_calls: {
+        Row: {
+          cost_cents: number
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          message_id: string | null
+          model: string
+          operation: string
+          provider: string
+          summary_id: string | null
+          tenant_id: string
+          tokens_in: number
+          tokens_out: number
+        }
+        Insert: {
+          cost_cents?: number
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          message_id?: string | null
+          model: string
+          operation: string
+          provider: string
+          summary_id?: string | null
+          tenant_id: string
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Update: {
+          cost_cents?: number
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          message_id?: string | null
+          model?: string
+          operation?: string
+          provider?: string
+          summary_id?: string | null
+          tenant_id?: string
+          tokens_in?: number
+          tokens_out?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_calls_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_calls_summary_id_fkey"
+            columns: ["summary_id"]
+            isOneToOne: false
+            referencedRelation: "summaries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_calls_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audios: {
         Row: {
           created_at: string

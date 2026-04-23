@@ -25,6 +25,7 @@ import { serve } from "inngest/next";
 
 import { inngest } from "@/inngest/client";
 import { describeImage } from "@/inngest/functions/describe-image";
+import { generateSummaryFunction } from "@/inngest/functions/generate-summary";
 import { mediaDownloadRetryWorker } from "@/inngest/functions/media-download-retry";
 import { ping } from "@/inngest/functions/ping";
 import { retryPendingDownloads } from "@/inngest/functions/retry-pending";
@@ -40,5 +41,6 @@ export const { GET, POST, PUT } = serve({
     retryPendingDownloads,
     mediaDownloadRetryWorker,
     transcriptionRetry,
+    generateSummaryFunction,
   ],
 });

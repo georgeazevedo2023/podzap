@@ -73,6 +73,29 @@ export const mediaDownloadRetry = eventType("media.download.retry", {
 });
 
 /**
+ * Manual trigger for summary generation. Emitted by
+ * `POST /api/summaries/generate` (and, later, by the schedule runner in
+ * Fase 9) when a user asks for a fresh narrative summary of a group over
+ * a given period. The handler (`inngest/functions/generate-summary.ts`)
+ * delegates to `lib/summary/generator.ts#generateSummary`.
+ *
+ * Keeping this out-of-band is intentional: Gemini 2.5 Pro calls can take
+ * 10-30s and we don't want to hold the HTTP request open that long.
+ */
+export const summaryRequested = eventType("summary.requested", {
+  schema: staticSchema<{
+    tenantId: string;
+    groupId: string;
+    /** ISO-8601 string; rehydrated to `Date` inside the worker. */
+    periodStart: string;
+    /** ISO-8601 string; rehydrated to `Date` inside the worker. */
+    periodEnd: string;
+    /** Optional — omit to use the generator's default ("fun"). */
+    tone?: "formal" | "fun" | "corporate";
+  }>(),
+});
+
+/**
  * Health-check event handled by `inngest/functions/ping.ts`. Used by
  * smoke tests to confirm the worker runtime is up and the event
  * subscription is wired. Never emitted in production traffic.

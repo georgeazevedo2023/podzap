@@ -41,4 +41,4 @@ Next.js 15 · TypeScript · Tailwind · Supabase · Inngest · UAZAPI · Groq ·
 
 ## 📦 Status
 
-MVP em desenvolvimento. Fases 0–5 concluídas (fundação, auth+multi-tenancy, conexão WhatsApp via UAZAPI, listagem/seleção de grupos, captura de mensagens via webhook, transcrição multimodal via Groq Whisper + Gemini Vision orquestrada pelo Inngest); **Fase 6 (filtro de relevância + agrupamento por tópicos — pipeline `filter → cluster → normalize` rumo ao LLM da Fase 7) em andamento**. Ver [`ROADMAP.md`](./ROADMAP.md) e [`docs/integrations/pipeline.md`](./docs/integrations/pipeline.md).
+MVP em desenvolvimento. Fases 0–6 concluídas (fundação, auth+multi-tenancy, conexão WhatsApp via UAZAPI, listagem/seleção de grupos, captura de mensagens via webhook, transcrição multimodal via Groq Whisper + Gemini Vision orquestrada pelo Inngest, pipeline `filter → cluster → normalize`); **Fase 7 (geração do resumo via Gemini 2.5 Pro, com tom configurável, tracking de custo em `ai_calls` e saída em `summaries` com status `pending_review`) em andamento**. Ver [`ROADMAP.md`](./ROADMAP.md) e [`docs/integrations/summary-generation.md`](./docs/integrations/summary-generation.md).

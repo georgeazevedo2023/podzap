@@ -118,14 +118,59 @@ export async function generateSummary(input: SummaryInput): Promise<SummaryResul
     throw new AiError('invalid_input', 'Cannot summarise an empty message list');
   }
 
+  const prompt = buildPrompt(input);
+  return callGeminiJson({
+    systemPrompt: null,
+    userPrompt: prompt,
+    promptVersion: SUMMARY_PROMPT_VERSION,
+  });
+}
+
+/**
+ * Phase 7 orchestrator API — accepts a pre-built `(systemPrompt, userPrompt)`
+ * pair from `lib/summary/prompt.ts` rather than re-deriving the prompt from
+ * raw messages. Keeps the legacy `generateSummary(SummaryInput)` signature
+ * intact for earlier callers while letting the Fase 7 pipeline own prompt
+ * construction end-to-end (tone-aware, topic-aware, with its own version
+ * string).
+ *
+ * Returns the same `{ text, topics, model, promptVersion }` shape; the
+ * `promptVersion` echoed back matches the one passed in — so downstream
+ * `summaries.prompt_version` reflects the exact revision that produced the
+ * text, not an internal constant.
+ */
+export type GenerateSummaryFromPromptInput = {
+  systemPrompt: string;
+  userPrompt: string;
+  promptVersion: string;
+};
+
+export async function generateSummaryFromPrompt(
+  input: GenerateSummaryFromPromptInput,
+): Promise<SummaryResult> {
+  if (!input.userPrompt || input.userPrompt.trim().length === 0) {
+    throw new AiError('invalid_input', 'userPrompt must be a non-empty string');
+  }
+  return callGeminiJson(input);
+}
+
+/**
+ * Shared Gemini JSON-structured call. `systemPrompt === null` falls back to
+ * a single-turn user-only contents array (matches the legacy behaviour);
+ * otherwise the system prompt is sent via `systemInstruction`.
+ */
+async function callGeminiJson(input: {
+  systemPrompt: string | null;
+  userPrompt: string;
+  promptVersion: string;
+}): Promise<SummaryResult> {
   const model = process.env.GEMINI_LLM_MODEL ?? 'gemini-2.5-pro';
   const client = getClient();
-  const prompt = buildPrompt(input);
 
   try {
     const response = await client.models.generateContent({
       model,
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      contents: [{ role: 'user', parts: [{ text: input.userPrompt }] }],
       config: {
         temperature: 0.7,
         responseMimeType: 'application/json',
@@ -137,6 +182,9 @@ export async function generateSummary(input: SummaryInput): Promise<SummaryResul
           },
           required: ['text', 'topics'],
         },
+        ...(input.systemPrompt
+          ? { systemInstruction: input.systemPrompt }
+          : {}),
       },
     });
 
@@ -159,7 +207,7 @@ export async function generateSummary(input: SummaryInput): Promise<SummaryResul
       text: parsed.text.trim(),
       topics: parsed.topics,
       model,
-      promptVersion: SUMMARY_PROMPT_VERSION,
+      promptVersion: input.promptVersion,
     };
   } catch (err) {
     if (err instanceof AiError) throw err;

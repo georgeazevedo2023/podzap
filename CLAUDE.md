@@ -179,8 +179,9 @@ npx inngest-cli dev
 - [x] Fase 3: listagem e seleção de grupos
 - [x] Fase 4: captura de mensagens (webhook) ✅
 - [x] Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) ✅
-- [ ] 🟡 **Fase 6: filtro de relevância + agrupamento por tópicos — em andamento**
-- [ ] Fase 7+: ver `ROADMAP.md`
+- [x] Fase 6: filtro de relevância + agrupamento por tópicos ✅
+- [ ] 🟡 **Fase 7: geração do resumo (Gemini 2.5 Pro) — em andamento**
+- [ ] Fase 8+: ver `ROADMAP.md`
 
 ---
 
@@ -280,3 +281,46 @@ messages + transcripts (JOIN)
 - Weight base `0.3` + boosts (áudio >20s, >100 chars, `?` final, keyword crítica, mídia visual), clamped `[0, 1]`.
 - Cluster: single-pass por timestamp, quebra em `gap > 30min` (default) **ou** jaccard de participantes < 0.3. Keywords dominantes extraídas no final.
 - `/pipeline-preview` (dev-only, `NODE_ENV !== 'production'`) é a UI de inspeção manual antes da Fase 7.
+
+---
+
+## 13. Geração de resumos (Fase 7+)
+
+Referência completa: `docs/integrations/summary-generation.md`.
+
+```
+NormalizedConversation (Fase 6)
+      │
+      ▼
+┌──────────────────────┐  lib/summary/prompt.ts
+│  buildSummaryPrompt  │  (tone: formal | fun | corporate)
+└──────────┬───────────┘
+           │ prompt PT-BR + structured output schema
+           ▼
+┌──────────────────────┐  lib/ai/gemini-llm.ts
+│   Gemini 2.5 Pro     │  { text, topics, estimatedMinutes }
+└──────────┬───────────┘
+           │
+           ▼
+┌──────────────────────┐  lib/summary/generator.ts
+│  INSERT summaries    │  status = 'pending_review'
+│  +  trackAiCall()    │  best-effort → ai_calls
+└──────────┬───────────┘
+           │
+           ▼
+   Fase 8 (aprovação humana) consome
+```
+
+- **Trigger**: `POST /api/summaries/generate` emite evento Inngest `summary.requested`; worker `generate-summary` orquestra.
+- **Rate limit**: 10 gerações/hora/tenant no endpoint (protege contra loop + custo).
+- **Custo**: toda chamada vai em `ai_calls` (provider, model, tokens, cost_cents, duration_ms, summary_id). Agregação via `getAiUsageForTenant()`.
+- **Prompt versioning**: `podzap-summary/v<N>-<tone>` gravado em `summaries.prompt_version`; resumos antigos ficam com a versão antiga.
+- **Anti-hallucination**: system prompt exige "APENAS informação presente"; participantes passados como lista fechada; top-20 mensagens por weight; structured output com `topics` cruzado contra os recebidos.
+
+Tons disponíveis:
+
+| Tom         | Quando usar                                       |
+| ----------- | ------------------------------------------------- |
+| `formal`    | B2B, comunicados corporativos, jurídico           |
+| `fun`       | Grupos sociais, comunidades (default)             |
+| `corporate` | Times internos, stand-ups assíncronos             |
