@@ -92,6 +92,14 @@ export const summaryRequested = eventType("summary.requested", {
     periodEnd: string;
     /** Optional — omit to use the generator's default ("fun"). */
     tone?: "formal" | "fun" | "corporate";
+    /**
+     * Fase 11: set by the cron runner for schedules whose
+     * `approval_mode='auto'`. When true, `generate-summary` calls
+     * `autoApproveSummary` after persistence and emits `summary.approved`
+     * itself (no human in the loop). Manual `/api/summaries/generate`
+     * requests omit this flag.
+     */
+    autoApprove?: boolean;
   }>(),
 });
 

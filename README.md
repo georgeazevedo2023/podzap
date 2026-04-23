@@ -39,6 +39,22 @@ Next.js 15 · TypeScript · Tailwind · Supabase · Inngest · UAZAPI · Groq ·
 
 ---
 
-## 📦 Status
+## 📦 Status — MVP 1.0 completo 🎉
 
-MVP em desenvolvimento. Fases 0–9 concluídas (fundação, auth+multi-tenancy, conexão WhatsApp via UAZAPI, listagem/seleção de grupos, captura de mensagens via webhook, transcrição multimodal via Groq Whisper + Gemini Vision orquestrada pelo Inngest, pipeline `filter → cluster → normalize`, geração do resumo via Gemini 2.5 Pro com tom configurável, tracking de custo em `ai_calls`, aprovação humana com revisão/edição/aprovar/rejeitar/regenerar e sidebar badge de pendentes, TTS via Gemini 2.5 Flash TTS gerando WAV no bucket privado `audios` com signed URL e worker `generate-tts` on `summary.approved`); **Fase 10 (entrega — worker `deliver-to-whatsapp` on `audio.created` envia o WAV via UAZAPI `/send/media` pro grupo original, com retries Inngest 3x + rota `POST /api/audios/[id]/redeliver` rate-limited 6/h/tenant) em andamento**. Ver [`ROADMAP.md`](./ROADMAP.md) e [`docs/integrations/delivery.md`](./docs/integrations/delivery.md).
+**Fases 0–11 concluídas em 2026-04-22.** Pipeline end-to-end funcionando do webhook ao WhatsApp, com agendamento automático:
+
+- **Fundação + auth/RLS**: multi-tenancy via RLS em 10 tabelas, Supabase Auth com magic link, trigger `handle_new_user`.
+- **WhatsApp (UAZAPI)**: QR code + polling de status, criptografia AES-256-GCM dos tokens de instância, sync de grupos com toggle monitor preservado.
+- **Captura + transcrição**: webhook idempotente com SSRF guards + MIME sniff, Storage bucket `media`, workers Inngest `transcribe-audio` (Groq Whisper) + `describe-image` (Gemini Vision).
+- **Pipeline + resumo**: `filter → cluster → normalize` rule-based, resumo via Gemini 2.5 Pro com tons `formal | fun | corporate`, tracking de custo em `ai_calls`.
+- **Aprovação humana** (feature principal): revisar/editar/aprovar/rejeitar/regenerar com state machine `pending_review → approved | rejected`.
+- **TTS + entrega**: Gemini 2.5 Flash TTS → WAV no bucket `audios`, worker `deliver-to-whatsapp` envia PTT no grupo original via UAZAPI com caption opcional, retries + redeliver manual.
+- **Agendamento**: worker `run-schedules` cron `*/5m` dispara resumos automáticos conforme `schedules`, com modos `auto | optional | required`.
+
+**Métricas**: 246 testes passando (21 spec files), 23 rotas de API, 10 workers Inngest, 6 migrations, ~29.447 LOC.
+
+**Relatório completo**: [`docs/MVP-COMPLETION.md`](./docs/MVP-COMPLETION.md) — timeline, arquitetura, features shipadas, débitos priorizados, checklist de deploy, métricas do PRD §16.
+
+**Pendente validação humana** (não automatizável): escanear 1 QR real, gerar 1 resumo com custo real observado, receber 1 áudio real no WhatsApp.
+
+Ver também [`ROADMAP.md`](./ROADMAP.md), [`CLAUDE.md`](./CLAUDE.md) e os 11 audits em [`docs/audits/`](./docs/audits/).

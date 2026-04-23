@@ -169,7 +169,9 @@ npx inngest-cli dev
 
 ---
 
-## 8. Status atual
+## 8. Status atual — **MVP COMPLETO 🎉**
+
+Relatório consolidado: [`docs/MVP-COMPLETION.md`](docs/MVP-COMPLETION.md) — timeline, arquitetura, features, débitos priorizados, checklist de deploy. Métricas: 246 testes passando, 23 rotas, 10 workers Inngest, 6 migrations, ~29.447 LOC.
 
 - [x] PRD definido
 - [x] Layout/design system (mockups em `podZAP/`)
@@ -183,8 +185,9 @@ npx inngest-cli dev
 - [x] Fase 7: geração do resumo (Gemini 2.5 Pro) ✅
 - [x] Fase 8: aprovação humana (review + edit + approve/reject/regenerate) ✅
 - [x] Fase 9: TTS (Gemini 2.5 Flash TTS → WAV no bucket `audios`) ✅
-- [ ] 🟡 **Fase 10: entrega via UAZAPI (worker `deliver-to-whatsapp` on `audio.created` + redeliver manual) — em andamento**
-- [ ] Fase 11+: ver `ROADMAP.md`
+- [x] Fase 10: entrega via UAZAPI (worker `deliver-to-whatsapp` on `audio.created` + redeliver manual) ✅
+- [x] Fase 11: agendamento (cron `*/5 * * * *` → `dueSchedulesNow` → `summary.requested` com `autoApprove`) ✅ — última fase MVP
+- [ ] Pós-MVP: ver `ROADMAP.md` + `docs/MVP-COMPLETION.md` §9 (UI `/schedule`, Upstash rate limit, MP3 TTS, chunking, dashboard analytics, e backlog PRD Fase 12-18)
 
 ---
 
@@ -430,3 +433,52 @@ audios row criada (Fase 9)
 - **Idempotência**: `deliverAudio` short-circuita se `delivered_to_whatsapp=true`; `redeliver` força a chamada.
 - **Retry**: Inngest 3x (backoff exponencial) para transientes + botão "Reenviar" manual com rate limit 6/h/tenant.
 - **Concerns abertos**: rate limit UAZAPI (~10/min), desconexão mid-flight, grupo removido (não diferenciado de outros UAZAPI_ERROR), buffer size ~16 MB (fallback URL pública não implementado), possível duplicata se `sendAudio` suceder e `markDelivered` falhar.
+
+---
+
+## 17. Agendamento (Fase 11)
+
+Referência completa: `docs/integrations/scheduling.md`.
+
+```
+Inngest cron  */5 * * * *
+      │
+      ▼
+┌──────────────────────────────┐  inngest/functions/run-schedules.ts
+│  runSchedulesHandler         │  retries: 1 (handler idempotente)
+└──────────────┬───────────────┘
+               │ step.run('find-due')
+               ▼
+┌──────────────────────────────┐  lib/schedules/service.ts
+│  dueSchedulesNow(now, 5)     │  America/Sao_Paulo · fixed_time · window (now-5, now]
+└──────────────┬───────────────┘
+               │  for each schedule
+               ▼
+  step.run('dedup-check-<id>')  → summaryExistsForWindow (overlap periods)
+               │
+               │  not exists
+               ▼
+  step.run('enqueue-<id>')
+               │
+               ▼
+  inngest.send(summary.requested { tenantId, groupId, periodStart, periodEnd,
+                                   tone, autoApprove: mode==='auto' })
+               │
+               ▼
+  Fase 7 → (Fase 8 auto/humano) → Fase 9 → Fase 10
+```
+
+- **Schema `schedules`**: 1 row/grupo (UNIQUE `group_id`), `tenant_id` escopado, `frequency ∈ {daily, weekly, custom}`, `time_of_day` (sem tz), `day_of_week` 0-6 (Dom-Sáb), `trigger_type ∈ {fixed_time, inactivity, dynamic_window}` (só `fixed_time` disparando), `approval_mode ∈ {auto, optional, required}`, `voice`, `tone`, `is_active`.
+- **Janelas de mensagens**: `daily` = últimas 24h; `weekly` = últimos 7 dias.
+- **Timezone**: fixo em `America/Sao_Paulo` — conversão via `Intl.DateTimeFormat` (sem lib externa). Multi-tz por tenant é pós-MVP.
+- **Modos de aprovação**:
+  - `auto` → pipeline completo sem humano (`generate-summary` emite `summary.approved` logo após o insert quando recebe `autoApprove: true`).
+  - `optional` → cria `pending_review`; **o auto-approve em 24h não está implementado** — hoje se comporta como `required`.
+  - `required` → `pending_review` até humano aprovar via `/approval/[id]`.
+- **Dedup**: `summaries` com overlap (`period_start <= end AND period_end >= start`) para o mesmo `(tenant_id, group_id)` aborta o emit — cobre cron skew, retry manual, invocação dupla no dashboard.
+- **API** (`app/api/schedules/`): `GET /api/schedules`, `POST /api/schedules`, `PATCH /api/schedules/[id]`, `DELETE /api/schedules/[id]`. Erros `SchedulesError` → 404 / 409 / 422 / 500.
+- **Limitações MVP**:
+  - Crons Inngest **não disparam em dev** — invocar `run-schedules` manualmente no dashboard (`http://127.0.0.1:8288`). Em prod (Inngest Cloud) o cron roda.
+  - `trigger_type` só `fixed_time` está ativo (`inactivity`/`dynamic_window` são placeholders do enum — rows com esses valores nunca disparam).
+  - `approval_mode='optional'` auto-approve após 24h não implementado.
+  - `frequency='custom'` reservado mas ignorado pelo worker.

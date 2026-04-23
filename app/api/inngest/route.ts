@@ -31,6 +31,7 @@ import { generateTtsFunction } from "@/inngest/functions/generate-tts";
 import { mediaDownloadRetryWorker } from "@/inngest/functions/media-download-retry";
 import { ping } from "@/inngest/functions/ping";
 import { retryPendingDownloads } from "@/inngest/functions/retry-pending";
+import { runSchedulesFunction } from "@/inngest/functions/run-schedules";
 import { transcribeAudioFunction } from "@/inngest/functions/transcribe-audio";
 import { transcriptionRetry } from "@/inngest/functions/transcription-retry";
 
@@ -46,5 +47,6 @@ export const { GET, POST, PUT } = serve({
     generateSummaryFunction,
     generateTtsFunction,
     deliverToWhatsappFunction,
+    runSchedulesFunction,
   ],
 });

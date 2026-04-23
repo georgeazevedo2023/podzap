@@ -449,7 +449,7 @@ describe("generateSummaryHandler — Inngest integration", () => {
 
     const result = await generateSummaryHandler(ctx);
 
-    expect(result).toEqual({ summaryId: "summary-id-1" });
+    expect(result).toEqual({ summaryId: "summary-id-1", autoApproved: false });
     expect(ctx.stepNames).toEqual(["generate"]);
 
     // Orchestrator received Date objects, not strings.

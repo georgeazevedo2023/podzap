@@ -27,6 +27,7 @@ export type ErrorCode =
   | "INSTANCE_NOT_CONNECTED"
   | "INVALID_STATE"
   | "ALREADY_EXISTS"
+  | "CONFLICT"
   | "DELIVERY_ERROR";
 
 export interface ApiError {
@@ -161,6 +162,9 @@ export function mapErrorToResponse(err: unknown): NextResponse {
     }
     if (code === "ALREADY_EXISTS") {
       return errorResponse(409, "ALREADY_EXISTS", message);
+    }
+    if (code === "CONFLICT") {
+      return errorResponse(409, "CONFLICT", message);
     }
     if (code === "DB_ERROR") {
       return errorResponse(500, "INTERNAL_ERROR", message);

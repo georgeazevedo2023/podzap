@@ -143,28 +143,35 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 10 — Entrega 🟡
+### Fase 10 — Entrega ✅
 **Objetivo:** áudio + texto chegam no WhatsApp do usuário/grupo.
 
-- [ ] Envio via UAZAPI (áudio + legenda)
-- [ ] Player no dashboard (mockup: `screen_history_schedule.jsx`)
-- [ ] Histórico de resumos com download
-- [ ] Tela Home com últimos resumos (mockup: `screen_home.jsx`)
+- [x] Envio via UAZAPI (áudio + legenda)
+- [x] Player no dashboard (`/podcasts`)
+- [x] Histórico de resumos com download
+- [x] Tela Home com últimos resumos (`/home`)
 
 **Aceite:** resumo aprovado chega no WhatsApp com áudio + texto.
 
 ---
 
-### Fase 11 — Agendamento ⬜
+### Fase 11 — Agendamento ✅
 **Objetivo:** resumos gerados automaticamente conforme configuração.
 
-- [ ] Migration `schedules`
-- [ ] Tipos: horário fixo / inatividade / janela dinâmica
-- [ ] Cron (Inngest scheduled functions)
-- [ ] UI configuração por grupo
-- [ ] Frequências: diário / semanal
+- [x] Schedules já existe desde migration 0001; service `lib/schedules/service.ts` com CRUD + `dueSchedulesNow`
+- [x] Worker cron `*/5m` (`inngest/functions/run-schedules.ts`) emite `summary.requested`
+- [x] Modos `approval_mode ∈ {auto, optional, required}`
+- [x] API CRUD (`/api/schedules`, `/api/schedules/[id]`)
+- [ ] 🟡 UI `/schedule` (backend completo; UI ficou como débito, ver `docs/MVP-COMPLETION.md` §8)
+- [x] Frequências: diário / semanal
 
-**Aceite:** agendar "todo dia 18h" e receber resumo sem intervenção.
+**Aceite:** agendar "todo dia 18h" (via API) → cron dispara → resumo gerado sem intervenção.
+
+---
+
+## 🎉 MVP 1.0 COMPLETO
+
+Relatório consolidado: [`docs/MVP-COMPLETION.md`](./docs/MVP-COMPLETION.md).
 
 ---
 
