@@ -84,10 +84,13 @@ export function GroupCard({ group, onToggle, isToggling }: GroupCardProps) {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              color: 'var(--text)',
+              fontStyle: group.name ? 'normal' : 'italic',
+              opacity: group.name ? 1 : 0.55,
             }}
-            title={group.name}
+            title={group.name || '(sem nome)'}
           >
-            {group.name}
+            {group.name || '(sem nome)'}
           </div>
           <div
             style={{

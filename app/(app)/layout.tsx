@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AppSidebar } from '@/components/shell/AppSidebar';
 import type { WhatsappStatus } from '@/components/shell/Sidebar';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getCurrentUserAndTenant } from '@/lib/tenant';
+import { getCurrentUserAndTenant, isSuperadmin } from '@/lib/tenant';
 
 /**
  * Fetches the tenant's current WhatsApp instance (if any) and derives the
@@ -111,9 +111,10 @@ export default async function AppLayout({
   const { user, tenant } = context;
   // Parallelise the two sidebar-scoped fetches — they're independent and
   // both block the layout render.
-  const [whatsapp, pendingApprovals] = await Promise.all([
+  const [whatsapp, pendingApprovals, superadmin] = await Promise.all([
     fetchWhatsappState(tenant.id),
     fetchPendingApprovalsCount(tenant.id),
+    isSuperadmin(user.id),
   ]);
 
   return (
@@ -137,6 +138,7 @@ export default async function AppLayout({
         whatsappStatus={whatsapp.status}
         whatsappPhone={whatsapp.phone}
         pendingApprovals={pendingApprovals}
+        isSuperadmin={superadmin}
       />
       <main
         style={{

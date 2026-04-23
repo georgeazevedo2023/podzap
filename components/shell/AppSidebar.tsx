@@ -17,6 +17,7 @@ const ROUTES: Record<NavId, string> = {
   schedule: '/schedule',
   onboarding: '/onboarding',
   settings: '/settings',
+  admin: '/admin',
 };
 
 /**
@@ -61,6 +62,8 @@ export interface AppSidebarProps {
    * every navigation without any client polling.
    */
   pendingApprovals?: number;
+  /** When true, sidebar shows the "Admin" nav item linking to `/admin`. */
+  isSuperadmin?: boolean;
 }
 
 /**
@@ -75,6 +78,7 @@ export function AppSidebar({
   whatsappStatus,
   whatsappPhone,
   pendingApprovals,
+  isSuperadmin,
 }: AppSidebarProps) {
   const pathname = usePathname() ?? '/home';
   const router = useRouter();
@@ -90,6 +94,7 @@ export function AppSidebar({
       whatsappStatus={whatsappStatus}
       whatsappPhone={whatsappPhone}
       pendingApprovals={pendingApprovals}
+      isSuperadmin={isSuperadmin}
     />
   );
 }

@@ -18,7 +18,8 @@ export type NavId =
   | 'history'
   | 'schedule'
   | 'onboarding'
-  | 'settings';
+  | 'settings'
+  | 'admin';
 
 interface NavItem {
   id: NavId;
@@ -70,6 +71,11 @@ export interface SidebarProps {
    * or undefined, no badge is rendered (vs. a visible "0" pill).
    */
   pendingApprovals?: number;
+  /**
+   * When true, renders an "Admin" nav item linking to `/admin`. Only set
+   * server-side after a real `superadmins` table check.
+   */
+  isSuperadmin?: boolean;
 }
 
 export function Sidebar({
@@ -81,6 +87,7 @@ export function Sidebar({
   tenantPlan,
   whatsappStatus = 'none',
   whatsappPhone,
+  isSuperadmin = false,
   pendingApprovals,
 }: SidebarProps) {
   // Only surface the badge when there's actual work pending — rendering a "0"
@@ -109,6 +116,12 @@ export function Sidebar({
     { id: 'onboarding', label: zapLabel, icon: <Icons.Zap /> },
     { id: 'settings', label: 'Ajustes', icon: <Icons.Settings /> },
   ];
+
+  // Superadmin-only: cross-tenant management panel. Keyed by `is_superadmin()`
+  // in the DB (not a client flag) — prop always comes from server.
+  const adminItems: NavItem[] = isSuperadmin
+    ? [{ id: 'admin', label: 'Admin', icon: <Icons.Settings /> }]
+    : [];
 
   const used = usage?.used ?? 0;
   const total = usage?.total ?? 15;
@@ -256,6 +269,33 @@ export function Sidebar({
             onClick={() => onNav(i.id)}
           />
         ),
+      )}
+
+      {adminItems.length > 0 && (
+        <>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--pink-500)',
+              padding: '16px 10px 6px',
+            }}
+          >
+            Superadmin
+          </div>
+          {adminItems.map((i) => (
+            <NavButton
+              key={i.id}
+              id={i.id}
+              label={i.label}
+              icon={i.icon}
+              active={current === i.id}
+              onClick={() => onNav(i.id)}
+            />
+          ))}
+        </>
       )}
 
       <div style={{ flex: 1 }} />
