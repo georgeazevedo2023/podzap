@@ -49,16 +49,19 @@ export function GroupCard({ group, onToggle, isToggling }: GroupCardProps) {
       tabIndex={0}
       style={{
         background: on ? 'var(--surface)' : 'var(--bg-2)',
-        border: '2.5px solid var(--stroke)',
+        border: on
+          ? '3px solid var(--lime-500)'
+          : '2.5px solid var(--stroke)',
         borderRadius: 'var(--radius-lg)',
         padding: 16,
         boxShadow: on
-          ? 'var(--shadow-chunk)'
+          ? '4px 4px 0 var(--lime-500)'
           : '2px 2px 0 var(--stroke)',
         cursor: isToggling ? 'wait' : 'pointer',
-        transition: 'box-shadow 0.12s ease, transform 0.12s ease, opacity 0.12s ease',
+        transition:
+          'box-shadow 0.12s ease, transform 0.12s ease, opacity 0.12s ease, border-color 0.12s ease',
         position: 'relative',
-        opacity: isToggling ? 0.6 : on ? 1 : 0.85,
+        opacity: isToggling ? 0.6 : 1,
         outline: 'none',
       }}
     >

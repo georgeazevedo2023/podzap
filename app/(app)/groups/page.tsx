@@ -32,22 +32,33 @@ import { SyncButton } from './SyncButton';
  * Auth is enforced by `(app)/layout.tsx`; we still re-fetch the context
  * here because we need the tenant id locally.
  */
-export default async function GroupsPage() {
+const PAGE_SIZE = 20;
+
+type GroupsPageProps = {
+  searchParams: Promise<{ page?: string; q?: string; only?: string }>;
+};
+
+export default async function GroupsPage({ searchParams }: GroupsPageProps) {
   const context = await getCurrentUserAndTenant();
   if (!context) {
     redirect('/login?error=Faça login para continuar');
   }
 
   const { tenant } = context;
+  const params = await searchParams;
+  const page = Math.max(0, Number.parseInt(params.page ?? '0', 10) || 0);
+  const search = (params.q ?? '').trim();
+  const monitoredOnly = params.only === '1';
 
-  // Run the two independent reads in parallel — both are tenant-scoped and
-  // the instance load is unrelated to the groups query.
-  const [instance, groups] = await Promise.all([
+  // Also fetch the monitored count separately — the paged result gives us
+  // only rows for this page, but the subtitle needs the full count.
+  const [instance, groupsPage, monitoredCountResult] = await Promise.all([
     getCurrentInstance(tenant.id),
-    listGroups(tenant.id),
+    listGroups(tenant.id, { page, pageSize: PAGE_SIZE, search, monitoredOnly }),
+    listGroups(tenant.id, { monitoredOnly: true, pageSize: 1 }),
   ]);
 
-  const monitoredCount = groups.filter((g) => g.isMonitored).length;
+  const monitoredCount = monitoredCountResult.total;
   const hasInstance = instance !== null;
   const hasConnectedInstance =
     hasInstance && instance.status === 'connected';
@@ -58,7 +69,7 @@ export default async function GroupsPage() {
         title="Grupos"
         subtitle={
           hasInstance
-            ? `${monitoredCount} monitorados de ${groups.length}`
+            ? `${monitoredCount} monitorados de ${groupsPage.total}`
             : 'conecta o WhatsApp pra listar seus grupos'
         }
         accent="purple"
@@ -81,12 +92,19 @@ export default async function GroupsPage() {
           <NotConnectedYetEmptyState />
         )}
 
-        {hasConnectedInstance && groups.length === 0 && (
+        {hasConnectedInstance && groupsPage.total === 0 && !search && !monitoredOnly && (
           <NoGroupsEmptyState />
         )}
 
-        {hasConnectedInstance && groups.length > 0 && (
-          <GroupsList initial={groups} />
+        {hasConnectedInstance && (groupsPage.total > 0 || search || monitoredOnly) && (
+          <GroupsList
+            initial={groupsPage.rows}
+            total={groupsPage.total}
+            page={groupsPage.page}
+            pageSize={groupsPage.pageSize}
+            initialSearch={search}
+            initialMonitoredOnly={monitoredOnly}
+          />
         )}
       </div>
     </div>

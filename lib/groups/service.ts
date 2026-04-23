@@ -151,32 +151,60 @@ function decryptInstanceToken(row: InstanceRow): string {
  * `search` (case-insensitive substring on `name`). Never throws NOT_FOUND —
  * an empty array is a valid answer for a tenant that hasn't synced yet.
  */
+export type ListGroupsResult = {
+  rows: GroupView[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+/**
+ * Return a paginated slice of this tenant's groups. Filters out rows with
+ * empty `name` by default (UAZAPI returns ~20% of rows as zombie groups
+ * the user was added to but never opened).
+ *
+ * Always returns server-paginated data — do NOT load everything and slice
+ * client-side. Tenants with 1000+ groups will otherwise stall the browser.
+ */
 export async function listGroups(
   tenantId: string,
-  opts?: { monitoredOnly?: boolean; search?: string },
-): Promise<GroupView[]> {
+  opts?: {
+    monitoredOnly?: boolean;
+    search?: string;
+    page?: number;      // 0-indexed
+    pageSize?: number;  // default 20, max 100
+    includeUnnamed?: boolean; // default false
+  },
+): Promise<ListGroupsResult> {
   const supabase = createAdminClient();
+  const page = Math.max(0, opts?.page ?? 0);
+  const pageSize = Math.min(100, Math.max(1, opts?.pageSize ?? 20));
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
   let query = supabase
     .from("groups")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("tenant_id", tenantId);
+
+  // Exclude empty-name zombies by default — they pollute the list and have
+  // no useful identity to show.
+  if (!opts?.includeUnnamed) {
+    query = query.neq("name", "");
+  }
 
   if (opts?.monitoredOnly) {
     query = query.eq("is_monitored", true);
   }
   if (opts?.search && opts.search.trim().length > 0) {
-    // PostgREST ilike wildcards use `*`, not `%`. We accept the user's raw
-    // string and wrap it so "foo" matches any group containing "foo".
     const q = opts.search.trim();
     query = query.ilike("name", `%${q}%`);
   }
 
-  // Named groups first (empty-name UAZAPI artifacts go last); then by name.
-  // Supabase order+nullsLast doesn't cover empty strings, so we also
-  // secondary-sort by name length to push single-char/empty junk to the end.
-  const { data, error } = await query
+  const { data, error, count } = await query
     .order("is_monitored", { ascending: false })
-    .order("name", { ascending: true, nullsFirst: false });
+    .order("name", { ascending: true, nullsFirst: false })
+    .range(from, to);
 
   if (error) {
     throw new GroupsError(
@@ -186,16 +214,12 @@ export async function listGroups(
     );
   }
   const rows = (data ?? []) as GroupRow[];
-  // Push empty/whitespace-only names to the end so the user sees real groups
-  // first. UAZAPI returns ~20% of rows with empty `name` (zombie groups the
-  // user was added to but never opened) — they clutter the top otherwise.
-  return rows.map(toView).sort((a, b) => {
-    const aEmpty = !a.name || a.name.trim() === "";
-    const bEmpty = !b.name || b.name.trim() === "";
-    if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
-    if (a.isMonitored !== b.isMonitored) return a.isMonitored ? -1 : 1;
-    return a.name.localeCompare(b.name, "pt-BR");
-  });
+  return {
+    rows: rows.map(toView),
+    total: count ?? rows.length,
+    page,
+    pageSize,
+  };
 }
 
 /**

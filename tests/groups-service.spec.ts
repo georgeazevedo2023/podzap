@@ -66,6 +66,7 @@ type AnyRow = Record<string, unknown>;
 
 type FilterOp =
   | { kind: "eq"; col: string; val: unknown }
+  | { kind: "neq"; col: string; val: unknown }
   | { kind: "ilike"; col: string; pattern: string };
 
 /**
@@ -78,6 +79,8 @@ function makeBuilder(table: keyof typeof db) {
     filters: FilterOp[];
     orders: Array<{ col: string; ascending: boolean }>;
     limit?: number;
+    range?: { from: number; to: number };
+    selectCountExact: boolean;
     op:
       | { kind: "select"; columns: string }
       | { kind: "insert"; row: AnyRow }
@@ -87,6 +90,7 @@ function makeBuilder(table: keyof typeof db) {
   } = {
     filters: [],
     orders: [],
+    selectCountExact: false,
     op: { kind: "select", columns: "*" },
     selectAfter: false,
   };
@@ -95,6 +99,7 @@ function makeBuilder(table: keyof typeof db) {
     rows.filter((r) =>
       state.filters.every((f) => {
         if (f.kind === "eq") return r[f.col] === f.val;
+        if (f.kind === "neq") return r[f.col] !== f.val;
         if (f.kind === "ilike") {
           const v = r[f.col];
           if (typeof v !== "string") return false;
@@ -139,9 +144,11 @@ function makeBuilder(table: keyof typeof db) {
 
   const api: Record<string, (...args: unknown[]) => unknown> = {};
 
-  api.select = (cols?: unknown) => {
+  api.select = (cols?: unknown, opts?: unknown) => {
     if (state.op.kind === "select") {
       state.op.columns = (cols as string) ?? "*";
+      const countOpt = (opts as { count?: string } | undefined)?.count;
+      if (countOpt === "exact") state.selectCountExact = true;
     } else {
       // mutation followed by .select("*")
       state.selectAfter = true;
@@ -164,6 +171,10 @@ function makeBuilder(table: keyof typeof db) {
     state.filters.push({ kind: "eq", col: col as string, val });
     return api;
   };
+  api.neq = (col: unknown, val: unknown) => {
+    state.filters.push({ kind: "neq", col: col as string, val });
+    return api;
+  };
   api.ilike = (col: unknown, pattern: unknown) => {
     state.filters.push({
       kind: "ilike",
@@ -184,6 +195,10 @@ function makeBuilder(table: keyof typeof db) {
     state.limit = n as number;
     return api;
   };
+  api.range = (from: unknown, to: unknown) => {
+    state.range = { from: from as number, to: to as number };
+    return api;
+  };
 
   const run = (): {
     data: AnyRow | AnyRow[] | null;
@@ -193,9 +208,20 @@ function makeBuilder(table: keyof typeof db) {
     switch (state.op.kind) {
       case "select": {
         let out = applyFilters(rows);
+        const fullCount = out.length;
         out = applyOrder(out);
-        if (state.limit !== undefined) out = out.slice(0, state.limit);
-        return { data: out, error: null };
+        if (state.range) {
+          out = out.slice(state.range.from, state.range.to + 1);
+        } else if (state.limit !== undefined) {
+          out = out.slice(0, state.limit);
+        }
+        const result = { data: out, error: null } as {
+          data: AnyRow[];
+          error: null;
+          count?: number;
+        };
+        if (state.selectCountExact) result.count = fullCount;
+        return result;
       }
       case "insert": {
         const now = new Date().toISOString();
@@ -386,7 +412,9 @@ function seedGroup(partial: Partial<GroupRow> = {}): GroupRow {
 
 describe("listGroups", () => {
   it("returns empty when the tenant has no groups", async () => {
-    expect(await service.listGroups(TENANT_A)).toEqual([]);
+    const res = await service.listGroups(TENANT_A);
+    expect(res.rows).toEqual([]);
+    expect(res.total).toBe(0);
   });
 
   it("orders monitored first, then by name ascending", async () => {
@@ -394,7 +422,7 @@ describe("listGroups", () => {
     seedGroup({ name: "Alpha", is_monitored: false });
     seedGroup({ name: "Mike", is_monitored: true });
 
-    const out = await service.listGroups(TENANT_A);
+    const out = (await service.listGroups(TENANT_A)).rows;
     expect(out.map((g) => g.name)).toEqual(["Mike", "Alpha", "Zeta"]);
   });
 
@@ -403,7 +431,7 @@ describe("listGroups", () => {
     seedGroup({ name: "B", is_monitored: false });
     seedGroup({ name: "C", is_monitored: true });
 
-    const out = await service.listGroups(TENANT_A, { monitoredOnly: true });
+    const out = (await service.listGroups(TENANT_A, { monitoredOnly: true })).rows;
     expect(out.map((g) => g.name).sort()).toEqual(["A", "C"]);
     expect(out.every((g) => g.isMonitored)).toBe(true);
   });
@@ -413,7 +441,7 @@ describe("listGroups", () => {
     seedGroup({ name: "Marketing" });
     seedGroup({ name: "dev - secret channel" });
 
-    const out = await service.listGroups(TENANT_A, { search: "DEV" });
+    const out = (await service.listGroups(TENANT_A, { search: "DEV" })).rows;
     expect(out.map((g) => g.name).sort()).toEqual([
       "Dev Team Brazil",
       "dev - secret channel",
@@ -424,7 +452,7 @@ describe("listGroups", () => {
     seedGroup({ tenant_id: TENANT_A, name: "mine" });
     seedGroup({ tenant_id: TENANT_B, name: "theirs" });
 
-    const out = await service.listGroups(TENANT_A);
+    const out = (await service.listGroups(TENANT_A)).rows;
     expect(out).toHaveLength(1);
     expect(out[0].name).toBe("mine");
   });

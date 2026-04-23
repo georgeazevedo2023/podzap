@@ -68,7 +68,7 @@ export default async function PipelinePreviewPage({
   const startRaw = pickFirst(params.start)?.trim() ?? '';
   const endRaw = pickFirst(params.end)?.trim() ?? '';
 
-  const groups = await listGroups(tenant.id);
+  const groups = (await listGroups(tenant.id, { pageSize: 100 })).rows;
 
   const hasAllParams =
     groupId.length > 0 && startRaw.length > 0 && endRaw.length > 0;

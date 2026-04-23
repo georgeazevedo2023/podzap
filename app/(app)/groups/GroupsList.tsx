@@ -1,66 +1,53 @@
 'use client';
 
-// NOTE: `@/lib/groups/service` is authored in parallel by another Fase 3
-// agent. We only import the `GroupView` type from it — once the module
-// lands this file type-checks without changes.
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import type { GroupView } from '@/lib/groups/service';
 
 import { GroupCard } from './GroupCard';
 
-/** ms of "stop typing" before the filter re-evaluates. Cheap debounce — we
- *  filter client-side so the only cost is React render work, but even that
- *  gets chatty on long lists. */
-const SEARCH_DEBOUNCE_MS = 150;
-
-/** Client-side page size. Fetching the full list (100-800 rows) is ~50-100KB
- *  of JSON which is fine; rendering 700+ cards with handlers kills the tab.
- *  25 per page keeps the DOM small and pagination instant (no round-trip). */
-const PAGE_SIZE = 25;
+/** ms of "stop typing" before we update the URL (which triggers a re-fetch). */
+const SEARCH_DEBOUNCE_MS = 300;
 
 export interface GroupsListProps {
   initial: GroupView[];
+  total: number;
+  page: number;           // 0-indexed, current page served by the server
+  pageSize: number;
+  initialSearch: string;
+  initialMonitoredOnly: boolean;
 }
 
 /**
- * Client-side orchestrator for the groups screen.
+ * Groups list with **server-side pagination**. Page / search / filter state
+ * lives in the URL (`?page=N&q=…&only=1`), so navigation + refresh + back
+ * button all work naturally. Each interaction pushes a new URL and the
+ * server component re-renders with the new slice.
  *
- * State strategy:
- *   - `groups` starts from the server-rendered `initial` and only mutates
- *     via optimistic toggle updates. Server-side refreshes (after a "sync")
- *     happen through `router.refresh()` invoked by `SyncButton`, which
- *     re-runs the parent server component and therefore re-seeds
- *     `initial` on the next render.
- *   - Search is fully client-side (debounced 150ms). We keep the raw input
- *     value as controlled state so we can wire Esc-to-clear; the debounced
- *     copy feeds the filter.
- *   - Toggle monitor is optimistic: we flip the flag immediately, POST in
- *     the background, and revert + surface an error banner on failure.
- *     Per-group toggling state lives in a `Set<string>` so multiple
- *     toggles in flight don't clobber each other.
- *
- * Accessibility:
- *   - Search input has an `aria-label` + Esc clears it.
- *   - The "N monitorados" sticker sits inside a `role="status"
- *     aria-live="polite"` region so screen readers hear the updated count
- *     when a toggle lands.
- *   - Monitored-only pill is a button with `aria-pressed`.
+ * Optimistic toggle for monitor flag is still client-side: we flip the
+ * row locally, POST, then reconcile. A subsequent page navigation will
+ * re-seed from server truth anyway.
  */
-export function GroupsList({ initial }: GroupsListProps) {
+export function GroupsList({
+  initial,
+  total,
+  page,
+  pageSize,
+  initialSearch,
+  initialMonitoredOnly,
+}: GroupsListProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [groups, setGroups] = useState<GroupView[]>(initial);
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [monitoredOnly, setMonitoredOnly] = useState(false);
+  const [searchInput, setSearchInput] = useState(initialSearch);
   const [toggling, setToggling] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
 
-  // Keep `groups` in sync when the server re-renders this component with a
-  // new `initial` prop (e.g. after `router.refresh()` post-sync). We only
-  // replace when the identity of the array changes to avoid clobbering
-  // in-flight optimistic toggles.
+  // Re-seed local state when the server re-renders with new data (new page,
+  // new filter, after router.refresh()). The identity change is the signal.
   const lastSeenInitialRef = useRef(initial);
   useEffect(() => {
     if (lastSeenInitialRef.current !== initial) {
@@ -69,58 +56,51 @@ export function GroupsList({ initial }: GroupsListProps) {
     }
   }, [initial]);
 
-  // Debounce the search input.
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total === 0 ? 0 : page * pageSize + 1;
+  const to = Math.min((page + 1) * pageSize, total);
+
+  // Build a new URL preserving existing params, overriding the ones passed.
+  const buildHref = useCallback(
+    (patch: { page?: number; q?: string; only?: boolean }): string => {
+      const sp = new URLSearchParams(searchParams?.toString() ?? '');
+      if (patch.page !== undefined) {
+        if (patch.page <= 0) sp.delete('page');
+        else sp.set('page', String(patch.page));
+      }
+      if (patch.q !== undefined) {
+        if (!patch.q) sp.delete('q');
+        else sp.set('q', patch.q);
+        // Reset page when search changes.
+        sp.delete('page');
+      }
+      if (patch.only !== undefined) {
+        if (!patch.only) sp.delete('only');
+        else sp.set('only', '1');
+        sp.delete('page');
+      }
+      const qs = sp.toString();
+      return qs ? `${pathname}?${qs}` : pathname;
+    },
+    [pathname, searchParams],
+  );
+
+  // Debounce search → URL push.
   useEffect(() => {
-    const id = setTimeout(
-      () => setDebouncedSearch(searchInput),
-      SEARCH_DEBOUNCE_MS,
-    );
+    if (searchInput === initialSearch) return;
+    const id = setTimeout(() => {
+      router.push(buildHref({ q: searchInput }));
+    }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(id);
-  }, [searchInput]);
-
-  const monitoredCount = useMemo(
-    () => groups.filter((g) => g.isMonitored).length,
-    [groups],
-  );
-
-  const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
-    return groups.filter((g) => {
-      if (monitoredOnly && !g.isMonitored) return false;
-      if (q && !g.name.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [groups, debouncedSearch, monitoredOnly]);
-
-  // Reset to page 0 whenever the filter result set changes (search text or
-  // monitored-only toggle). Prevents "page 12 of 3" after narrowing.
-  useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, monitoredOnly]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages - 1);
-  const pageStart = currentPage * PAGE_SIZE;
-  const pageItems = useMemo(
-    () => filtered.slice(pageStart, pageStart + PAGE_SIZE),
-    [filtered, pageStart],
-  );
+  }, [searchInput, initialSearch, buildHref, router]);
 
   const handleToggle = useCallback(
     async (groupId: string, nextOn: boolean) => {
-      // Optimistic flip.
       setGroups((prev) =>
-        prev.map((g) =>
-          g.id === groupId ? { ...g, isMonitored: nextOn } : g,
-        ),
+        prev.map((g) => (g.id === groupId ? { ...g, isMonitored: nextOn } : g)),
       );
-      setToggling((prev) => {
-        const next = new Set(prev);
-        next.add(groupId);
-        return next;
-      });
+      setToggling((prev) => new Set(prev).add(groupId));
       setError(null);
-
       try {
         const res = await fetch(
           `/api/groups/${encodeURIComponent(groupId)}/monitor`,
@@ -132,26 +112,26 @@ export function GroupsList({ initial }: GroupsListProps) {
           },
         );
         if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as
+            | { error?: { message?: string } }
+            | null;
           throw new Error(
-            `Falha ao ${nextOn ? 'ativar' : 'desativar'} monitoramento (${res.status})`,
+            body?.error?.message ??
+              `Falha ao ${nextOn ? 'ativar' : 'desativar'} monitoramento (${res.status})`,
           );
         }
         const data = (await res.json()) as { group: GroupView };
-        // Reconcile with server-returned truth.
         setGroups((prev) =>
           prev.map((g) => (g.id === groupId ? data.group : g)),
         );
       } catch (err) {
-        // Revert optimistic update.
         setGroups((prev) =>
           prev.map((g) =>
             g.id === groupId ? { ...g, isMonitored: !nextOn } : g,
           ),
         );
         setError(
-          err instanceof Error
-            ? err.message
-            : 'Erro ao atualizar grupo',
+          err instanceof Error ? err.message : 'Erro ao atualizar grupo',
         );
       } finally {
         setToggling((prev) => {
@@ -168,20 +148,23 @@ export function GroupsList({ initial }: GroupsListProps) {
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === 'Escape' && searchInput.length > 0) {
         setSearchInput('');
-        setDebouncedSearch('');
+        router.push(buildHref({ q: '' }));
       }
     },
-    [searchInput],
+    [searchInput, buildHref, router],
+  );
+
+  const monitoredBadge = useMemo(
+    () => (
+      <span className="sticker sticker-purple">
+        🎯 {initialMonitoredOnly ? 'só monitorados' : `${total} nesta página`}
+      </span>
+    ),
+    [total, initialMonitoredOnly],
   );
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 20,
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Toolbar */}
       <div
         style={{
@@ -231,7 +214,7 @@ export function GroupsList({ initial }: GroupsListProps) {
               type="button"
               onClick={() => {
                 setSearchInput('');
-                setDebouncedSearch('');
+                router.push(buildHref({ q: '' }));
               }}
               aria-label="Limpar busca"
               style={{
@@ -251,14 +234,14 @@ export function GroupsList({ initial }: GroupsListProps) {
 
         <button
           type="button"
-          onClick={() => setMonitoredOnly((v) => !v)}
-          aria-pressed={monitoredOnly}
+          onClick={() => router.push(buildHref({ only: !initialMonitoredOnly }))}
+          aria-pressed={initialMonitoredOnly}
           aria-label="Mostrar apenas grupos monitorados"
           style={{
             padding: '10px 16px',
             borderRadius: 'var(--radius-pill)',
             border: '2.5px solid var(--stroke)',
-            background: monitoredOnly
+            background: initialMonitoredOnly
               ? 'var(--lime-500)'
               : 'var(--surface)',
             color: 'var(--ink-900)',
@@ -266,27 +249,17 @@ export function GroupsList({ initial }: GroupsListProps) {
             fontSize: 13,
             fontWeight: 700,
             cursor: 'pointer',
-            boxShadow: monitoredOnly
+            boxShadow: initialMonitoredOnly
               ? 'var(--shadow-chunk)'
               : '2px 2px 0 var(--stroke)',
             whiteSpace: 'nowrap',
           }}
         >
-          {monitoredOnly ? '✓ só monitorados' : 'só monitorados'}
+          {initialMonitoredOnly ? '✓ só monitorados' : 'só monitorados'}
         </button>
 
-        <div
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-          }}
-        >
-          <span className="sticker sticker-purple">
-            🎯 {monitoredCount} monitorados
-          </span>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          {monitoredBadge}
         </div>
       </div>
 
@@ -327,18 +300,17 @@ export function GroupsList({ initial }: GroupsListProps) {
         </div>
       )}
 
-      {/* Grid */}
-      {filtered.length > 0 ? (
+      {/* Grid + pagination */}
+      {groups.length > 0 ? (
         <>
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(320px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
               gap: 16,
             }}
           >
-            {pageItems.map((group) => (
+            {groups.map((group) => (
               <GroupCard
                 key={group.id}
                 group={group}
@@ -350,22 +322,90 @@ export function GroupsList({ initial }: GroupsListProps) {
             ))}
           </div>
 
-          <Pagination
-            page={currentPage}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            pageSize={PAGE_SIZE}
-            onChange={setPage}
-          />
+          {totalPages > 1 && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '14px 20px',
+                background: 'var(--surface)',
+                border: '2.5px solid var(--stroke)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-chunk)',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: 'var(--text-dim)',
+                }}
+              >
+                <span style={{ color: 'var(--text)', fontWeight: 800 }}>
+                  {from}–{to}
+                </span>{' '}
+                de{' '}
+                <span style={{ color: 'var(--text)', fontWeight: 800 }}>
+                  {total}
+                </span>
+                {' · '}
+                página{' '}
+                <span style={{ color: 'var(--text)', fontWeight: 800 }}>
+                  {page + 1}
+                </span>
+                {' / '}
+                {totalPages}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={page <= 0}
+                  onClick={() =>
+                    router.push(buildHref({ page: Math.max(0, page - 1) }))
+                  }
+                  aria-label="Página anterior"
+                  style={{
+                    opacity: page > 0 ? 1 : 0.4,
+                    cursor: page > 0 ? 'pointer' : 'not-allowed',
+                    padding: '8px 14px',
+                  }}
+                >
+                  ← anterior
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-purple"
+                  disabled={page >= totalPages - 1}
+                  onClick={() =>
+                    router.push(
+                      buildHref({ page: Math.min(totalPages - 1, page + 1) }),
+                    )
+                  }
+                  aria-label="Próxima página"
+                  style={{
+                    opacity: page < totalPages - 1 ? 1 : 0.4,
+                    cursor:
+                      page < totalPages - 1 ? 'pointer' : 'not-allowed',
+                    padding: '8px 14px',
+                  }}
+                >
+                  próxima →
+                </button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <FilterEmptyState
-          hasQuery={debouncedSearch.length > 0}
-          monitoredOnly={monitoredOnly}
+          hasQuery={initialSearch.length > 0}
+          monitoredOnly={initialMonitoredOnly}
           onClear={() => {
             setSearchInput('');
-            setDebouncedSearch('');
-            setMonitoredOnly(false);
+            router.push(pathname);
           }}
         />
       )}
@@ -374,109 +414,6 @@ export function GroupsList({ initial }: GroupsListProps) {
 }
 
 export default GroupsList;
-
-/* -------------------------------------------------------------------------- */
-/* Pagination                                                                 */
-/* -------------------------------------------------------------------------- */
-
-interface PaginationProps {
-  page: number;
-  totalPages: number;
-  totalItems: number;
-  pageSize: number;
-  onChange: (page: number) => void;
-}
-
-function Pagination({
-  page,
-  totalPages,
-  totalItems,
-  pageSize,
-  onChange,
-}: PaginationProps) {
-  if (totalPages <= 1) return null;
-
-  const from = page * pageSize + 1;
-  const to = Math.min((page + 1) * pageSize, totalItems);
-  const canPrev = page > 0;
-  const canNext = page < totalPages - 1;
-
-  const scrollToTop = () => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-        padding: '14px 20px',
-        background: 'var(--surface)',
-        border: '2.5px solid var(--stroke)',
-        borderRadius: 'var(--radius-lg)',
-        boxShadow: 'var(--shadow-chunk)',
-        flexWrap: 'wrap',
-      }}
-    >
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          color: 'var(--text-dim)',
-        }}
-      >
-        <span style={{ color: 'var(--text)', fontWeight: 800 }}>
-          {from}–{to}
-        </span>{' '}
-        de <span style={{ color: 'var(--text)', fontWeight: 800 }}>{totalItems}</span>
-        {' · '}
-        página <span style={{ color: 'var(--text)', fontWeight: 800 }}>{page + 1}</span>
-        {' / '}
-        {totalPages}
-      </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={!canPrev}
-          onClick={() => {
-            onChange(Math.max(0, page - 1));
-            scrollToTop();
-          }}
-          aria-label="Página anterior"
-          style={{
-            opacity: canPrev ? 1 : 0.4,
-            cursor: canPrev ? 'pointer' : 'not-allowed',
-            padding: '8px 14px',
-          }}
-        >
-          ← anterior
-        </button>
-        <button
-          type="button"
-          className="btn btn-purple"
-          disabled={!canNext}
-          onClick={() => {
-            onChange(Math.min(totalPages - 1, page + 1));
-            scrollToTop();
-          }}
-          aria-label="Próxima página"
-          style={{
-            opacity: canNext ? 1 : 0.4,
-            cursor: canNext ? 'pointer' : 'not-allowed',
-            padding: '8px 14px',
-          }}
-        >
-          próxima →
-        </button>
-      </div>
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 /* Local components                                                           */
@@ -538,11 +475,7 @@ function FilterEmptyState({
         </div>
       </div>
       {(hasQuery || monitoredOnly) && (
-        <button
-          type="button"
-          onClick={onClear}
-          className="btn btn-ghost"
-        >
+        <button type="button" onClick={onClear} className="btn btn-ghost">
           limpar filtros
         </button>
       )}

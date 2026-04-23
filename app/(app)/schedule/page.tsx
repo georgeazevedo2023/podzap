@@ -48,7 +48,7 @@ export default async function SchedulePage() {
   const [schedules, groups]: [ScheduleView[], GroupView[]] =
     await Promise.all([
       listSchedules(tenant.id),
-      listGroups(tenant.id, { monitoredOnly: true }),
+      listGroups(tenant.id, { monitoredOnly: true, pageSize: 100 }).then((r) => r.rows),
     ]);
 
   const hasMonitoredGroups = groups.length > 0;
