@@ -27,7 +27,7 @@ export default function HomePage() {
         </h1>
         <p style={{ color: 'var(--color-text-dim)', fontSize: 16, marginBottom: 24 }}>
           Transforme caos de mensagens em um podcast inteligente — com controle humano
-          antes da publicação.
+          antes da publicação. Acesso por convite.
         </p>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

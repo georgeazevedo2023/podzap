@@ -31,7 +31,11 @@ export default async function LoginPage({
   const error = pickFirst(params.error);
 
   return (
+    // F13: dark theme for login — matches the `(app)` route group so the
+    // look stays consistent across authenticated vs. pre-auth screens.
+    // Landing page at `/` stays on the default light palette.
     <main
+      data-theme="dark"
       style={{
         minHeight: '100vh',
         display: 'grid',
@@ -66,7 +70,7 @@ export default async function LoginPage({
             marginBottom: 20,
           }}
         >
-          A gente te manda um link mágico no email
+          acesso por convite — use seu email e senha corporativos
         </p>
 
         {message ? (
@@ -145,27 +149,49 @@ export default async function LoginPage({
             }}
           />
 
+          <label
+            htmlFor="password"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'var(--color-text-dim)',
+              marginTop: 4,
+            }}
+          >
+            Senha
+          </label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            minLength={6}
+            autoComplete="current-password"
+            placeholder="••••••••"
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: 15,
+              fontWeight: 500,
+              padding: '12px 20px',
+              border: '2.5px solid var(--color-stroke)',
+              borderRadius: 999,
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              outline: 'none',
+              boxShadow: '3px 3px 0 var(--color-stroke)',
+            }}
+          />
+
           <button
             type="submit"
             className="btn btn-purple"
-            style={{ justifyContent: 'center', marginTop: 4 }}
+            style={{ justifyContent: 'center', marginTop: 8 }}
           >
-            enviar link
+            entrar
           </button>
         </form>
-
-        <p
-          style={{
-            marginTop: 20,
-            paddingTop: 16,
-            borderTop: '2px dashed var(--color-stroke)',
-            fontSize: 12,
-            color: 'var(--color-text-dim)',
-            lineHeight: 1.5,
-          }}
-        >
-          Novo por aqui? O cadastro é automático no primeiro login.
-        </p>
       </div>
     </main>
   );

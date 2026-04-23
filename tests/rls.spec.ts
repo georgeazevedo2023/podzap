@@ -7,8 +7,10 @@
  * Setup:
  *   - Service-role client (bypasses RLS) is used for fixtures & teardown.
  *   - Two users are created via supabase.auth.admin.createUser with
- *     email_confirm: true. The handle_new_user() trigger (migration 0002)
- *     creates one tenant + one owner tenant_members row per signup.
+ *     email_confirm: true. Since F13 (migration 0008) dropped the
+ *     self-service handle_new_user() trigger, the fixture provisions a
+ *     tenant + owner tenant_members row manually via the service-role
+ *     client — the same way the admin UI (/admin, F13 A4) will do it.
  *   - Each user signs in with password on a fresh anon client to obtain a
  *     scoped authenticated session.
  *
@@ -77,18 +79,31 @@ async function createUserAndFixture(
   }
   const userId = created.user.id;
 
-  // 2. Fetch the tenant the trigger created. Use service-role (bypass RLS).
-  const { data: memberships, error: memErr } = await admin
-    .from('tenant_members')
-    .select('tenant_id, role')
-    .eq('user_id', userId);
-  if (memErr) throw new Error(`tenant_members lookup failed: ${memErr.message}`);
-  if (!memberships || memberships.length !== 1) {
+  // 2. Provision tenant + owner membership via service-role (bypasses RLS).
+  //    This replaces the old handle_new_user() trigger dropped in 0008.
+  const tenantName = email.split('@')[0] ?? 'test-tenant';
+  const { data: tenantRow, error: tenantErr } = await admin
+    .from('tenants')
+    .insert({ name: tenantName, plan: 'free' })
+    .select('id')
+    .single();
+  if (tenantErr || !tenantRow) {
     throw new Error(
-      `expected exactly 1 tenant_members row for ${email}, got ${memberships?.length ?? 0}`,
+      `tenants.insert for ${email} failed: ${tenantErr?.message ?? 'no row'}`,
     );
   }
-  const tenantId = memberships[0].tenant_id as string;
+  const tenantId = tenantRow.id as string;
+
+  const { error: memInsertErr } = await admin.from('tenant_members').insert({
+    tenant_id: tenantId,
+    user_id: userId,
+    role: 'owner',
+  });
+  if (memInsertErr) {
+    throw new Error(
+      `tenant_members.insert for ${email} failed: ${memInsertErr.message}`,
+    );
+  }
 
   // 3. Sign the user in on a fresh anon client -> authenticated session.
   const client = makeAnonClient();
@@ -137,7 +152,7 @@ afterAll(async () => {
 // -----------------------------------------------------------------------------
 
 describe('RLS — multi-tenant isolation', () => {
-  it('trigger creates exactly one tenant + one owner membership per signup', async () => {
+  it('admin provisioning yields exactly one tenant + one owner membership', async () => {
     const a = state.a!;
     const b = state.b!;
 

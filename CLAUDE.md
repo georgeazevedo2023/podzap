@@ -188,7 +188,8 @@ Relatório consolidado: [`docs/MVP-COMPLETION.md`](docs/MVP-COMPLETION.md) — t
 - [x] Fase 10: entrega via UAZAPI (worker `deliver-to-whatsapp` on `audio.created` + redeliver manual) ✅
 - [x] Fase 11: agendamento (cron `*/5 * * * *` → `dueSchedulesNow` → `summary.requested` com `autoApprove`) ✅ — última fase MVP
 - [x] Fase 12 (pós-MVP housekeeping): remove `/health`, dark theme em `(app)`, superadmin (migration 0007 + `scripts/set-superadmin.mjs`), home redesenhada 1:1 com protótipo (hero player + stats + grid + 3 painéis sidebar) ✅ PASS WITH CONCERNS — ver `docs/audits/fase-12-audit.md`
-- [ ] Pós-MVP: ver `ROADMAP.md` + `docs/MVP-COMPLETION.md` §9 (UI `/schedule`, Upstash rate limit, MP3 TTS, chunking, dashboard analytics, e backlog PRD Fase 12-18)
+- [x] Fase 13 (admin-managed tenancy): migration 0008 (drop trigger `handle_new_user`, UNIQUE `whatsapp_instances(tenant_id)`, `tenants.is_active`, policies SELECT com superadmin bypass), login email+senha, proxy gateia `/admin`, `lib/admin/{tenants,users,uazapi}.ts` + APIs completas, route group `(admin)` com layout dark + dashboard. Onboarding ajustado para empty state "contate o admin". ✅ PASS WITH CONCERNS — ver `docs/audits/fase-13-audit.md` e `docs/integrations/admin-management.md`
+- [ ] Pós-MVP: ver `ROADMAP.md` + `docs/MVP-COMPLETION.md` §9 (UI `/schedule`, Upstash rate limit, MP3 TTS, chunking, dashboard analytics, e backlog PRD Fase 14+)
 
 ---
 
@@ -516,4 +517,30 @@ Referência completa: `docs/integrations/superadmin.md`.
 - **Migration** `db/migrations/0007_superadmin.sql` cria a tabela + policy `superadmins_read_self` (user lê sua própria row) + helper `public.is_superadmin()` (stable, security definer, `search_path=''`) exposto a `authenticated` e `anon`.
 - **Promoção**: `node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<txt>"]`. O user precisa já existir em `auth.users` (fez login ao menos uma vez). Script é idempotente (`on conflict do update`).
 - **Uso em RLS**: `is_superadmin()` **ainda não está referenciada em nenhuma policy**. Quando expandir (candidates: `tenants`, `whatsapp_instances`, `ai_calls`, `schedules`), usar o padrão `using (tenant_filter or public.is_superadmin())`. Cuidado LGPD antes de expandir pra `messages`/`transcripts`/`summaries` — registrar acessos em audit log primeiro.
-- **Writes**: `service_role` only. Cliente browser nunca promove/demove. Admin panel UI fica pós-MVP.
+- **Writes**: `service_role` only. Cliente browser nunca promove/demove. Admin panel UI **live desde Fase 13** — ver §20.
+
+---
+
+## 20. Modelo admin-managed (Fase 13)
+
+Referência completa: `docs/integrations/admin-management.md`. Audit: `docs/audits/fase-13-audit.md`.
+
+```
+┌──────────────┐   cria tenant   ┌──────────────┐   cria user      ┌──────────────┐
+│  Superadmin  │────────────────▶│    Tenant    │─────────────────▶│  Usuário(s)  │
+│  /admin/*    │                 │ is_active    │  email+senha     │ tenant_memb  │
+└──────┬───────┘                 └──────┬───────┘                  └──────┬───────┘
+       │ atribui instância              │ 1 instância (UNIQUE)            │ login
+       ▼                                ▼                                 ▼
+  whatsapp_instances             tenants (plan)                   /login → /home
+```
+
+- **Sem signup público**. Trigger `on_auth_user_created` foi dropado em `0008_admin_managed.sql`.
+- **Login email+senha** (`supabase.auth.signInWithPassword`). Magic link removido.
+- **`/admin/*` gated** em 3 camadas: `proxy.ts` (redirect 307), `app/(admin)/layout.tsx` via `requireSuperadmin()`, rotas `/api/admin/*` checam sessão antes do service-role client.
+- **1:1 tenant↔instância**: `UNIQUE(tenant_id)` em `whatsapp_instances`. `attachInstance` valida tenant existe + ativo + sem instância prévia + instância UAZAPI existe + não está attached em outro tenant.
+- **Suspend vs delete**: `suspendTenant` flipa `is_active=false` (reversível, sem perda de dados); `deleteTenant` é hard delete com cascade (irreversível).
+- **Tabela de rotas admin**: `/admin` (dashboard), `/admin/tenants`, `/admin/tenants/[id]`, `/admin/users`, `/admin/uazapi`. APIs em `/api/admin/{tenants,users,uazapi}/*`.
+- **Débitos (Fase 14)**: email notificando senha no createUser; audit log; `/forgot-password`; modal chunky substituindo `window.confirm`; deletar `POST /api/whatsapp/connect` + `startConnectAction` deprecated.
+- **Rollback em createUser**: se `tenant_members.insert` falha, o `auth.users.createUser` é revertido via `supabase.auth.admin.deleteUser` — não fica user órfão.
+- **Token UAZAPI**: vem do `GET /instance/all` admin, encriptado AES-256-GCM antes do INSERT em `whatsapp_instances` (mesmo padrão do fluxo legacy).

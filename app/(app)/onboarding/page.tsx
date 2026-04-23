@@ -11,7 +11,6 @@ import {
   type InstanceView,
 } from '@/lib/whatsapp/service';
 
-import { startConnectAction } from './actions';
 import { ConnectedPanel } from './ConnectedPanel';
 import { QrCodePanel } from './QrCodePanel';
 
@@ -48,9 +47,9 @@ export default async function OnboardingPage() {
     <div style={{ minHeight: '100vh' }}>
       <TopBar
         title="Conectar WhatsApp"
-        subtitle="escaneia o QR com o celular e a gente cuida do resto"
+        subtitle="status da instância atribuída ao seu tenant"
         accent="zap"
-        breadcrumb="podZAP · Fase 2"
+        breadcrumb="podZAP · Fase 13"
       />
 
       <div
@@ -155,6 +154,12 @@ function Stepper({ current }: { current: Step }) {
 /* Start panel (step 0 — no instance yet)                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * F13: admin-managed tenancy. Tenants don't self-provision instances —
+ * the superadmin attaches an existing UAZAPI instance via `/admin/uazapi`.
+ * When there's no instance attached yet, we show a passive "contate o
+ * admin" empty state instead of the legacy "gerar QR" flow.
+ */
 function StartPanel() {
   return (
     <div
@@ -168,55 +173,48 @@ function StartPanel() {
       }}
     >
       <div>
-        <span className="sticker sticker-zap" style={{ marginBottom: 12 }}>
-          🟢 passo 1/3
+        <span className="sticker sticker-yellow" style={{ marginBottom: 12 }}>
+          ⏳ aguardando atribuição
         </span>
         <h2
           style={{
             margin: '10px 0 14px',
             fontFamily: 'var(--font-display)',
-            fontSize: 48,
+            fontSize: 40,
             fontWeight: 800,
-            lineHeight: 1,
+            lineHeight: 1.05,
             letterSpacing: '-0.03em',
           }}
         >
-          bora conectar seu{' '}
-          <span style={{ color: 'var(--color-zap-500)' }}>zap</span>? 📱
+          nenhuma instância atribuída ainda 📭
         </h2>
         <p
           style={{
-            margin: '0 0 22px',
+            margin: '0 0 18px',
             fontSize: 15,
             color: 'var(--color-text-dim)',
             lineHeight: 1.5,
             maxWidth: 480,
           }}
         >
-          a gente usa a API oficial (uazapi) pra ler mensagens dos grupos que
-          você escolher. nada de bot, nada de print — você autoriza, a gente
-          resume.
+          no modelo atual, apenas um <strong>superadmin</strong> vincula uma
+          instância UAZAPI ao seu tenant. Entre em contato com quem administra
+          a plataforma para que você possa gerar o QR code e conectar o zap.
         </p>
-
-        <form action={startConnectAction}>
-          <button type="submit" className="btn btn-zap">
-            ⚡ gerar QR code
-          </button>
-        </form>
 
         <ul
           style={{
             listStyle: 'none',
             padding: 0,
-            margin: '26px 0 0',
+            margin: '20px 0 0',
             display: 'grid',
             gap: 10,
           }}
         >
           {[
-            ['🔒', 'sem print, sem bot', 'API oficial, token criptografado'],
-            ['🎯', 'só os grupos que você marcar', 'nada de ler o zap inteiro'],
-            ['⚡', 'setup em 2 minutos', 'sério, é rapidinho'],
+            ['📨', 'peça pro admin', 'diga o nome do seu tenant'],
+            ['🔌', 'ele atribui a instância', 'vinculação é feita pelo painel admin'],
+            ['⚡', 'aí volta aqui', 'o QR aparece logo após a atribuição'],
           ].map(([icon, title, desc]) => (
             <li
               key={title}
@@ -270,7 +268,7 @@ function StartPanel() {
           }}
         >
           <div>
-            <div style={{ fontSize: 64, marginBottom: 6 }}>📱</div>
+            <div style={{ fontSize: 64, marginBottom: 6 }}>📭</div>
             <div
               style={{
                 fontFamily: 'var(--font-display)',
@@ -280,7 +278,7 @@ function StartPanel() {
                 letterSpacing: '-0.02em',
               }}
             >
-              seu zap<br />espera por aí
+              sem instância<br />atribuída
             </div>
             <div
               style={{
@@ -289,7 +287,7 @@ function StartPanel() {
                 marginTop: 6,
               }}
             >
-              clica em "gerar QR code"
+              contate o superadmin
             </div>
           </div>
         </div>

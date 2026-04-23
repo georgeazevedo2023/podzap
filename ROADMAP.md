@@ -190,20 +190,42 @@ Entregue em 2026-04-22. Ver [`docs/audits/fase-12-audit.md`](./docs/audits/fase-
 - [ ] 🧊 Criar `/settings` e migrar conteúdo do antigo `SettingsCard` (removido da home nesta fase)
 - [ ] 🧊 `HeroPlayer` refetch de signed URL antes de expirar (hoje `<audio>` quebra após 1h)
 - [ ] 🧊 GenerateQuickCard: avaliar modal inline vs link pra `/schedule` (hoje link)
-- [ ] 🧊 Expandir policies RLS relevantes com `or public.is_superadmin()` (tenants, whatsapp_instances, ai_calls)
-- [ ] 🧊 Admin panel `/admin` (pós-MVP — usa `is_superadmin()` gate server-side)
+- [x] Expandir policies RLS relevantes com `or public.is_superadmin()` (entregue na Fase 13 para `tenants`, `tenant_members`, `whatsapp_instances`)
+- [x] Admin panel `/admin` — entregue na Fase 13 (dashboard + APIs + layout)
+
+---
+
+### Fase 13 — Admin-managed tenancy ✅ (PASS WITH CONCERNS)
+
+Entregue em 2026-04-23. Ver [`docs/audits/fase-13-audit.md`](./docs/audits/fase-13-audit.md) + guia [`docs/integrations/admin-management.md`](./docs/integrations/admin-management.md).
+
+- [x] Migration `0008_admin_managed.sql` — drop trigger `on_auth_user_created`, `UNIQUE(tenant_id)` em `whatsapp_instances`, coluna `tenants.is_active`, policies SELECT com bypass superadmin
+- [x] Login reescrito para email+senha (`signInWithPassword`) — dark theme
+- [x] `proxy.ts` gateia `/admin/*` com check de `superadmins`
+- [x] `lib/tenant.ts::requireSuperadmin()` helper
+- [x] `lib/admin/tenants.ts` + `lib/admin/users.ts` + `lib/admin/uazapi.ts` com CRUD + rollback em createUser
+- [x] APIs `/api/admin/{tenants,users,uazapi}/*` completas
+- [x] Route group `app/(admin)/` dark theme + `AdminSidebar` + dashboard `/admin`
+- [x] Páginas `/admin/tenants` (+ `[id]`, `/new`), `/admin/users`, `/admin/uazapi` com tabelas e modais chunky
+- [x] `/onboarding` ajustado: empty state "contate o admin" quando sem instância
+- [ ] 🧊 Email de notificação ao criar user
+- [ ] 🧊 Audit log de ações do superadmin
+- [ ] 🧊 `/forgot-password` self-service
+- [ ] 🧊 Modal chunky substituindo `window.confirm`
+- [ ] 🧊 Deletar rota deprecated `POST /api/whatsapp/connect` + server action `startConnectAction`
 
 ---
 
 ## 🧊 Pós-MVP (backlog PRD)
 
-- **Fase 13:** Personalização avançada (múltiplas vozes, estilos custom)
-- **Fase 14:** Dashboard analytics (métricas de uso, retenção)
-- **Fase 15:** Clips / highlights (cortes curtos do áudio)
-- **Fase 16:** Vídeo resumo
-- **Fase 17:** Memória de grupo (contexto entre resumos)
-- **Fase 18:** IA conversacional sobre resumos passados
-- **Fase 19:** Integração NotebookLM (opcional)
+- **Fase 14:** UI admin completa + email transacional + audit log + password self-reset (ver Fase 13 débitos)
+- **Fase 15:** Personalização avançada (múltiplas vozes, estilos custom)
+- **Fase 16:** Dashboard analytics (métricas de uso, retenção)
+- **Fase 17:** Clips / highlights (cortes curtos do áudio)
+- **Fase 18:** Vídeo resumo
+- **Fase 19:** Memória de grupo (contexto entre resumos)
+- **Fase 20:** IA conversacional sobre resumos passados
+- **Fase 21:** Integração NotebookLM (opcional)
 
 ---
 

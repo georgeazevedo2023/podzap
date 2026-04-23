@@ -17,6 +17,7 @@ import { getCurrentUserAndTenant, type CurrentTenant, type CurrentUser } from "@
 
 export type ErrorCode =
   | "UNAUTHORIZED"
+  | "FORBIDDEN"
   | "NOT_FOUND"
   | "RATE_LIMITED"
   | "UAZAPI_ERROR"
@@ -28,6 +29,7 @@ export type ErrorCode =
   | "INVALID_STATE"
   | "ALREADY_EXISTS"
   | "CONFLICT"
+  | "AUTH_ERROR"
   | "DELIVERY_ERROR";
 
 export interface ApiError {
@@ -165,6 +167,9 @@ export function mapErrorToResponse(err: unknown): NextResponse {
     }
     if (code === "CONFLICT") {
       return errorResponse(409, "CONFLICT", message);
+    }
+    if (code === "AUTH_ERROR") {
+      return errorResponse(500, "AUTH_ERROR", message);
     }
     if (code === "DB_ERROR") {
       return errorResponse(500, "INTERNAL_ERROR", message);

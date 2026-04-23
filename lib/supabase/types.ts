@@ -405,6 +405,27 @@ export type Database = {
           },
         ]
       }
+      superadmins: {
+        Row: {
+          granted_at: string
+          granted_by: string | null
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          granted_at?: string
+          granted_by?: string | null
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          granted_at?: string
+          granted_by?: string | null
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       tenant_members: {
         Row: {
           created_at: string
@@ -443,6 +464,7 @@ export type Database = {
           delivery_target: string
           id: string
           include_caption_on_delivery: boolean
+          is_active: boolean
           name: string
           plan: string
           updated_at: string
@@ -452,6 +474,7 @@ export type Database = {
           delivery_target?: string
           id?: string
           include_caption_on_delivery?: boolean
+          is_active?: boolean
           name: string
           plan?: string
           updated_at?: string
@@ -461,6 +484,7 @@ export type Database = {
           delivery_target?: string
           id?: string
           include_caption_on_delivery?: boolean
+          is_active?: boolean
           name?: string
           plan?: string
           updated_at?: string
@@ -558,6 +582,7 @@ export type Database = {
     }
     Functions: {
       current_tenant_ids: { Args: never; Returns: string[] }
+      is_superadmin: { Args: never; Returns: boolean }
       safe_uuid: { Args: { value: string }; Returns: string }
     }
     Enums: {

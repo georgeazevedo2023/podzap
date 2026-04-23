@@ -66,4 +66,13 @@ Next.js 16 · TypeScript · Tailwind v4 · Supabase · Inngest · UAZAPI · Groq
 - **Superadmin** (cross-tenant admin capability) — migration `0007_superadmin.sql` + helper `public.is_superadmin()` + script `scripts/set-superadmin.mjs` pra promoção via CLI. Ver [`docs/integrations/superadmin.md`](./docs/integrations/superadmin.md).
 - `/home` redesenhada 1:1 com o protótipo `podZAP/screen_home.jsx` — hero player com waveform animado, 4 stat cards, grid de últimos episódios, e 3 painéis laterais. Service `lib/stats/service.ts` alimenta o layout com dados reais. Débitos residuais em [`docs/audits/fase-12-audit.md`](./docs/audits/fase-12-audit.md).
 
-Ver também [`ROADMAP.md`](./ROADMAP.md), [`CLAUDE.md`](./CLAUDE.md) e os 12 audits em [`docs/audits/`](./docs/audits/).
+### Fase 13 (admin-managed tenancy) — 2026-04-23
+
+- **Modelo B2B**: signup público removido, trigger `handle_new_user` dropado. Superadmin cadastra tudo (tenants, users, instâncias).
+- **Login email+senha** (não mais magic link). Form dark em `/login`.
+- **Route group `(admin)`** gated por `requireSuperadmin()` + `proxy.ts` + check no layout. Dashboard em `/admin` com contagens reais.
+- **1:1 tenant↔instância UAZAPI** via `UNIQUE(tenant_id)`. Superadmin atribui instâncias existentes via `/api/admin/uazapi/attach` (ou atalho `create-and-attach`).
+- **Suspend vs. delete**: `tenants.is_active` soft-suspend + hard delete explícito com confirm.
+- Guia completo em [`docs/integrations/admin-management.md`](./docs/integrations/admin-management.md). Audit em [`docs/audits/fase-13-audit.md`](./docs/audits/fase-13-audit.md).
+
+Ver também [`ROADMAP.md`](./ROADMAP.md), [`CLAUDE.md`](./CLAUDE.md) e os 13 audits em [`docs/audits/`](./docs/audits/).

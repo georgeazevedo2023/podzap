@@ -21,10 +21,24 @@ const PROTECTED_PREFIXES = [
   '/schedule',
   '/settings',
   '/onboarding',
+  '/admin',
 ] as const;
+
+/**
+ * Superadmin-only prefixes (subset of `PROTECTED_PREFIXES`). Authenticated
+ * users that are not present in `public.superadmins` are redirected to
+ * `/home` with an access-denied banner. F13 added `/admin`.
+ */
+const ADMIN_PREFIXES = ['/admin'] as const;
 
 function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
+function isAdminPath(pathname: string): boolean {
+  return ADMIN_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
 }
@@ -83,6 +97,25 @@ export async function proxy(request: NextRequest) {
     url.searchParams.set('next', pathname);
     url.searchParams.set('error', 'Faça login para continuar');
     return NextResponse.redirect(url);
+  }
+
+  // F13: /admin routes require superadmin. We hit `public.superadmins`
+  // directly via the already-authenticated supabase client; RLS on that
+  // table lets an authenticated user read their own row (see 0007_superadmin.sql),
+  // so a regular user sees `null` and gets bounced to /home.
+  if (isAdminPath(pathname)) {
+    const { data: sa } = await supabase
+      .from('superadmins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (!sa) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/home';
+      url.searchParams.set('error', 'Acesso negado');
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;
