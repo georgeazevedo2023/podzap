@@ -41,4 +41,4 @@ Next.js 15 · TypeScript · Tailwind · Supabase · Inngest · UAZAPI · Groq ·
 
 ## 📦 Status
 
-MVP em desenvolvimento. Ver [`ROADMAP.md`](./ROADMAP.md).
+MVP em desenvolvimento. Fases 0 (fundação) e 1 (auth + multi-tenancy) concluídas; **Fase 2 (conexão WhatsApp via UAZAPI) em andamento**. Ver [`ROADMAP.md`](./ROADMAP.md).

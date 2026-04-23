@@ -173,8 +173,10 @@ npx inngest-cli dev
 
 - [x] PRD definido
 - [x] Layout/design system (mockups em `podZAP/`)
-- [ ] **Fase 0: scaffolding Next.js + Supabase** ← próximo passo
-- [ ] Fase 1+: ver `ROADMAP.md`
+- [x] Fase 0: scaffolding Next.js + Supabase
+- [x] Fase 1: Auth + multi-tenancy (RLS, signup auto-cria tenant)
+- [ ] 🟡 **Fase 2: conexão WhatsApp (UAZAPI) — em andamento**
+- [ ] Fase 3+: ver `ROADMAP.md`
 
 ---
 
@@ -185,3 +187,27 @@ npx inngest-cli dev
 - Respeitar multi-tenancy em **toda** query de banco
 - Usuários falam PT-BR; respostas e UI em português
 - Quando tocar em integrações externas (UAZAPI, Gemini, Groq), validar antes com chamada real ou mock explícito
+
+---
+
+## 10. Pipeline UAZAPI (Fase 2+)
+
+Referência completa: `docs/integrations/uazapi.md` (endpoints verificados live em 2026-04-22).
+
+- **Base URL**: `UAZAPI_BASE_URL` (ex.: `https://wsmart.uazapi.com`)
+- **2 tipos de token**:
+  - **Admin** — env `UAZAPI_ADMIN_TOKEN`. Escopo: `POST /instance/init`, `GET /instance/all`. Nunca toca o browser.
+  - **Instância** — único por tenant. Armazenado em `whatsapp_instances.uazapi_token_encrypted` (AES-256-GCM com `ENCRYPTION_KEY`). Usado em todo endpoint com escopo de número (`/instance/status`, `/instance/connect`, `DELETE /instance`, `/send/*`, `/group/*`, `/webhook`).
+- **Modelo 0..1 por tenant**: cada tenant tem no máximo uma instância no MVP. Multi-instância por tenant fica pós-MVP.
+- **Fluxo de conexão**:
+  1. `createInstance(name)` (admin) → recebe `{ instance: { id, token } }`
+  2. Encripta token + insere em `whatsapp_instances` com `status='connecting'`
+  3. `getQrCode(instanceToken)` → `POST /instance/connect` → `{ qrCodeBase64, status }`
+  4. UI renderiza `<img src="data:image/png;base64,${qrCodeBase64}">` + inicia polling
+  5. Polling `getInstanceStatus(instanceToken)` a cada 2-3s até `'connected'`
+  6. (Fase 4) webhook `connection` atualiza DB em tempo real
+- **Webhooks**: `POST /webhook` body `{ url, events: ['messages', 'connection'], enabled: true }` com token de instância. Evento `event` na payload de entrada fan-out por tipo.
+- **Delete**: `DELETE /instance` com **token de instância** (não admin — retorna 401).
+- **QR quirk**: servidor devolve `data:image/png;base64,…` com prefixo; o client em `lib/uazapi/client.ts` tira o prefixo e o caller adiciona de volta uma única vez.
+- **Rate limit**: `UazapiClient` tem token bucket interno; API routes têm rate limit in-memory 30/min/tenant. Em produção, considerar Upstash para limitar cross-instance.
+- **Sidebar indicator**: `app/(app)/layout.tsx` faz `SELECT status, phone FROM whatsapp_instances WHERE tenant_id=… LIMIT 1` via admin client e passa pro `AppSidebar` → `Sidebar` (prop `whatsappStatus` + `whatsappPhone`). Falhas degradam silenciosamente para `'none'`.

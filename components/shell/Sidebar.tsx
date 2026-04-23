@@ -26,6 +26,17 @@ interface NavItem {
   badge?: number;
 }
 
+/**
+ * Aggregated state of the tenant's WhatsApp connection, as surfaced in the
+ * sidebar. Mirrors the enum in `whatsapp_instances.status` plus a synthetic
+ * `none` case for tenants that have never provisioned an instance.
+ */
+export type WhatsappStatus =
+  | 'connected'
+  | 'connecting'
+  | 'disconnected'
+  | 'none';
+
 export interface SidebarProps {
   current: NavId;
   onNav: (id: NavId) => void;
@@ -41,6 +52,17 @@ export interface SidebarProps {
   tenantName?: string;
   /** Current tenant plan identifier (e.g. "free", "pro") — surfaced in the plan card. */
   tenantPlan?: string;
+  /**
+   * Current connection state of the tenant's WhatsApp instance (if any). Drives
+   * the colored status dot rendered next to the "Conectar Zap" nav item.
+   * Defaults to `'none'` — treated visually the same as `'disconnected'`.
+   */
+  whatsappStatus?: WhatsappStatus;
+  /**
+   * Optional phone number attached to the connected instance. Rendered as a
+   * small secondary line under "WhatsApp" when `whatsappStatus === 'connected'`.
+   */
+  whatsappPhone?: string | null;
 }
 
 export function Sidebar({
@@ -50,6 +72,8 @@ export function Sidebar({
   userEmail,
   tenantName,
   tenantPlan,
+  whatsappStatus = 'none',
+  whatsappPhone,
 }: SidebarProps) {
   const items: NavItem[] = [
     { id: 'home', label: 'Home', icon: <Icons.Home /> },
@@ -58,8 +82,13 @@ export function Sidebar({
     { id: 'history', label: 'Histórico', icon: <Icons.History /> },
     { id: 'schedule', label: 'Agenda', icon: <Icons.Calendar /> },
   ];
+
+  // "Conectar Zap" morphs into "WhatsApp + status dot" once we know there's
+  // (or was) an instance. The click target remains `/onboarding` in all
+  // states — it doubles as the detail/manage screen.
+  const zapLabel = whatsappStatus === 'none' ? 'Conectar Zap' : 'WhatsApp';
   const devItems: NavItem[] = [
-    { id: 'onboarding', label: 'Conectar Zap', icon: <Icons.Zap /> },
+    { id: 'onboarding', label: zapLabel, icon: <Icons.Zap /> },
     { id: 'settings', label: 'Ajustes', icon: <Icons.Settings /> },
   ];
 
@@ -187,17 +216,29 @@ export function Sidebar({
       >
         Setup
       </div>
-      {devItems.map((i) => (
-        <NavButton
-          key={i.id}
-          id={i.id}
-          label={i.label}
-          icon={i.icon}
-          badge={i.badge}
-          active={current === i.id}
-          onClick={() => onNav(i.id)}
-        />
-      ))}
+      {devItems.map((i) =>
+        i.id === 'onboarding' ? (
+          <WhatsappNavRow
+            key={i.id}
+            active={current === i.id}
+            label={i.label}
+            icon={i.icon}
+            status={whatsappStatus}
+            phone={whatsappPhone}
+            onClick={() => onNav(i.id)}
+          />
+        ) : (
+          <NavButton
+            key={i.id}
+            id={i.id}
+            label={i.label}
+            icon={i.icon}
+            badge={i.badge}
+            active={current === i.id}
+            onClick={() => onNav(i.id)}
+          />
+        ),
+      )}
 
       <div style={{ flex: 1 }} />
 
@@ -328,3 +369,132 @@ export function Sidebar({
 }
 
 export default Sidebar;
+
+/* ------------------------------------------------------------------ */
+/* Inline nav row: "Conectar Zap" with a live-status dot + phone.      */
+/* ------------------------------------------------------------------ */
+
+interface WhatsappNavRowProps {
+  active: boolean;
+  label: string;
+  icon: ReactNode;
+  status: WhatsappStatus;
+  phone?: string | null;
+  onClick: () => void;
+}
+
+/**
+ * Variant of `NavButton` that adds a small colored status dot + optional phone
+ * subtitle. Kept in-file to avoid a second button component while the whole
+ * sidebar still uses inline `style` blocks (see `NavButton`).
+ */
+function WhatsappNavRow({
+  active,
+  label,
+  icon,
+  status,
+  phone,
+  onClick,
+}: WhatsappNavRowProps) {
+  const dotColor =
+    status === 'connected'
+      ? '#22C55E' // green
+      : status === 'connecting'
+        ? '#F59E0B' // amber
+        : '#9CA3AF'; // gray (disconnected / none)
+
+  // `connecting` reuses the `.live-dot` CSS (pulse animation). Other states
+  // render a static dot.
+  const dotClassName = status === 'connecting' ? 'live-dot' : undefined;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={
+        status === 'connected'
+          ? `WhatsApp conectado${phone ? ` · ${phone}` : ''}`
+          : status === 'connecting'
+            ? 'WhatsApp conectando…'
+            : status === 'disconnected'
+              ? 'WhatsApp desconectado — clique para reconectar'
+              : 'WhatsApp não conectado — clique para conectar'
+      }
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '10px 12px',
+        background: active ? 'var(--purple-600)' : 'transparent',
+        color: active ? '#fff' : 'var(--text)',
+        borderRadius: 'var(--r-md)',
+        fontFamily: 'var(--font-body)',
+        fontWeight: 700,
+        fontSize: 14,
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'all 0.12s ease',
+        position: 'relative',
+        boxShadow: active ? '3px 3px 0 var(--stroke)' : 'none',
+        border: active
+          ? '2.5px solid var(--stroke)'
+          : '2.5px solid transparent',
+      }}
+      onMouseEnter={(e) => {
+        if (!active) e.currentTarget.style.background = 'var(--bg-2)';
+      }}
+      onMouseLeave={(e) => {
+        if (!active) e.currentTarget.style.background = 'transparent';
+      }}
+    >
+      <span
+        style={{
+          display: 'grid',
+          placeItems: 'center',
+          opacity: active ? 1 : 0.7,
+        }}
+      >
+        {icon}
+      </span>
+      <span
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          lineHeight: 1.15,
+          minWidth: 0,
+          flex: 1,
+        }}
+      >
+        <span>{label}</span>
+        {status === 'connected' && phone && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              opacity: 0.75,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              marginTop: 2,
+            }}
+          >
+            {phone}
+          </span>
+        )}
+      </span>
+      <span
+        aria-hidden
+        className={dotClassName}
+        style={{
+          marginLeft: 'auto',
+          width: 10,
+          height: 10,
+          borderRadius: '50%',
+          background: dotColor,
+          border: '2px solid var(--stroke)',
+          flexShrink: 0,
+        }}
+      />
+    </button>
+  );
+}

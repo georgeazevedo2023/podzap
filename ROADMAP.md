@@ -8,7 +8,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ## 🎯 MVP — Fases 0 a 10
 
-### Fase 0 — Fundação ⬜
+### Fase 0 — Fundação ✅
 **Objetivo:** projeto Next.js rodando, conectado ao Supabase, com deploy funcional.
 
 - [ ] Scaffold Next.js 15 + TS + Tailwind
@@ -23,7 +23,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 1 — Auth + Multi-tenancy ⬜
+### Fase 1 — Auth + Multi-tenancy ✅
 **Objetivo:** login funcional, usuário vinculado a tenant, RLS bloqueando acesso cruzado.
 
 - [ ] Migrations: `tenants`, `users`, `tenant_members`
@@ -37,7 +37,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 2 — Conexão WhatsApp (UAZAPI) ⬜
+### Fase 2 — Conexão WhatsApp (UAZAPI) 🟡
 **Objetivo:** usuário conecta instância UAZAPI via QR code e vê status da conexão.
 
 - [ ] Migration `whatsapp_instances`

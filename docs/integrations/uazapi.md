@@ -9,11 +9,11 @@ questions for the first integration layer.
 - **Client code**: `lib/uazapi/client.ts`
 - **Types / zod schemas**: `lib/uazapi/types.ts`
 
-> Sources: the `uazapi` Claude skill (authoritative), plus the public docs at
-> <https://docs.uazapi.com>. The docs site is a client-rendered SPA, so
-> several pages could not be auto-extracted — those are flagged in "Open
-> Questions" and should be validated against the live dashboard before going
-> to production.
+> Sources: the `uazapi` Claude skill, the public docs at
+> <https://docs.uazapi.com>, and — most importantly — a live probe of
+> `https://wsmart.uazapi.com` run on **2026-04-22** as part of Fase-2 audit.
+> Where the skill and the live server disagreed, the live server wins; those
+> resolutions are flagged inline.
 
 ---
 
@@ -47,58 +47,94 @@ All paths below are relative to the base URL. All JSON bodies.
 
 #### Create instance (admin)
 
-> **OPEN QUESTION**: the public docs expose this under the admin panel but the
-> exact path is not confirmed by the skill. Common variants observed in
-> UAZAPI-compatible gateways are `POST /instance/init` and
-> `POST /instance/create`. The client uses `POST /instance/init` as the primary
-> path; a fallback to `/instance/create` is acceptable if the first 404s.
+Verified live: `POST /instance/init`. The server accepts `admintoken` as the
+header; for peer-gateway parity the client also sends `token: <admin>` with
+the same value (both headers are honoured).
 
 ```
 POST /instance/init
-Headers: { "admintoken": "<admin>", "Content-Type": "application/json" }
+Headers: { "admintoken": "<admin>", "token": "<admin>", "Content-Type": "application/json" }
 Body:    { "name": "<arbitrary label>" }
-Response (shape as observed on similar gateways):
+Response:
 {
+  "info": "Instance created successfully",
+  "response": "Instance created successfully",
+  "status": "disconnected",
+  "token": "<per-instance token>",
+  "name": "...",
   "instance": {
     "id": "inst_abc123",
-    "name": "podzap-user-42",
-    "token": "inst_tok_xxxxxxxx",
+    "name": "podzap-tenant-42",
+    "token": "<per-instance token>",
     "status": "disconnected"
   }
 }
 ```
 
-We persist `id`, `token`, and `status`.
+We persist `instance.id`, `instance.token` (encrypted — AES-256-GCM with
+`ENCRYPTION_KEY`), and `instance.status`. Every subsequent per-instance call
+must use `instance.token` — **not** the admin token.
 
 #### Get status
+
+Verified live: `GET /instance/status`. Auth is the per-instance token, not
+admin.
 
 ```
 GET /instance/status
 Headers: { "token": "<instanceToken>" }
 Response: {
-  "instance": { "status": "connected" | "connecting" | "disconnected", ... },
+  "instance": { "status": "connected" | "connecting" | "disconnected",
+                "qrcode": "data:image/png;base64,..." | "", ... },
   "loggedIn": boolean
 }
 ```
 
-Multiple response shapes exist — the client normalises to a single enum
-(`InstanceStatus`).
+The live enum values are **exactly** `connected | connecting | disconnected`
+— there is no `qr` / `qrcode` status in the response (the QR payload travels
+alongside as `instance.qrcode` while `status` stays `connecting`). The client
+still normalises everything via `InstanceStatusSchema` and falls back to the
+`loggedIn` boolean when the string is missing.
 
 #### Connect / get QR code
+
+Verified live: `POST /instance/connect` with an empty JSON body, per-instance
+token. Response envelope on the live server:
 
 ```
 POST /instance/connect
 Headers: { "token": "<instanceToken>" }
 Body:    {}
-Response variants (all handled):
-  { "instance": { "qrcode": "<base64>", "status": "connecting" } }
-  { "qrcode": "<base64>" }
-  { "base64": "<base64>" }
-  { "status": "connected", "loggedIn": true }        // already connected
+Response (live):
+{
+  "connected": false,
+  "instance": {
+    "id": "...",
+    "token": "...",
+    "status": "connecting",
+    "qrcode": "data:image/png;base64,iVBORw0KGgoAAA..."   // INCLUDES prefix
+  },
+  ...
+}
 ```
 
-`qrcode` / `base64` is a data-URL-ready base64 string (no `data:` prefix in
-most cases — our client adds `data:image/png;base64,` if missing).
+**QR format quirk**: the live server returns the QR already wrapped as a data
+URL (`data:image/png;base64,<...>`). The `UazapiClient` strips the prefix in
+`extractQrBase64` so downstream code can re-add it exactly once. API routes
+and the UI treat the stored value as raw base64 and build `<img src="data:image/png;base64,..." />`
+themselves.
+
+Legacy shapes still handled for resilience (peer gateways / older UAZAPI
+builds):
+```
+{ "qrcode": "<raw base64>" }
+{ "base64": "<raw base64>" }
+{ "status": "connected", "loggedIn": true }           // already connected, no QR
+```
+
+If the instance is already connected, `instance.qrcode` comes back as `""`
+and `status === "connected"` — callers should branch on status before
+trying to render.
 
 #### List all instances (admin)
 
@@ -110,17 +146,36 @@ Response: Instance[]
 
 Useful for reconciliation jobs and orphan detection.
 
-#### Delete instance (admin)
+#### Delete instance
 
-> **OPEN QUESTION**: not in the skill doc. Canonical path on peer gateways is
-> `DELETE /instance/:id` or `POST /instance/logout`. The client implements
-> `DELETE /instance/{id}` with the admin token; validate before production.
+Verified live: `DELETE /instance` (no `:id` segment) with the **per-instance
+token**, NOT the admin token. This was the single most surprising finding
+during the Fase-2 probe — the admin token returns `401 Invalid token` on
+this path.
 
 ```
-DELETE /instance/{id}
-Headers: { "admintoken": "<admin>" }
-Response: { "deleted": true } | 204
+DELETE /instance
+Headers: { "token": "<instanceToken>" }
+Response: {
+  "info": "The device has been successfully disconnected and the instance has been deleted from the database.",
+  "response": "Instance Deleted"
+}
 ```
+
+Other variants **tested and rejected** on the live server (documented so
+nobody wastes time rediscovering this):
+
+| Attempt                          | Result                                                  |
+| -------------------------------- | ------------------------------------------------------- |
+| `DELETE /instance/<id>`          | `405 Method Not Allowed`                                |
+| `POST /instance/logout`          | `405 Method Not Allowed`                                |
+| `POST /instance/remove`          | `405 Method Not Allowed`                                |
+| `DELETE /instance` w/ admintoken | `401 Invalid token`                                     |
+| `POST /instance/disconnect`      | Works, but **only** transitions to `disconnected` — row stays. Use for soft-reset, not delete. |
+
+Implication for our storage model: deleting an instance from UAZAPI does
+NOT cascade — we must delete (or mark `deleted_at`) the `whatsapp_instances`
+row in the same API route.
 
 ---
 
@@ -193,24 +248,56 @@ Other media types supported by `/send/media`: `image`, `video`, `document`,
 
 ### 2.4 Webhooks
 
-> **OPEN QUESTION**: the exact webhook-registration endpoint (likely
-> `POST /webhook` or `POST /instance/webhook`) and the exact JSON envelope
-> were not verifiable from the docs site (SPA). The shapes below are the
-> de-facto shape used by UAZAPI as described by the skill and peer gateways
-> (Evolution API, Baileys-based gateways). Confirm against a real event
-> capture during integration QA.
+Webhooks are scoped per-instance. The exact endpoint was verified live on
+2026-04-22; the envelope fields below for incoming events still reflect the
+skill + peer-gateway conventions and should be reconfirmed against a real
+scanned instance in Fase 4 (not reachable without completing QR pairing).
 
-#### Register webhook (expected)
+#### List webhook config
+
+Verified live: `GET /webhook` with the per-instance token. Note the
+singular, unprefixed path — `GET /instance/webhook` returns `404`.
+
+```
+GET /webhook
+Headers: { "token": "<instanceToken>" }
+Response: [
+  {
+    "id": "...",
+    "url": "https://podzap.app/api/webhooks/uazapi",
+    "events": ["messages", "connection"],
+    "enabled": true,
+    "addUrlEvents": false,
+    "addUrlTypesMessages": false,
+    "excludeMessages": []
+  }
+]
+```
+
+Returns an **array** — UAZAPI allows multiple webhook URLs per instance,
+though our integration registers a single one.
+
+#### Register / upsert webhook
+
+Verified live: `POST /webhook`. Response is the updated array of configs.
 
 ```
 POST /webhook
-Headers: { "token": "<instanceToken>" }
+Headers: { "token": "<instanceToken>", "Content-Type": "application/json" }
 Body:    {
   "url": "https://podzap.app/api/webhooks/uazapi",
-  "events": ["messages", "status", "connection"],   // or "all"
-  "enabled": true
+  "events": ["messages", "connection"],
+  "enabled": true,
+  "addUrlEvents": false,
+  "addUrlTypesMessages": false,
+  "excludeMessages": []
 }
 ```
+
+Observed event names from the live probe: `messages`, `connection`. The
+skill also mentions `status` and the wildcard `all` but neither was
+round-tripped — handle unknown event strings defensively in the webhook
+route.
 
 Our single webhook route fans-out by `event` / `type`.
 
@@ -347,46 +434,71 @@ from the skill:
   bans.
 - Avoid bursting group-send > ~1 msg/sec per instance.
 
-> **OPEN QUESTION**: official per-endpoint quotas are not documented.
+> Official per-endpoint quotas remain undocumented. See §6 for our internal
+> mitigation (token bucket + per-tenant in-memory limiter).
 
 ---
 
 ## 4. QR → connected flow (ASCII sequence)
 
+Reflects the **live-verified** 2-token model: the admin token only rides
+`POST /instance/init`; everything after that uses the per-instance token
+returned in the init response.
+
 ```
-User           Next.js API           UazapiClient         UAZAPI           WhatsApp phone
- |                |                       |                  |                    |
- | click "Connect"|                       |                  |                    |
- |--------------->|                       |                  |                    |
- |                | createInstance(name)  |                  |                    |
- |                |---------------------->|                  |                    |
- |                |                       | POST /instance/init (admintoken)      |
- |                |                       |----------------->|                    |
- |                |                       |<----- {id,token} |                    |
- |                |<-- Instance ----------|                  |                    |
- |                | (persist to DB)       |                  |                    |
- |                |                                                               |
- |                | getQrCode(id)         |                  |                    |
- |                |---------------------->|                  |                    |
- |                |                       | POST /instance/connect (instance tok) |
- |                |                       |----------------->|                    |
- |                |                       |<-- {qrcode b64}  |                    |
- |                |<-- qrCodeBase64 ------|                  |                    |
- | render QR      |                       |                  |                    |
- |<---------------|                       |                  |                    |
- | scan with phone                                                                |
- |--------------------------------------------------------------------------- scan >|
- |                |                                                               |
- |                | [webhook] POST /api/webhooks/uazapi  event=connection.update  |
- |                |<----------------------------------------|                    |
- |                |  status=connected                                             |
- |                | (update DB + push to UI via SSE/refetch)                      |
- |<-- "connected" |                       |                  |                    |
+User           Next.js API             UazapiClient            UAZAPI             WhatsApp phone
+ |                |                       |                      |                      |
+ | click "Connect"|                       |                      |                      |
+ |--------------->|                       |                      |                      |
+ |                | createInstance(name)  |                      |                      |
+ |                |---------------------->|                      |                      |
+ |                |                       | POST /instance/init                         |
+ |                |                       |  Header: admintoken=<admin>                  |
+ |                |                       |--------------------->|                      |
+ |                |                       |<-- {instance:{id,   |                      |
+ |                |                       |    token:<INSTANCE>,|                      |
+ |                |                       |    status:"disconnected"}}                  |
+ |                |<-- Instance ----------|                      |                      |
+ |                | encrypt token + INSERT whatsapp_instances (status='connecting')     |
+ |                |                                                                     |
+ |                | getQrCode(instanceToken)                                             |
+ |                |---------------------->|                      |                      |
+ |                |                       | POST /instance/connect                      |
+ |                |                       |  Header: token=<INSTANCE>                   |
+ |                |                       |  Body:   {}                                 |
+ |                |                       |--------------------->|                      |
+ |                |                       |<-- {instance:{status:"connecting",         |
+ |                |                       |    qrcode:"data:image/png;base64,..."}}    |
+ |                |                       | (client strips "data:" prefix)              |
+ |                |<-- {qrCodeBase64,     |                      |                      |
+ |                |     status:"connecting"}                                            |
+ | render QR (re-adds "data:image/png;base64," prefix for <img src>)                    |
+ |<---------------|                                                                     |
+ | scan with phone                                                                      |
+ |------------------------------------------------------------------------------- scan >|
+ |                |                                                                     |
+ |                | [webhook] POST /api/webhooks/uazapi  event=connection  (Fase 4)     |
+ |                |<--------------------------------------------|                      |
+ |                |  status=connected                                                   |
+ |                | UPDATE whatsapp_instances SET status='connected', connected_at=now()|
+ |                |                                                                     |
+ |   (Fase 2 fallback: Next.js polls GET /instance/status every 2-3s until 'connected') |
+ |                | getInstanceStatus(instanceToken)                                    |
+ |                |---------------------->|                      |                      |
+ |                |                       | GET /instance/status |                      |
+ |                |                       |  Header: token=<INSTANCE>                   |
+ |                |                       |--------------------->|                      |
+ |                |                       |<-- {instance:{status:"connected"},         |
+ |                |                       |    loggedIn:true}                           |
+ |                |<-- "connected" -------|                      |                      |
+ |<-- "connected" |                                                                     |
 ```
 
-Polling fallback: if we can't trust the webhook, the client can poll
-`GET /instance/status` every 3s while the QR screen is open, stopping on
-`connected` or timeout.
+Polling fallback: until the webhook route lands in Fase 4, the client polls
+`GET /instance/status` every 2–3s while the QR screen is open, stopping on
+`connected` or a 2-minute timeout. The UazapiClient enforces a minimum
+interval via an internal token bucket so a runaway polling loop cannot DoS
+the upstream.
 
 ---
 
@@ -409,19 +521,35 @@ Polling fallback: if we can't trust the webhook, the client can poll
 
 ---
 
-## 6. Open questions
+## 6. Resolved vs still-open questions
 
-1. **Instance create/delete paths** — skill doesn't confirm; pick from
-   `/instance/init` | `/instance/create` and `DELETE /instance/{id}` |
-   `POST /instance/logout`. Verify against live server during integration.
-2. **Webhook registration endpoint** and the exact envelope (`event` field
-   name: is it `event`, `type`, or `action`?). Validate against a real
-   received payload before widening consumer code.
-3. **Webhook signature / HMAC** — appears to be none. Re-check whether
-   UAZAPI v2 introduced one; if not, enforce URL-secret + IP allowlist.
-4. **Rate limits** — no official numbers. Treat as unknown; add a token
-   bucket per instance (e.g. 1 msg/sec, 60 msg/min) and monitor 429s.
-5. **Audio format for PTT** — OGG/Opus plays natively as voice note; MP3 may
+### Resolved during Fase-2 live probe (2026-04-22)
+
+1. ✅ **Instance create path** → `POST /instance/init` with `admintoken` header.
+2. ✅ **Instance delete path** → `DELETE /instance` (no `:id`) with the
+   **per-instance token**, not admin. The admin token returns `401` on this
+   path. `POST /instance/disconnect` is a different operation (soft-disconnect
+   without removing the row).
+3. ✅ **Webhook registration endpoint** → `POST /webhook` (GET for read),
+   scoped by per-instance token. `GET /instance/webhook` returns `404`.
+4. ✅ **Status enum** is exactly `connected | connecting | disconnected`
+   (no `qr`). The QR payload travels alongside as `instance.qrcode`.
+5. ✅ **QR data-URL format**: the live server returns `data:image/png;base64,...`
+   (prefix included). `UazapiClient.extractQrBase64` strips the prefix; API
+   routes and UI re-add it exactly once when building the `<img src>`.
+
+### Still open — validate in later phases
+
+1. **Webhook event envelope** (`event` vs `type` vs `action`, nesting of
+   `data`). The shapes in §2.4 are from the skill and peer gateways; confirm
+   against a real webhook capture once a phone is paired. Scheduled for Fase 4.
+2. **Webhook signature / HMAC** — none appears to be documented. Mitigation:
+   unguessable URL-secret path segment + IP allowlist of `wsmart.uazapi.com`.
+   Re-check whether UAZAPI v2 introduced a signature header.
+3. **Rate limits** — no official numbers. Internal mitigation: token bucket
+   per instance in `UazapiClient` (≤1 msg/sec, ≤60 msg/min) + 30/min/tenant
+   at the API-route layer. Monitor 429s in production.
+4. **Audio format for PTT** — OGG/Opus plays natively as voice note; MP3 may
    be silently transcoded or rejected. Confirm by test send during M1.
-6. **`generate_mp3` on `/message/download`** — confirm it actually transcodes
+5. **`generate_mp3` on `/message/download`** — confirm it actually transcodes
    OGG → MP3 (helpful for our "download audio" feature).

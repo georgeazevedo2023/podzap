@@ -26,14 +26,34 @@ export const InstanceStatusSchema = z.enum([
 ]);
 export type InstanceStatus = z.infer<typeof InstanceStatusSchema>;
 
+/**
+ * Live shape (from `/instance/init` and `/instance/all` on wsmart.uazapi.com):
+ *   {
+ *     id, token, status, paircode, qrcode, name, profileName, profilePicUrl,
+ *     isBusiness, plataform, systemName, owner, current_presence,
+ *     lastDisconnect, lastDisconnectReason, adminField01, adminField02,
+ *     openai_apikey, chatbot_enabled, chatbot_ignoreGroups,
+ *     chatbot_stopConversation, chatbot_stopMinutes,
+ *     chatbot_stopWhenYouSendMsg, created, updated, currentTime,
+ *     msg_delay_min, msg_delay_max
+ *   }
+ * We only surface the subset our app needs; extra fields are ignored
+ * (Zod's default — it doesn't fail on unknown keys).
+ */
 export const InstanceSchema = z.object({
   id: z.string(),
   name: z.string(),
   token: z.string(),
   status: InstanceStatusSchema.default("unknown"),
-  ownerJid: z.string().optional(),
+  /** Primary WhatsApp JID once connected (e.g. "5511…@s.whatsapp.net"). */
+  owner: z.string().optional(),
   profileName: z.string().optional(),
-  profilePicUrl: z.string().url().optional(),
+  profilePicUrl: z.string().url().optional().or(z.literal("")),
+  isBusiness: z.boolean().optional(),
+  /** Device platform label from UAZAPI (e.g. "android", "smba", ""). */
+  plataform: z.string().optional(),
+  lastDisconnect: z.string().optional(),
+  lastDisconnectReason: z.string().optional(),
 });
 export type Instance = z.infer<typeof InstanceSchema>;
 
@@ -42,8 +62,14 @@ export const CreateInstanceRequestSchema = z.object({
 });
 export type CreateInstanceRequest = z.infer<typeof CreateInstanceRequestSchema>;
 
-// UAZAPI wraps responses inconsistently — accept either `{ instance: {...} }`
-// or the instance object at the root.
+/**
+ * Live envelope from `POST /instance/init`:
+ *   {
+ *     info, instance: { ...InstanceSchema }, name, response, status: {...},
+ *     token: "<instance-token>"
+ *   }
+ * We unwrap `instance` and let Zod strip the rest.
+ */
 export const CreateInstanceResponseSchema = z.preprocess(
   (raw) => {
     if (raw && typeof raw === "object" && "instance" in raw) {
@@ -54,6 +80,34 @@ export const CreateInstanceResponseSchema = z.preprocess(
   InstanceSchema,
 );
 export type CreateInstanceResponse = z.infer<typeof CreateInstanceResponseSchema>;
+
+// ──────────────────────────────────────────────────────────────────────────
+//  Webhook config (stored server-side on the instance)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Shape observed from `POST /webhook` (and `GET /webhook`):
+ *   [{ id, url, events: string[], enabled: boolean,
+ *      addUrlEvents: boolean, addUrlTypesMessages: boolean,
+ *      excludeMessages: string[] }]
+ */
+export const WebhookConfigSchema = z.object({
+  id: z.string().optional(),
+  url: z.string(),
+  events: z.array(z.string()).default([]),
+  enabled: z.boolean().default(true),
+  addUrlEvents: z.boolean().optional(),
+  addUrlTypesMessages: z.boolean().optional(),
+  excludeMessages: z.array(z.string()).optional(),
+});
+export type WebhookConfig = z.infer<typeof WebhookConfigSchema>;
+
+/** The endpoint always returns an array, even when only one is configured. */
+export const WebhookListSchema = z.preprocess(
+  (raw) => (Array.isArray(raw) ? raw : raw ? [raw] : []),
+  z.array(WebhookConfigSchema),
+);
+export type WebhookList = z.infer<typeof WebhookListSchema>;
 
 export const QrCodeResponseSchema = z.object({
   qrCodeBase64: z.string(),           // data-URL-ready base64 (no prefix)

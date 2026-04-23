@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname, useRouter } from 'next/navigation';
-import { Sidebar, type NavId } from './Sidebar';
+import { Sidebar, type NavId, type WhatsappStatus } from './Sidebar';
 
 /**
  * Route table for the sidebar nav. Each `NavId` maps to a URL under the
@@ -42,6 +42,15 @@ export interface AppSidebarProps {
   userEmail: string;
   tenantName: string;
   tenantPlan: string;
+  /**
+   * Current WhatsApp connection status for the tenant. The server layout
+   * resolves this via `whatsapp_instances` (admin client) so RLS doesn't
+   * accidentally hide the row; falls back to `'none'` if no instance exists
+   * or the fetch threw.
+   */
+  whatsappStatus?: WhatsappStatus;
+  /** Phone attached to the connected instance, when available. */
+  whatsappPhone?: string | null;
 }
 
 /**
@@ -53,6 +62,8 @@ export function AppSidebar({
   userEmail,
   tenantName,
   tenantPlan,
+  whatsappStatus,
+  whatsappPhone,
 }: AppSidebarProps) {
   const pathname = usePathname() ?? '/home';
   const router = useRouter();
@@ -65,6 +76,8 @@ export function AppSidebar({
       userEmail={userEmail}
       tenantName={tenantName}
       tenantPlan={tenantPlan}
+      whatsappStatus={whatsappStatus}
+      whatsappPhone={whatsappPhone}
     />
   );
 }
