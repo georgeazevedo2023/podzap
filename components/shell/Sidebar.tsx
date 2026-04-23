@@ -35,9 +35,22 @@ export interface SidebarProps {
     total: number;
     label?: string;
   };
+  /** Logged-in user's email (rendered truncated in the account chip). */
+  userEmail?: string;
+  /** Current tenant display name (used in the plan card header). */
+  tenantName?: string;
+  /** Current tenant plan identifier (e.g. "free", "pro") — surfaced in the plan card. */
+  tenantPlan?: string;
 }
 
-export function Sidebar({ current, onNav, usage }: SidebarProps) {
+export function Sidebar({
+  current,
+  onNav,
+  usage,
+  userEmail,
+  tenantName,
+  tenantPlan,
+}: SidebarProps) {
   const items: NavItem[] = [
     { id: 'home', label: 'Home', icon: <Icons.Home /> },
     { id: 'groups', label: 'Grupos', icon: <Icons.Group /> },
@@ -50,10 +63,20 @@ export function Sidebar({ current, onNav, usage }: SidebarProps) {
     { id: 'settings', label: 'Ajustes', icon: <Icons.Settings /> },
   ];
 
-  const used = usage?.used ?? 7;
+  const used = usage?.used ?? 0;
   const total = usage?.total ?? 15;
-  const usageLabel = usage?.label ?? `Você usou ${used} de ${total} resumos`;
+  // If a tenant is present, show its plan + usage instead of the mock "7 de 15".
+  const usageLabel =
+    usage?.label ??
+    (tenantPlan
+      ? `plano ${tenantPlan} · ${used}/${total} resumos`
+      : `Você usou ${used} de ${total} resumos`);
   const pct = Math.max(0, Math.min(100, (used / total) * 100));
+
+  const truncatedEmail =
+    userEmail && userEmail.length > 26
+      ? `${userEmail.slice(0, 23)}…`
+      : userEmail;
 
   return (
     <aside
@@ -123,7 +146,7 @@ export function Sidebar({ current, onNav, usage }: SidebarProps) {
               marginTop: 2,
             }}
           >
-            zap → podcast
+            {tenantName ? tenantName : 'zap → podcast'}
           </div>
         </div>
       </div>
@@ -241,6 +264,65 @@ export function Sidebar({ current, onNav, usage }: SidebarProps) {
           upgradar o bagulho
         </Button>
       </div>
+
+      {/* Account chip — email + logout */}
+      {userEmail && (
+        <div
+          style={{
+            marginTop: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 10px',
+            border: '2.5px solid var(--stroke)',
+            borderRadius: 'var(--r-md)',
+            background: 'var(--surface-2)',
+          }}
+        >
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: 'var(--purple-600)',
+              color: '#fff',
+              display: 'grid',
+              placeItems: 'center',
+              fontFamily: 'var(--font-brand)',
+              fontSize: 12,
+              flexShrink: 0,
+            }}
+          >
+            {userEmail.charAt(0).toUpperCase()}
+          </div>
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 11,
+              fontWeight: 600,
+              color: 'var(--text)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={userEmail}
+          >
+            {truncatedEmail}
+          </div>
+          <a
+            href="/logout"
+            className="btn btn-ghost"
+            style={{
+              fontSize: 11,
+              padding: '4px 8px',
+              fontWeight: 700,
+            }}
+          >
+            sair
+          </a>
+        </div>
+      )}
     </aside>
   );
 }
