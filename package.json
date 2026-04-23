@@ -1,0 +1,33 @@
+{
+  "name": "podzap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaaS multi-tenant que transforma conversas de grupos do WhatsApp em resumos em áudio estilo podcast",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^1.48.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.47.0",
+    "groq-sdk": "^1.1.2",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

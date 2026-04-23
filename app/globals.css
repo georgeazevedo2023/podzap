@@ -1,0 +1,293 @@
+/* podZAP — Tailwind v4 + design tokens */
+
+/* Google Fonts — Biscoito x Vida Infinita type stack (must precede all other rules) */
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bungee&family=Fraunces:opsz,wght@9..144,800;9..144,900&display=swap');
+@import "tailwindcss";
+
+/* -------------------------------------------------------------------------- */
+/* Theme — maps tokens to Tailwind keys so utilities like bg-purple-600,      */
+/* text-paper, rounded-md, shadow-chunk, font-display all work automatically. */
+/* -------------------------------------------------------------------------- */
+@theme inline {
+  /* Brand scales */
+  --color-purple-900: #1B0B3A;
+  --color-purple-800: #2A0F5C;
+  --color-purple-700: #4318D1;
+  --color-purple-600: #5B2BE8;
+  --color-purple-500: #7A3CFF;
+  --color-purple-400: #A97BFF;
+
+  --color-pink-600: #E6278E;
+  --color-pink-500: #FF3DA5;
+  --color-pink-400: #FF7AC6;
+  --color-pink-300: #FFB4DC;
+
+  --color-lime-500: #C6FF3C;
+  --color-lime-400: #D8FF66;
+  --color-lime-300: #E9FF9E;
+
+  --color-yellow-500: #FFC828;
+  --color-yellow-400: #FFDA5E;
+
+  --color-teal-500: #1DE9B6;
+  --color-red-500:  #FF4D3C;
+
+  --color-zap-500: #22C55E;
+  --color-zap-400: #4ADE80;
+
+  --color-ink-900: #0A0420;
+  --color-ink-800: #140B2E;
+  --color-ink-700: #1E1342;
+  --color-ink-600: #2B1F52;
+  --color-ink-500: #443669;
+
+  --color-paper:   #FFFBF2;
+  --color-paper-2: #F7F1E3;
+  --color-line:    rgba(0,0,0,0.08);
+
+  /* Semantic aliases — resolve to the runtime :root / [data-theme] / [data-palette] values */
+  --color-bg:        var(--bg);
+  --color-bg-2:      var(--bg-2);
+  --color-surface:   var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-text:      var(--text);
+  --color-text-dim:  var(--text-dim);
+  --color-text-inv:  var(--text-inv);
+  --color-accent:    var(--accent);
+  --color-accent-2:  var(--accent-2);
+  --color-accent-3:  var(--accent-3);
+  --color-stroke:    var(--stroke);
+  --color-brand-card-1: var(--brand-card-1);
+  --color-brand-card-2: var(--brand-card-2);
+  --color-brand-card-3: var(--brand-card-3);
+  --color-brand-card-4: var(--brand-card-4);
+
+  /* Fonts */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body:    'Space Grotesk', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+  --font-brand:   'Archivo Black', system-ui, sans-serif;
+  --font-sans:    var(--font-body); /* Tailwind default alias */
+
+  /* Radii */
+  --radius-sm:   10px;
+  --radius-md:   16px;
+  --radius-lg:   24px;
+  --radius-xl:   32px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-chunk:      4px 4px 0 var(--stroke);
+  --shadow-chunk-lg:   8px 8px 0 var(--stroke);
+  --shadow-soft:       0 10px 30px rgba(10, 4, 32, 0.12);
+  --shadow-glow-lime:  0 0 40px rgba(198, 255, 60, 0.4);
+  --shadow-glow-pink:  0 0 40px rgba(255, 61, 165, 0.35);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Runtime theme variables — light default, dark override, palette variants.  */
+/* These power the semantic color aliases in @theme above.                    */
+/* -------------------------------------------------------------------------- */
+:root {
+  --bg:         #FFFBF2;
+  --bg-2:       #F7F1E3;
+  --surface:    #ffffff;
+  --surface-2:  #FFF7E6;
+  --text:       #0A0420;
+  --text-dim:   #5A4D7A;
+  --text-inv:   #FFFBF2;
+  --accent:     #5B2BE8; /* purple-600 */
+  --accent-2:   #FF3DA5; /* pink-500   */
+  --accent-3:   #C6FF3C; /* lime-500   */
+  --brand-card-1: #5B2BE8;
+  --brand-card-2: #FF3DA5;
+  --brand-card-3: #FFC828;
+  --brand-card-4: #C6FF3C;
+  --stroke:     #0A0420;
+}
+
+[data-theme="dark"] {
+  --bg:        #08030F;
+  --bg-2:      #110725;
+  --surface:   #180A30;
+  --surface-2: #221048;
+  --text:      #FFFBF2;
+  --text-dim:  #B4A8D1;
+  --text-inv:  #0A0420;
+  --stroke:    #000000;
+  --shadow-chunk:    4px 4px 0 #000;
+  --shadow-chunk-lg: 8px 8px 0 #000;
+}
+
+/* Palette variants (via data-palette) */
+[data-palette="neon"] {
+  --accent:   #C6FF3C; /* lime-500   */
+  --accent-2: #FF3DA5; /* pink-500   */
+  --accent-3: #7A3CFF; /* purple-500 */
+}
+[data-palette="zap"] {
+  --accent:   #22C55E; /* zap-500    */
+  --accent-2: #FFC828; /* yellow-500 */
+  --accent-3: #5B2BE8; /* purple-600 */
+}
+[data-palette="retro"] {
+  --accent:   #FF4D3C; /* red-500    */
+  --accent-2: #FFC828; /* yellow-500 */
+  --accent-3: #1DE9B6; /* teal-500   */
+}
+
+/* Font variants */
+[data-font="bricolage"] { --font-display: 'Bricolage Grotesque', sans-serif; }
+[data-font="bungee"]    { --font-display: 'Bungee', sans-serif; }
+[data-font="fraunces"]  { --font-display: 'Fraunces', serif; }
+[data-font="archivo"]   { --font-display: 'Archivo Black', sans-serif; }
+
+/* -------------------------------------------------------------------------- */
+/* Base                                                                        */
+/* -------------------------------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Scrollbars subtle */
+*::-webkit-scrollbar        { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb  { background: #443669; border-radius: 4px; }
+*::-webkit-scrollbar-track  { background: transparent; }
+
+/* -------------------------------------------------------------------------- */
+/* Reusable utilities (Tailwind v4 @utility — composable with variants).       */
+/* -------------------------------------------------------------------------- */
+@utility chunky-border {
+  border: 2.5px solid var(--stroke);
+}
+@utility chunky-shadow {
+  box-shadow: var(--shadow-chunk, 4px 4px 0 var(--stroke));
+}
+@utility chunky-shadow-lg {
+  box-shadow: var(--shadow-chunk-lg, 8px 8px 0 var(--stroke));
+}
+@utility sprinkle {
+  background-image:
+    radial-gradient(circle at 10% 20%, #FF7AC6 2px, transparent 3px),
+    radial-gradient(circle at 80% 30%, #D8FF66 2px, transparent 3px),
+    radial-gradient(circle at 30% 70%, #FFDA5E 2px, transparent 3px),
+    radial-gradient(circle at 65% 85%, #A97BFF 2px, transparent 3px),
+    radial-gradient(circle at 50% 15%, #1DE9B6 2px, transparent 3px);
+  background-size: 220px 220px;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Components                                                                  */
+/* -------------------------------------------------------------------------- */
+@layer components {
+  /* STICKER ---------------------------------------------------------------- */
+  .sticker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 2px solid var(--stroke);
+    background: #C6FF3C;            /* lime-500 */
+    color: #0A0420;                  /* ink-900 */
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: 2px 2px 0 var(--stroke);
+    white-space: nowrap;
+  }
+  .sticker-pink   { background: #FF3DA5; color: #fff; }
+  .sticker-purple { background: #5B2BE8; color: #fff; }
+  .sticker-yellow { background: #FFC828; }
+  .sticker-zap    { background: #22C55E; color: #fff; }
+
+  /* BUTTON ---------------------------------------------------------------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 14px;
+    border: 2.5px solid var(--stroke);
+    border-radius: 999px;
+    background: #C6FF3C;
+    color: #0A0420;
+    box-shadow: var(--shadow-chunk, 4px 4px 0 var(--stroke));
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .btn:hover  { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--stroke); }
+  .btn:active { transform: translate(2px, 2px);   box-shadow: 2px 2px 0 var(--stroke); }
+
+  .btn-pink   { background: #FF3DA5; color: #fff; }
+  .btn-purple { background: #5B2BE8; color: #fff; }
+  .btn-yellow { background: #FFC828; }
+  .btn-zap    { background: #22C55E; color: #fff; }
+  .btn-ghost  { background: transparent; box-shadow: none; }
+  .btn-ghost:hover {
+    background: rgba(0,0,0,0.05);
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* CARD ------------------------------------------------------------------- */
+  .card {
+    background: var(--surface);
+    border: 2.5px solid var(--stroke);
+    border-radius: 24px;
+    box-shadow: var(--shadow-chunk, 4px 4px 0 var(--stroke));
+  }
+
+  /* LIVE DOT --------------------------------------------------------------- */
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22C55E;
+    animation: pulse-dot 1.6s ease-out infinite;
+    display: inline-block;
+  }
+
+  /* MARQUEE TRACK ---------------------------------------------------------- */
+  .marquee-track {
+    display: flex;
+    gap: 32px;
+    animation: marquee 30s linear infinite;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Keyframes                                                                   */
+/* -------------------------------------------------------------------------- */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50%      { transform: scaleY(1); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-2deg); }
+  50%      { transform: rotate(2deg); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  50%      { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+}

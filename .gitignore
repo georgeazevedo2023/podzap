@@ -25,6 +25,9 @@ yarn-debug.log*
 *.swp
 .DS_Store
 
+# claude code local state
+.claude/
+
 # supabase
 supabase/.temp/
 supabase/.branches/
