@@ -50,7 +50,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 3 — Listagem e seleção de grupos ⬜
+### Fase 3 — Listagem e seleção de grupos 🟡
 **Objetivo:** listar grupos da instância e marcar quais monitorar.
 
 - [ ] Migration `groups`

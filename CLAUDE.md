@@ -176,7 +176,8 @@ npx inngest-cli dev
 - [x] Fase 0: scaffolding Next.js + Supabase
 - [x] Fase 1: Auth + multi-tenancy (RLS, signup auto-cria tenant)
 - [ ] 🟡 **Fase 2: conexão WhatsApp (UAZAPI) — em andamento**
-- [ ] Fase 3+: ver `ROADMAP.md`
+- [ ] 🟡 **Fase 3: listagem e seleção de grupos — em andamento** (flip para ✅ quando integração passar)
+- [ ] Fase 4+: ver `ROADMAP.md`
 
 ---
 

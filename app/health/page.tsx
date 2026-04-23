@@ -8,7 +8,10 @@ async function checkSupabase(): Promise<{ ok: boolean; detail: string }> {
     const { error } = await supabase.from('tenants').select('id').limit(1);
 
     if (error) {
-      if (error.code === '42P01') {
+      // `42P01` = Postgres "relation does not exist".
+      // `PGRST205` = PostgREST "table not found in schema cache" (same root cause —
+      // surfaces when the schema cache hasn't picked up a newly-created table yet).
+      if (error.code === '42P01' || error.code === 'PGRST205') {
         return { ok: false, detail: 'Tabelas ainda não criadas (rode a migration)' };
       }
       return { ok: false, detail: `${error.code}: ${error.message}` };

@@ -224,7 +224,7 @@ export function QrCodePanel({ instance: initial }: QrCodePanelProps) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
         gap: 28,
         alignItems: 'start',
       }}
@@ -310,6 +310,7 @@ export function QrCodePanel({ instance: initial }: QrCodePanelProps) {
         </ol>
 
         <div
+          aria-live="polite"
           style={{
             marginTop: 18,
             padding: 14,
@@ -449,6 +450,8 @@ export function QrCodePanel({ instance: initial }: QrCodePanelProps) {
           </div>
 
           <div
+            aria-live="polite"
+            role="status"
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
@@ -462,7 +465,10 @@ export function QrCodePanel({ instance: initial }: QrCodePanelProps) {
           </div>
 
           {isConnected && (
-            <span className="sticker sticker-zap">
+            <span
+              aria-live="polite"
+              className="sticker sticker-zap"
+            >
               <span className="live-dot" /> conectado!
             </span>
           )}

@@ -162,7 +162,7 @@ function StartPanel() {
       style={{
         padding: 32,
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
         gap: 28,
         alignItems: 'center',
       }}

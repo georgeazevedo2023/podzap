@@ -95,7 +95,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico, images
      * - api/webhooks (external webhooks must not go through auth middleware)
+     * - api/inngest (Inngest registers endpoints under /api/inngest — Fase 5)
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/inngest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

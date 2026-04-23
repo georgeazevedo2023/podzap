@@ -21,7 +21,8 @@ export type ErrorCode =
   | "RATE_LIMITED"
   | "UAZAPI_ERROR"
   | "VALIDATION_ERROR"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "NO_INSTANCE";
 
 export interface ApiError {
   code: ErrorCode;
@@ -140,6 +141,15 @@ export function mapErrorToResponse(err: unknown): NextResponse {
     }
     if (code === "VALIDATION_ERROR") {
       return errorResponse(400, "VALIDATION_ERROR", message);
+    }
+    if (code === "NO_INSTANCE") {
+      return errorResponse(409, "NO_INSTANCE", message);
+    }
+    if (code === "UAZAPI_ERROR") {
+      return errorResponse(502, "UAZAPI_ERROR", message);
+    }
+    if (code === "DB_ERROR") {
+      return errorResponse(500, "INTERNAL_ERROR", message);
     }
   }
 
