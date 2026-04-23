@@ -1,0 +1,230 @@
+/* podZAP — design tokens */
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bungee&family=Fraunces:opsz,wght@9..144,800;9..144,900&display=swap');
+
+:root {
+  /* Palette: Biscoito x Vida Infinita mashup */
+  --purple-900: #1B0B3A;
+  --purple-800: #2A0F5C;
+  --purple-700: #4318D1;
+  --purple-600: #5B2BE8;
+  --purple-500: #7A3CFF;
+  --purple-400: #A97BFF;
+
+  --pink-600: #E6278E;
+  --pink-500: #FF3DA5;
+  --pink-400: #FF7AC6;
+  --pink-300: #FFB4DC;
+
+  --lime-500: #C6FF3C;
+  --lime-400: #D8FF66;
+  --lime-300: #E9FF9E;
+
+  --yellow-500: #FFC828;
+  --yellow-400: #FFDA5E;
+
+  --teal-500: #1DE9B6;
+  --red-500: #FF4D3C;
+
+  --zap-500: #22C55E; /* WhatsApp-ish */
+  --zap-400: #4ADE80;
+
+  --ink-900: #0A0420;
+  --ink-800: #140B2E;
+  --ink-700: #1E1342;
+  --ink-600: #2B1F52;
+  --ink-500: #443669;
+
+  --paper: #FFFBF2;
+  --paper-2: #F7F1E3;
+  --line: rgba(0,0,0,0.08);
+
+  /* Semantic (light is default, dark overrides) */
+  --bg: var(--paper);
+  --bg-2: var(--paper-2);
+  --surface: #ffffff;
+  --surface-2: #FFF7E6;
+  --text: var(--ink-900);
+  --text-dim: #5A4D7A;
+  --text-inv: #FFFBF2;
+  --accent: var(--purple-600);
+  --accent-2: var(--pink-500);
+  --accent-3: var(--lime-500);
+  --brand-card-1: var(--purple-600);
+  --brand-card-2: var(--pink-500);
+  --brand-card-3: var(--yellow-500);
+  --brand-card-4: var(--lime-500);
+  --stroke: #0A0420;
+
+  /* Type */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-brand: 'Archivo Black', system-ui, sans-serif; /* for BIG words */
+
+  /* Shape */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --r-pill: 999px;
+
+  /* Shadows — chunky comic */
+  --shadow-chunk: 4px 4px 0 var(--stroke);
+  --shadow-chunk-lg: 8px 8px 0 var(--stroke);
+  --shadow-soft: 0 10px 30px rgba(10, 4, 32, 0.12);
+  --shadow-glow-lime: 0 0 40px rgba(198, 255, 60, 0.4);
+  --shadow-glow-pink: 0 0 40px rgba(255, 61, 165, 0.35);
+}
+
+[data-theme="dark"] {
+  --bg: #08030F;
+  --bg-2: #110725;
+  --surface: #180A30;
+  --surface-2: #221048;
+  --text: #FFFBF2;
+  --text-dim: #B4A8D1;
+  --text-inv: #0A0420;
+  --stroke: #000000;
+  --shadow-chunk: 4px 4px 0 #000;
+  --shadow-chunk-lg: 8px 8px 0 #000;
+}
+
+/* Palette variants (via data-palette) */
+[data-palette="neon"] {
+  --accent: var(--lime-500);
+  --accent-2: var(--pink-500);
+  --accent-3: var(--purple-500);
+}
+[data-palette="zap"] {
+  --accent: var(--zap-500);
+  --accent-2: var(--yellow-500);
+  --accent-3: var(--purple-600);
+}
+[data-palette="retro"] {
+  --accent: var(--red-500);
+  --accent-2: var(--yellow-500);
+  --accent-3: var(--teal-500);
+}
+
+/* Font variants */
+[data-font="bricolage"] { --font-display: 'Bricolage Grotesque', sans-serif; }
+[data-font="bungee"]    { --font-display: 'Bungee', sans-serif; }
+[data-font="fraunces"]  { --font-display: 'Fraunces', serif; }
+[data-font="archivo"]   { --font-display: 'Archivo Black', sans-serif; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Utility */
+.chunky-border { border: 2.5px solid var(--stroke); }
+.chunky-shadow { box-shadow: var(--shadow-chunk); }
+.chunky-shadow-lg { box-shadow: var(--shadow-chunk-lg); }
+
+.sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--stroke);
+  background: var(--lime-500);
+  color: var(--ink-900);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: 2px 2px 0 var(--stroke);
+  white-space: nowrap;
+}
+.sticker.pink { background: var(--pink-500); color: #fff; }
+.sticker.purple { background: var(--purple-600); color: #fff; }
+.sticker.yellow { background: var(--yellow-500); }
+.sticker.zap { background: var(--zap-500); color: #fff; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 12px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 14px;
+  border: 2.5px solid var(--stroke);
+  border-radius: var(--r-pill);
+  background: var(--lime-500);
+  color: var(--ink-900);
+  box-shadow: var(--shadow-chunk);
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--stroke); }
+.btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--stroke); }
+.btn.pink { background: var(--pink-500); color: #fff; }
+.btn.purple { background: var(--purple-600); color: #fff; }
+.btn.yellow { background: var(--yellow-500); }
+.btn.zap { background: var(--zap-500); color: #fff; }
+.btn.ghost { background: transparent; box-shadow: none; }
+.btn.ghost:hover { background: rgba(0,0,0,0.05); box-shadow: none; transform: none; }
+
+.card {
+  background: var(--surface);
+  border: 2.5px solid var(--stroke);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-chunk);
+}
+
+/* Scrollbars subtle */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--ink-500); border-radius: 4px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* Marquee */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-track { display: flex; gap: 32px; animation: marquee 30s linear infinite; }
+
+/* Waveform bars */
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+/* Wiggle */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+
+/* Pulse dot */
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--zap-500);
+  animation: pulse-dot 1.6s ease-out infinite;
+  display: inline-block;
+}
+
+/* Confetti sprinkle background (subtle) */
+.sprinkle {
+  background-image:
+    radial-gradient(circle at 10% 20%, var(--pink-400) 2px, transparent 3px),
+    radial-gradient(circle at 80% 30%, var(--lime-400) 2px, transparent 3px),
+    radial-gradient(circle at 30% 70%, var(--yellow-400) 2px, transparent 3px),
+    radial-gradient(circle at 65% 85%, var(--purple-400) 2px, transparent 3px),
+    radial-gradient(circle at 50% 15%, var(--teal-500) 2px, transparent 3px);
+  background-size: 220px 220px;
+}

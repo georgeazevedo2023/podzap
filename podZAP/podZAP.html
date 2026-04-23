@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>podZAP — zap virando podcast</title>
+  <link rel="stylesheet" href="tokens.css">
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="shell.jsx"></script>
+  <script type="text/babel" src="screen_home.jsx"></script>
+  <script type="text/babel" src="screen_onboarding.jsx"></script>
+  <script type="text/babel" src="screen_groups.jsx"></script>
+  <script type="text/babel" src="screen_approval.jsx"></script>
+  <script type="text/babel" src="screen_history_schedule.jsx"></script>
+
+  <script type="text/babel">
+    const TWEAKS = /*EDITMODE-BEGIN*/{
+      "theme": "dark",
+      "palette": "zap",
+      "font": "fraunces"
+    }/*EDITMODE-END*/;
+
+    function App() {
+      // persist current screen
+      const [screen, setScreen] = React.useState(() => localStorage.getItem('podzap.screen') || 'home');
+      const [confetti, setConfetti] = React.useState(false);
+      const [tweaks, setTweaks] = React.useState(TWEAKS);
+      const [tweaksOpen, setTweaksOpen] = React.useState(false);
+      const [editMode, setEditMode] = React.useState(false);
+      const [toast, setToast] = React.useState(null);
+
+      React.useEffect(() => {
+        localStorage.setItem('podzap.screen', screen);
+        document.documentElement.setAttribute('data-theme', tweaks.theme);
+        document.documentElement.setAttribute('data-palette', tweaks.palette);
+        document.documentElement.setAttribute('data-font', tweaks.font);
+      }, [screen, tweaks]);
+
+      // Tweak mode protocol
+      React.useEffect(() => {
+        const handler = (e) => {
+          if (e.data?.type === '__activate_edit_mode') { setEditMode(true); setTweaksOpen(true); }
+          if (e.data?.type === '__deactivate_edit_mode') { setEditMode(false); setTweaksOpen(false); }
+        };
+        window.addEventListener('message', handler);
+        window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+        return () => window.removeEventListener('message', handler);
+      }, []);
+
+      const updateTweak = (key, val) => {
+        const n = { ...tweaks, [key]: val };
+        setTweaks(n);
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [key]: val } }, '*');
+      };
+
+      const showToast = (msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 2800);
+      };
+
+      const handleApprove = () => {
+        setConfetti(true);
+        showToast('🎉 podcast tá no ar! enviando no grupo...');
+        setTimeout(() => {
+          setConfetti(false);
+          setScreen('home');
+        }, 2400);
+      };
+
+      const handleGenerate = () => {
+        setScreen('approval');
+      };
+
+      const screens = {
+        home: { title: 'bom dia, ae! 👋', subtitle: 'seus grupos tão agitados — 247 msgs novas nas últimas 2h', accent: 'purple' },
+        groups: { title: 'seus grupos 💬', subtitle: 'escolhe quem vira podcast', accent: 'pink' },
+        approval: { title: 'revisar roteiro ✏️', subtitle: 'edita, regenera, muda o tom — ou aprova e solta no ar', accent: 'yellow', breadcrumb: 'aprovação › família do caos' },
+        history: { title: 'biblioteca 📚', subtitle: 'todo mundo que já virou podcast', accent: 'lime' },
+        schedule: { title: 'quando rola 📅', subtitle: 'configura a agenda dos podcasts automáticos', accent: 'purple' },
+        onboarding: { title: 'bora começar 🚀', subtitle: 'conecta seu zap e a gente faz o resto', accent: 'zap' },
+        settings: { title: 'ajustes ⚙️', subtitle: 'fazenda das configurações', accent: 'purple' },
+      };
+
+      const s = screens[screen];
+
+      const ScreenComp = {
+        home: <HomeScreen onNav={setScreen} onGenerate={handleGenerate}/>,
+        groups: <GroupsScreen onNav={setScreen}/>,
+        approval: <ApprovalScreen onApprove={handleApprove} onBack={() => setScreen('home')}/>,
+        history: <HistoryScreen onNav={setScreen}/>,
+        schedule: <ScheduleScreen/>,
+        onboarding: <OnboardingScreen onNext={() => setScreen('groups')}/>,
+        settings: <SettingsStub/>,
+      }[screen];
+
+      const topActions = (
+        <>
+          <button title="notificações" style={{
+            width: 42, height: 42, borderRadius: '50%',
+            background: 'var(--bg-2)', color: 'var(--text)',
+            border: '2px solid var(--stroke)',
+            display: 'grid', placeItems: 'center', cursor: 'pointer',
+            position: 'relative',
+          }}>
+            <Ico.Bell/>
+            <span style={{
+              position: 'absolute', top: -2, right: -2,
+              width: 12, height: 12, borderRadius: '50%',
+              background: 'var(--pink-500)',
+              border: '2px solid var(--surface)',
+            }}/>
+          </button>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '6px 12px 6px 6px',
+            background: 'var(--bg-2)', border: '2px solid var(--stroke)',
+            borderRadius: 999,
+          }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: '50%',
+              background: 'var(--pink-500)', color: '#fff',
+              display: 'grid', placeItems: 'center',
+              fontFamily: 'var(--font-brand)', fontSize: 12,
+              border: '2px solid var(--stroke)',
+            }}>JP</div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1 }}>João P.</div>
+              <div style={{ fontSize: 10, color: 'var(--text-dim)', lineHeight: 1, marginTop: 2 }}>plano hype</div>
+            </div>
+          </div>
+        </>
+      );
+
+      return (
+        <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
+          <Confetti active={confetti}/>
+          <Sidebar current={screen} onNav={setScreen}/>
+          <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <TopBar
+              title={s.title}
+              subtitle={s.subtitle}
+              accent={s.accent}
+              breadcrumb={s.breadcrumb}
+              actions={topActions}
+            />
+            <div style={{ flex: 1, overflow: 'hidden', position: 'relative', background: 'var(--bg)' }}>
+              {ScreenComp}
+            </div>
+          </main>
+
+          {/* Floating global player (always visible when not on home) */}
+          {screen !== 'home' && screen !== 'onboarding' && <MiniPlayer/>}
+
+          {/* Toast */}
+          {toast && (
+            <div style={{
+              position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)',
+              background: 'var(--ink-900)', color: 'var(--lime-500)',
+              padding: '14px 22px',
+              border: '2.5px solid var(--stroke)',
+              borderRadius: 999,
+              fontFamily: 'var(--font-body)', fontWeight: 700, fontSize: 14,
+              boxShadow: '5px 5px 0 var(--stroke)',
+              zIndex: 5000,
+              animation: 'toast-in 0.3s ease-out',
+            }}>
+              {toast}
+              <style>{`@keyframes toast-in { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; }}`}</style>
+            </div>
+          )}
+
+          {/* Tweaks panel */}
+          {editMode && tweaksOpen && (
+            <TweaksPanel tweaks={tweaks} updateTweak={updateTweak} onClose={() => setTweaksOpen(false)}/>
+          )}
+        </div>
+      );
+    }
+
+    function SettingsStub() {
+      return <div style={{ padding: 40 }}>
+        <div className="card" style={{ padding: 30, maxWidth: 600 }}>
+          <MicMascot size={80} mood="thinking"/>
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800 }}>ajustes</h2>
+          <p style={{ color: 'var(--text-dim)' }}>configurações de conta, integrações, billing — em breve.</p>
+        </div>
+      </div>;
+    }
+
+    function MiniPlayer() {
+      const [playing, setPlaying] = React.useState(true);
+      return (
+        <div style={{
+          position: 'fixed', bottom: 18, right: 18,
+          background: 'var(--ink-900)', color: '#fff',
+          border: '2.5px solid var(--stroke)',
+          borderRadius: 'var(--r-xl)',
+          padding: '10px 14px',
+          boxShadow: 'var(--shadow-chunk-lg)',
+          display: 'flex', alignItems: 'center', gap: 12,
+          zIndex: 500,
+          minWidth: 340,
+        }}>
+          <PodCover title="família" variant={0} size={44}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 800, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>família do caos · ep.42</div>
+            <div style={{ height: 16, marginTop: 4 }}>
+              <Waveform bars={28} playing={playing} color="var(--lime-500)" height={16}/>
+            </div>
+          </div>
+          <button onClick={() => setPlaying(!playing)} style={{
+            width: 38, height: 38, borderRadius: '50%',
+            background: 'var(--lime-500)', color: 'var(--ink-900)',
+            border: '2.5px solid var(--stroke)', cursor: 'pointer',
+            display: 'grid', placeItems: 'center',
+          }}>
+            {playing ? <Ico.Pause/> : <Ico.Play/>}
+          </button>
+        </div>
+      );
+    }
+
+    function TweaksPanel({ tweaks, updateTweak, onClose }) {
+      return (
+        <div style={{
+          position: 'fixed', top: 16, right: 16,
+          width: 300, background: 'var(--surface)',
+          border: '2.5px solid var(--stroke)',
+          borderRadius: 'var(--r-lg)',
+          boxShadow: 'var(--shadow-chunk-lg)',
+          padding: 16, zIndex: 9000,
+          fontFamily: 'var(--font-body)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 800, flex: 1 }}>🎨 Tweaks</div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20 }}>×</button>
+          </div>
+
+          <TweakGroup label="tema">
+            {[['light','☀️ claro'],['dark','🌙 escuro']].map(([v,l]) => (
+              <TweakChip key={v} active={tweaks.theme === v} onClick={() => updateTweak('theme', v)}>{l}</TweakChip>
+            ))}
+          </TweakGroup>
+
+          <TweakGroup label="paleta">
+            {[
+              ['default','roxo biscoito'],
+              ['neon','verde neon'],
+              ['zap','zap verde'],
+              ['retro','retrô quente'],
+            ].map(([v,l]) => (
+              <TweakChip key={v} active={tweaks.palette === v} onClick={() => updateTweak('palette', v)}>{l}</TweakChip>
+            ))}
+          </TweakGroup>
+
+          <TweakGroup label="fonte display">
+            {[
+              ['bricolage','Bricolage'],
+              ['bungee','Bungee'],
+              ['archivo','Archivo Black'],
+              ['fraunces','Fraunces'],
+            ].map(([v,l]) => (
+              <TweakChip key={v} active={tweaks.font === v} onClick={() => updateTweak('font', v)}>{l}</TweakChip>
+            ))}
+          </TweakGroup>
+        </div>
+      );
+    }
+
+    function TweakGroup({ label, children }) {
+      return (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-dim)', marginBottom: 6 }}>{label}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{children}</div>
+        </div>
+      );
+    }
+
+    function TweakChip({ active, onClick, children }) {
+      return (
+        <button onClick={onClick} style={{
+          padding: '6px 10px',
+          background: active ? 'var(--purple-600)' : 'var(--bg-2)',
+          color: active ? '#fff' : 'var(--text)',
+          border: '2px solid var(--stroke)',
+          borderRadius: 999, fontSize: 11, fontWeight: 700,
+          fontFamily: 'var(--font-body)', cursor: 'pointer',
+          boxShadow: active ? '2px 2px 0 var(--stroke)' : 'none',
+        }}>{children}</button>
+      );
+    }
+
+    const waitReady = () => {
+      if (window.HomeScreen && window.GroupsScreen && window.ApprovalScreen && window.HistoryScreen && window.ScheduleScreen && window.OnboardingScreen && window.Sidebar) {
+        ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+      } else {
+        setTimeout(waitReady, 50);
+      }
+    };
+    waitReady();
+  </script>
+</body>
+</html>
