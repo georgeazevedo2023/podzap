@@ -77,7 +77,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 5 — Transcrição multimodal 🟡
+### Fase 5 — Transcrição multimodal ✅
 **Objetivo:** toda mensagem de áudio/imagem vira texto no banco.
 
 - [ ] Worker Inngest: `transcribe-audio` (Groq Whisper)
@@ -90,7 +90,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 6 — Filtro de relevância + agrupamento ⬜
+### Fase 6 — Filtro de relevância + agrupamento 🟡
 **Objetivo:** remover ruído e agrupar mensagens em tópicos coerentes.
 
 - [ ] Filtro: remover "ok", "kkk", stickers, stopwords

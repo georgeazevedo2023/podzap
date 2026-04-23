@@ -178,8 +178,9 @@ npx inngest-cli dev
 - [x] Fase 2: conexão WhatsApp (UAZAPI)
 - [x] Fase 3: listagem e seleção de grupos
 - [x] Fase 4: captura de mensagens (webhook) ✅
-- [ ] 🟡 **Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) — em andamento**
-- [ ] Fase 6+: ver `ROADMAP.md`
+- [x] Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) ✅
+- [ ] 🟡 **Fase 6: filtro de relevância + agrupamento por tópicos — em andamento**
+- [ ] Fase 7+: ver `ROADMAP.md`
 
 ---
 
@@ -243,3 +244,39 @@ Inngest  (app/api/inngest/route.ts + inngest/functions/*)
 - **Em prod**: `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` no Vercel; crons rodam pela Inngest Cloud.
 - **Retry**: default Inngest (3x backoff exponencial); falhas determinísticas (Gemini safety block) marcam e não re-agendam.
 - **UI**: `/history` mostra transcrição inline sob cada mensagem áudio/imagem; quando ainda não existe, aparece badge pulsante "transcrevendo…" / "analisando imagem…".
+
+---
+
+## 12. Pipeline de normalização (Fase 6+)
+
+Referência completa: `docs/integrations/pipeline.md`.
+
+Fluxo puro (sem IO, exceto a query do orchestrator):
+
+```
+messages + transcripts (JOIN)
+      │
+      ▼
+┌──────────────────┐   lib/pipeline/filter.ts
+│  filterMessages  │   drop ruído + score [0,1]  → NormalizedMessage[]
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐   lib/pipeline/cluster.ts
+│  clusterByTopic  │   gap temporal + jaccard   → Topic[]
+└────────┬─────────┘
+         │
+         ▼
+┌───────────────────────────────┐   lib/pipeline/normalize.ts
+│  buildNormalizedConversation  │   orchestrator (admin client)
+└───────────────────────────────┘
+         │
+         ▼
+  NormalizedConversation → entrada pro LLM da Fase 7
+```
+
+- **Rule-based, não AI**: embeddings/clustering semântico ficam pós-MVP.
+- Drop: stickers, stopwords PT (`ok`/`kkk`/…), URL-only, emoji-only, <3 chars sem mídia.
+- Weight base `0.3` + boosts (áudio >20s, >100 chars, `?` final, keyword crítica, mídia visual), clamped `[0, 1]`.
+- Cluster: single-pass por timestamp, quebra em `gap > 30min` (default) **ou** jaccard de participantes < 0.3. Keywords dominantes extraídas no final.
+- `/pipeline-preview` (dev-only, `NODE_ENV !== 'production'`) é a UI de inspeção manual antes da Fase 7.
