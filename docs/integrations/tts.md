@@ -106,7 +106,7 @@ RIFF<size>WAVEfmt <16><1><channels><sampleRate><byteRate><blockAlign><bits>data<
 - `TtsResult.durationSeconds` é computado a partir do comprimento do PCM: `samples / SAMPLE_RATE_HZ`.
 - `TtsResult.mimeType = 'audio/wav'`.
 
-**Compressão para MP3 é pós-MVP.** Um arquivo típico de 3–5 min de narração ocupa ~8–14 MB em WAV 24 kHz mono. Para reduzir custo de banda em entrega (Fase 10+), um step adicional pode rodar `ffmpeg -i … -b:a 64k out.mp3`; requer binário `ffmpeg` disponível no runtime Inngest/Vercel.
+**Compressão para MP3 é pós-MVP.** Um arquivo típico de 3–5 min de narração ocupa ~8–14 MB em WAV 24 kHz mono. Para reduzir custo de banda em entrega (Fase 10+), um step adicional pode rodar `ffmpeg -i … -b:a 64k out.mp3`; adicionar `ffmpeg` ao `Dockerfile` do container (apt-get install) ou usar uma imagem base com ffmpeg já instalado.
 
 ---
 

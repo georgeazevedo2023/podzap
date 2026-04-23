@@ -170,7 +170,7 @@ Worker `deliver-to-whatsapp` on `audio.created` (retries 3). Migration `0006_ten
 | LLM (resumo) | Gemini 2.5 Pro | Qualidade narrativa + structured output nativo |
 | TTS | Gemini 2.5 Flash TTS | Voz PT-BR (Kore/Charon); saída PCM 24 kHz |
 | Queue/workers | Inngest v4 | Fan-out por event, retries exponenciais, crons, dev dashboard |
-| Deploy | Vercel (app) + Supabase (db) + Inngest Cloud (workers) | Padrão Next.js; três deploys independentes |
+| Deploy | **Hetzner + Portainer** (Docker stack) + Supabase (db) + Inngest Cloud (workers) | Self-hosted; stack `.yml` gerenciada via Portainer UI |
 | Validação | zod 4 | Discriminated unions cobrem shape zoológico da UAZAPI |
 | Testes | Vitest 4 | Fast, ESM-first; mocks explícitos em todos os integrações |
 
@@ -243,7 +243,7 @@ Agregação consolidada das seções "Débitos" de todos os 11 audits, priorizad
 ### 🔴 Alta prioridade (bloqueia uso real em produção ou escala)
 
 1. **UI `/schedule` não existe** (Fase 11) — diretório `app/(app)/schedule/` está vazio. Backend completo (service + worker + API), mas usuário não tem forma visual de criar/editar schedules. **ETA próxima fase.**
-2. **Rate limiter UAZAPI é in-memory** (Fase 2, 3) — não funciona com múltiplas instâncias Vercel. Migrar para Upstash/Redis antes de 2+ pods.
+2. **Rate limiter UAZAPI é in-memory** (Fase 2, 3) — não funciona com múltiplos containers na stack Portainer (replicas > 1). Migrar pra Redis (container separado na mesma stack) antes de escalar horizontalmente.
 3. **Chunking de TTS > 5000 chars não implementado** (Fase 9) — resumos longos **falham**. Adicionar split + concat WAV, ou cap estrito no texto aprovado.
 4. **Custo real de Gemini 2.5 Pro não validado** (Fase 7) — estimativa $0.01-0.02 é teórica; `ai_calls.cost_cents` fica `null` porque SDK não retorna.
 5. **Sem tracking de custo agregado por tenant com limites de plano** (Fase 5, 7) — `getAiUsageForTenant()` existe mas não há enforcement. Tenants podem estourar free tier.
@@ -327,17 +327,24 @@ Todas as métricas do PRD §16 são computáveis do schema atual:
 
 ## 11. Deployment checklist
 
-### Vercel (app)
-- [ ] Importar repo, branch `main`
-- [ ] Env vars obrigatórias:
+### Hetzner + Portainer (app)
+
+Guia completo: **`docs/deploy/hetzner-portainer.md`**. Resumo:
+
+- [ ] Hetzner: VM Ubuntu 24.04 (CX22 basta pra começar), Docker + Portainer instalados
+- [ ] Traefik ou nginx na frente pra TLS (Let's Encrypt)
+- [ ] Build da imagem: `docker build -t podzap:latest .` (Dockerfile multi-stage no repo)
+- [ ] Criar **Stack** no Portainer apontando pro `docker-compose.yml` do repo
+- [ ] Env vars na stack (Portainer UI → Stack → Environment variables):
   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
   - `UAZAPI_BASE_URL`, `UAZAPI_ADMIN_TOKEN`, `UAZAPI_WEBHOOK_SECRET`
   - `ENCRYPTION_KEY` (32 bytes hex — AES-256-GCM; gerar com `openssl rand -hex 32`)
   - `GROQ_API_KEY`
   - `GEMINI_API_KEY`
-  - `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` (não `INNGEST_DEV`)
-- [ ] Build command: `npm run build`
-- [ ] Node runtime: 20+
+  - `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` (nunca `INNGEST_DEV` em prod)
+  - `NEXT_PUBLIC_APP_URL=https://podzap.app`
+- [ ] Redeploy da stack após qualquer alteração (push de imagem nova + Portainer UI → Pull and redeploy)
+- [ ] Node 20+ é o base da imagem (ver Dockerfile)
 
 ### Supabase (prod)
 - [ ] Criar projeto novo (region: `sa-east-1` São Paulo)
@@ -350,16 +357,16 @@ Todas as métricas do PRD §16 são computáveis do schema atual:
 
 ### Inngest Cloud
 - [ ] Criar app "podzap-prod"
-- [ ] Configurar endpoint: `https://<vercel-domain>/api/inngest`
-- [ ] Copiar `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` pra Vercel
+- [ ] Configurar endpoint: `https://<seu-domínio>/api/inngest`
+- [ ] Copiar `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` pras env vars da stack Portainer
 - [ ] Verificar 10 funções aparecem no dashboard
 - [ ] Crons ativos: `retry-pending-downloads` (*/5m), `transcription-retry` (*/15m), `run-schedules` (*/5m)
 
 ### UAZAPI
 - [ ] Pagar tier de produção no `wsmart.uazapi.com`
-- [ ] Guardar `UAZAPI_ADMIN_TOKEN` no Vercel
-- [ ] Em dev: substituir ngrok por **URL permanente** do Vercel
-- [ ] Registrar webhook via `scripts/register-webhook.mjs` com URL Vercel + `UAZAPI_WEBHOOK_SECRET`
+- [ ] `UAZAPI_ADMIN_TOKEN` nas env vars da stack Portainer
+- [ ] Em dev: ngrok; em prod: domínio TLS já apontado pra Hetzner
+- [ ] Registrar webhook via `scripts/register-webhook.mjs` com URL de prod + `UAZAPI_WEBHOOK_SECRET`
 - [ ] Confirmar `events: ['messages', 'connection']`
 
 ### Gemini
@@ -372,8 +379,9 @@ Todas as métricas do PRD §16 são computáveis do schema atual:
 - [ ] Groq tem tier grátis generoso (~30 req/min) — monitorar
 
 ### Domínio + DNS
-- [ ] Apontar domínio custom para Vercel
-- [ ] Atualizar `NEXT_PUBLIC_SUPABASE_URL` redirect allowlist no Supabase
+- [ ] Apontar domínio (A record) para o IP da VM Hetzner
+- [ ] Traefik/nginx na stack emite cert Let's Encrypt automático
+- [ ] Adicionar URL ao "Redirect URLs" do Supabase Auth (via `scripts/configure-auth.mjs` ou dashboard)
 - [ ] Re-registrar webhook UAZAPI com URL final
 
 ### Observabilidade (recomendado pós-MVP)

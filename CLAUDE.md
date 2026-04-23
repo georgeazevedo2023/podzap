@@ -31,7 +31,7 @@ PRD completo: `docs/PRD.md`
 | LLM (resumo) | Gemini 2.5 Pro (principal) / GPT-4.1 (fallback) | Qualidade narrativa |
 | TTS | Gemini Speech API | Controle de voz/estilo/velocidade |
 | Filas/Workers | Inngest (ou Trigger.dev) | Pipeline assíncrono com retry |
-| Deploy | Vercel (app) + Supabase (db) | Padrão Next.js |
+| Deploy | **Hetzner + Portainer (Docker stack)** + Supabase (db) | Self-hosted; NÃO usamos Vercel |
 
 ---
 
@@ -47,7 +47,7 @@ PRD completo: `docs/PRD.md`
         │                                    ▼
 ┌───────┴────────┐                   ┌──────────────┐
 │  Next.js App   │◀──────────────────│   Inngest    │
-│   (Vercel)     │                   │   Workers    │
+│  (Hetzner)     │                   │   Workers    │
 └───────┬────────┘                   └──────┬───────┘
         │                                   │
         │          RLS multi-tenant         │
@@ -248,7 +248,7 @@ Inngest  (app/api/inngest/route.ts + inngest/functions/*)
 
 - **Events canônicos** (`inngest/events.ts`): `message.captured`, `message.transcription.requested`, `media.download.retry`. Case-sensitive — erro comum é usar underscore.
 - **Em dev**: `INNGEST_DEV=1` em `.env.local` + `npx inngest-cli@latest dev -u http://localhost:3001/api/inngest` em paralelo ao `npm run dev`. Dashboard em `http://127.0.0.1:8288`.
-- **Em prod**: `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` no Vercel; crons rodam pela Inngest Cloud.
+- **Em prod**: `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` como env vars na stack Portainer; crons rodam pela Inngest Cloud (ou Inngest self-hosted em container separado — decisão pendente).
 - **Retry**: default Inngest (3x backoff exponencial); falhas determinísticas (Gemini safety block) marcam e não re-agendam.
 - **UI**: `/history` mostra transcrição inline sob cada mensagem áudio/imagem; quando ainda não existe, aparece badge pulsante "transcrevendo…" / "analisando imagem…".
 

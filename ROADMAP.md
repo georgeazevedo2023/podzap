@@ -16,7 +16,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 - [ ] Criar projeto Supabase (dev)
 - [ ] Configurar `.env.local` completo
 - [ ] Supabase clients (browser / server / admin)
-- [ ] Deploy inicial Vercel
+- [ ] Deploy inicial Hetzner (via stack Portainer)
 - [ ] CI básica (typecheck + build)
 
 **Aceite:** `npm run dev` abre tela Home, `supabase.from('tenants').select()` retorna vazio (tabela existe).

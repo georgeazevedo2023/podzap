@@ -35,7 +35,9 @@ npm run dev
 
 ## 🛠 Stack
 
-Next.js 15 · TypeScript · Tailwind · Supabase · Inngest · UAZAPI · Groq · Gemini
+Next.js 16 · TypeScript · Tailwind v4 · Supabase · Inngest · UAZAPI · Groq · Gemini
+
+**Deploy:** Hetzner + Portainer (Docker stack). Ver [`docs/deploy/hetzner-portainer.md`](./docs/deploy/hetzner-portainer.md).
 
 ---
 

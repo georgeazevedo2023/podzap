@@ -70,7 +70,7 @@ function buildSystemPrompt(tone: SummaryTone): string {
 /**
  * PT-BR date/time formatting that matches the spec's `.toLocaleString('pt-BR')`
  * contract. We pin `America/Sao_Paulo` so prompts are reproducible regardless
- * of the host timezone (Vercel, local dev, CI).
+ * of the host timezone (Hetzner container, local dev, CI).
  */
 function formatDateBR(d: Date): string {
   return d.toLocaleString("pt-BR", {

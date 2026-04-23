@@ -26,8 +26,9 @@
  *
  * Logging:
  *   We compute a short correlation id (8-char hex of a cheap hash over the
- *   body) so the log lines on this request can be grep'd together in Vercel
- *   logs across validator/handler/persist boundaries.
+ *   body) so the log lines on this request can be grep'd together in the
+ *   container logs (Portainer / `docker logs`) across validator/handler/
+ *   persist boundaries.
  */
 
 import { NextResponse } from 'next/server';

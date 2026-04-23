@@ -5,7 +5,7 @@
  * Why we need this:
  *   - `lib/webhooks/persist.ts` fires `downloadAndStore` as a fire-and-forget
  *     promise. If the Next.js process is killed mid-download (deploy window,
- *     Vercel cold-start eviction, OOM) the row will stay `pending` forever.
+ *     container restart / OOM) the row will stay `pending` forever.
  *   - UAZAPI media URLs are signed with a short TTL (~hours). Retrying after
  *     24 hours is pointless — the upstream URL is dead. We cap the lookback
  *     at 24h to avoid burning cycles on rows we can't recover.

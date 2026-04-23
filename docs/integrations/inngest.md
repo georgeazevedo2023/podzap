@@ -106,11 +106,11 @@ segundos.
 
 ## Prod setup
 
-Em produção (Vercel) o Inngest roda via **Inngest Cloud**:
+Em produção (Hetzner + Portainer stack) o Inngest roda via **Inngest Cloud**:
 
 1. Crie um projeto em [app.inngest.com](https://app.inngest.com).
 2. Copie `Event Key` e `Signing Key`.
-3. No Vercel, em _Environment Variables_, adicione:
+3. Na stack Portainer, em _Environment variables_, adicione:
 
    ```
    INNGEST_EVENT_KEY=<event-key>
@@ -119,12 +119,16 @@ Em produção (Vercel) o Inngest roda via **Inngest Cloud**:
 
    **Não** defina `INNGEST_DEV` em prod (ou defina `INNGEST_DEV=0`).
 
-4. Após deploy, registre a app em Inngest Cloud apontando para
-   `https://<your-domain>/api/inngest`. O SDK se auto-registra no primeiro
+4. Após o stack subir, registre a app em Inngest Cloud apontando para
+   `https://<seu-domínio>/api/inngest`. O SDK se auto-registra no primeiro
    request e as funções aparecem no dashboard.
 
-Os crons rodam automaticamente pela Inngest Cloud — não precisa de
-Vercel Cron nem GitHub Actions.
+Os crons rodam automaticamente pela Inngest Cloud — não precisa de cron
+do host nem GitHub Actions.
+
+**Alternativa self-hosted:** rodar Inngest num container próprio na mesma
+stack Portainer e apontar `INNGEST_BASE_URL` pra ele. Fica pós-MVP até
+termos motivo pra sair da Inngest Cloud.
 
 ---
 
@@ -150,7 +154,7 @@ função trata como "no retry" marcando a mensagem e retornando sem lançar
 | Evento dispatched mas nenhuma função roda               | Nome do evento não bate com o trigger                        | Confira `inngest/events.ts` — é `message.captured` (ponto), não underscore   |
 | Groq "file too large"                                   | Áudio > 25MB (limite do Whisper)                             | Implementar chunking (issue futura) ou descartar com flag                    |
 | Gemini retorna bloqueio de safety                       | Imagem sensível                                              | Marcar `transcription_failed` sem retry e seguir                             |
-| Cron não dispara em prod                                | `INNGEST_DEV=1` ficou em prod                                | Remova do Vercel env e redeploy                                              |
+| Cron não dispara em prod                                | `INNGEST_DEV=1` ficou em prod                                | Remova da stack Portainer env vars + redeploy da stack                       |
 | Função roda mas `messages` não existe                   | Evento dispatchado com `messageId` inválido (teste manual)   | Use um UUID real de `messages` — ou proteja a função com um early-return     |
 
 ---

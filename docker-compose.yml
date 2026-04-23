@@ -1,0 +1,106 @@
+# podZAP — Stack Portainer
+# -----------------------------------------------------------------------------
+# Como usar no Portainer:
+#   1. Stacks → Add stack → "podzap"
+#   2. Build method: "Repository" (apontar pro GitHub) ou "Upload" do arquivo
+#   3. Preencher env vars no painel (NÃO commitar segredos no git)
+#   4. Deploy
+#
+# Assume uma rede externa `traefik` já criada (se usar Traefik pra TLS).
+# Se não usar Traefik, remover os labels e expor porta diretamente.
+# -----------------------------------------------------------------------------
+
+services:
+  app:
+    # Build local (dev/CI):
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # OU usar imagem publicada (recomendado em prod — build em CI, push pro registry):
+    # image: ghcr.io/georgeazevedo2023/podzap:latest
+    container_name: podzap-app
+    restart: unless-stopped
+
+    environment:
+      # --- App ---
+      NODE_ENV: production
+      PORT: "3000"
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      APP_URL: ${NEXT_PUBLIC_APP_URL}
+
+      # --- Supabase ---
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_ACCESS_TOKEN: ${SUPABASE_ACCESS_TOKEN}
+      SUPABASE_PROJECT_REF: ${SUPABASE_PROJECT_REF}
+      DATABASE_URL: ${DATABASE_URL}
+
+      # --- UAZAPI ---
+      UAZAPI_BASE_URL: ${UAZAPI_BASE_URL}
+      UAZAPI_ADMIN_TOKEN: ${UAZAPI_ADMIN_TOKEN}
+      UAZAPI_WEBHOOK_SECRET: ${UAZAPI_WEBHOOK_SECRET}
+
+      # --- AI ---
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_STT_MODEL: ${GROQ_STT_MODEL:-whisper-large-v3}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_VISION_MODEL: ${GEMINI_VISION_MODEL:-gemini-2.5-flash}
+      GEMINI_LLM_MODEL: ${GEMINI_LLM_MODEL:-gemini-2.5-pro}
+      GEMINI_TTS_MODEL: ${GEMINI_TTS_MODEL:-gemini-2.5-flash-preview-tts}
+
+      # --- Inngest (Cloud em prod; NUNCA INNGEST_DEV=1 aqui) ---
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY}
+
+      # --- Segurança ---
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+
+    # Sem Traefik: descomente
+    # ports:
+    #   - "3000:3000"
+
+    # Com Traefik (recomendado): labels roteiam + TLS Let's Encrypt
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.podzap.rule=Host(`${PODZAP_HOST:-podzap.example.com}`)"
+      - "traefik.http.routers.podzap.entrypoints=websecure"
+      - "traefik.http.routers.podzap.tls.certresolver=letsencrypt"
+      - "traefik.http.services.podzap.loadbalancer.server.port=3000"
+
+    networks:
+      - traefik
+      - default
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --- OPCIONAL: Redis pra rate limit distribuído quando scale > 1 ---
+  # Descomente quando sair de 1 replica:
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: podzap-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - default
+
+networks:
+  traefik:
+    external: true
+  default:
+
+# volumes:
+#   redis-data:

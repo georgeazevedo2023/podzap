@@ -110,18 +110,21 @@ Check `/history` — the message should appear in the feed immediately.
 
 ---
 
-## 3. Deploy setup (Vercel)
+## 3. Deploy setup (Hetzner + Portainer)
 
-Vercel gives you a stable HTTPS URL per environment — you only need to
-run the registrar once per env.
+Production runs as a Docker stack in Portainer on a Hetzner VM, behind
+Traefik (or nginx) for TLS termination on a stable domain. Register the
+webhook once per environment:
 
 ```bash
 # Staging
-node --env-file=.env.staging scripts/register-webhook.mjs https://podzap-staging.vercel.app
+node --env-file=.env.staging scripts/register-webhook.mjs https://staging.podzap.app
 
 # Production
 node --env-file=.env.production scripts/register-webhook.mjs https://podzap.app
 ```
+
+See `docs/deploy/hetzner-portainer.md` for the full stack setup.
 
 Post-deploy sanity:
 
@@ -253,7 +256,7 @@ policies confirm this is the only tenant that can read the row downstream.
 ### 5.4 Rotating the secret
 
 1. Generate a new value: `openssl rand -hex 32`
-2. Update `UAZAPI_WEBHOOK_SECRET` in Vercel / `.env.local`.
+2. Update `UAZAPI_WEBHOOK_SECRET` in the Portainer stack env / `.env.local`.
 3. Re-run `scripts/register-webhook.mjs <url>` — it propagates the new
    secret to UAZAPI's webhook config.
 4. Invalidate the old value in a redeploy window.
