@@ -31,46 +31,77 @@ export default async function LoginPage({
   const error = pickFirst(params.error);
 
   return (
-    // F13: dark theme for login — matches the `(app)` route group so the
-    // look stays consistent across authenticated vs. pre-auth screens.
-    // Landing page at `/` stays on the default light palette.
-    <main
-      data-theme="dark"
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        padding: '40px',
-        background: 'var(--color-bg)',
-        color: 'var(--color-text)',
-      }}
-    >
-      <div
-        className="card"
-        style={{ maxWidth: 480, width: '100%', padding: 32 }}
+    <main data-theme="dark" className="login-stage">
+      {/* Animated gradient blobs — sit on z-index 0 behind everything */}
+      <div aria-hidden className="login-blob login-blob--purple" />
+      <div aria-hidden className="login-blob login-blob--pink" />
+      <div aria-hidden className="login-blob login-blob--lime" />
+
+      {/* Subtle grid overlay — gives depth without being noisy */}
+      <div aria-hidden className="login-grid" />
+
+      {/* Decorative waveform at the bottom — reinforces the "podcast" idea */}
+      <svg
+        aria-hidden
+        className="login-waveform"
+        viewBox="0 0 1200 160"
+        preserveAspectRatio="none"
       >
-        <span className="sticker sticker-pink">🎙 podZAP</span>
+        <defs>
+          <linearGradient id="wavegrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#7A3CFF" />
+            <stop offset="50%" stopColor="#FF3DA5" />
+            <stop offset="100%" stopColor="#C6FF3C" />
+          </linearGradient>
+        </defs>
+        {/* Generated bars — pseudo-waveform */}
+        {Array.from({ length: 60 }).map((_, i) => {
+          const h = 20 + Math.sin(i * 0.6) * 30 + Math.cos(i * 0.25) * 20 + 40;
+          const x = i * 20 + 10;
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={160 - h}
+              width={8}
+              height={h}
+              rx={3}
+              fill="url(#wavegrad)"
+            />
+          );
+        })}
+      </svg>
+
+      <div className="login-card">
+        <span
+          className="sticker sticker-pink"
+          style={{ boxShadow: '2px 2px 0 #000' }}
+        >
+          🎙 podZAP
+        </span>
 
         <h1
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 32,
-            lineHeight: 1.05,
-            fontWeight: 700,
-            margin: '16px 0 8px',
+            fontFamily: 'var(--font-brand)',
+            fontSize: 44,
+            lineHeight: 1,
+            fontWeight: 400,
+            margin: '18px 0 8px',
             letterSpacing: '-0.02em',
+            color: '#FFFBF2',
           }}
         >
-          Entrar
+          pod<span style={{ color: '#FF3DA5' }}>ZAP</span>
         </h1>
         <p
           style={{
-            color: 'var(--color-text-dim)',
+            color: '#B4A8D1',
             fontSize: 15,
-            marginBottom: 20,
+            marginBottom: 24,
+            lineHeight: 1.45,
           }}
         >
-          acesso por convite — use seu email e senha corporativos
+          acesso por convite — entre com seu email e senha
         </p>
 
         {message ? (
@@ -79,11 +110,11 @@ export default async function LoginPage({
             style={{
               marginBottom: 16,
               padding: '12px 16px',
-              border: '2.5px solid var(--color-stroke)',
+              border: '2.5px solid #000',
               borderRadius: 16,
-              background: 'var(--color-lime-400)',
-              color: 'var(--color-ink-900)',
-              boxShadow: '3px 3px 0 var(--color-stroke)',
+              background: '#D8FF66',
+              color: '#0A0420',
+              boxShadow: '3px 3px 0 #000',
               fontWeight: 700,
               fontSize: 14,
             }}
@@ -98,11 +129,11 @@ export default async function LoginPage({
             style={{
               marginBottom: 16,
               padding: '12px 16px',
-              border: '2.5px solid var(--color-stroke)',
+              border: '2.5px solid #000',
               borderRadius: 16,
-              background: 'var(--color-red-500)',
+              background: '#FF4D3C',
               color: '#fff',
-              boxShadow: '3px 3px 0 var(--color-stroke)',
+              boxShadow: '3px 3px 0 #000',
               fontWeight: 700,
               fontSize: 14,
             }}
@@ -122,7 +153,7 @@ export default async function LoginPage({
               fontWeight: 700,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
-              color: 'var(--color-text-dim)',
+              color: '#B4A8D1',
             }}
           >
             Email
@@ -140,12 +171,12 @@ export default async function LoginPage({
               fontSize: 15,
               fontWeight: 500,
               padding: '12px 20px',
-              border: '2.5px solid var(--color-stroke)',
+              border: '2.5px solid #000',
               borderRadius: 999,
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
+              background: 'rgba(255, 251, 242, 0.08)',
+              color: '#FFFBF2',
               outline: 'none',
-              boxShadow: '3px 3px 0 var(--color-stroke)',
+              boxShadow: '3px 3px 0 #000',
             }}
           />
 
@@ -156,7 +187,7 @@ export default async function LoginPage({
               fontWeight: 700,
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
-              color: 'var(--color-text-dim)',
+              color: '#B4A8D1',
               marginTop: 4,
             }}
           >
@@ -175,23 +206,39 @@ export default async function LoginPage({
               fontSize: 15,
               fontWeight: 500,
               padding: '12px 20px',
-              border: '2.5px solid var(--color-stroke)',
+              border: '2.5px solid #000',
               borderRadius: 999,
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
+              background: 'rgba(255, 251, 242, 0.08)',
+              color: '#FFFBF2',
               outline: 'none',
-              boxShadow: '3px 3px 0 var(--color-stroke)',
+              boxShadow: '3px 3px 0 #000',
             }}
           />
 
           <button
             type="submit"
             className="btn btn-purple"
-            style={{ justifyContent: 'center', marginTop: 8 }}
+            style={{ justifyContent: 'center', marginTop: 10 }}
           >
             entrar
           </button>
         </form>
+
+        <p
+          style={{
+            marginTop: 20,
+            paddingTop: 16,
+            borderTop: '2px dashed rgba(255, 255, 255, 0.15)',
+            fontSize: 11,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            fontWeight: 700,
+            color: '#8B7FB0',
+            textAlign: 'center',
+          }}
+        >
+          🔒 cadastro apenas via administrador
+        </p>
       </div>
     </main>
   );

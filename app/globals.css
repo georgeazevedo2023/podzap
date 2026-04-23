@@ -336,3 +336,92 @@ body {
   0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
   50%      { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
 }
+
+/* ---- Login background — animated gradient blobs + grid overlay ---- */
+@keyframes blob-drift-a {
+  0%,100% { transform: translate(0, 0) scale(1); }
+  33%     { transform: translate(80px, 60px) scale(1.08); }
+  66%     { transform: translate(-40px, 100px) scale(0.94); }
+}
+@keyframes blob-drift-b {
+  0%,100% { transform: translate(0, 0) scale(1); }
+  50%     { transform: translate(-120px, -60px) scale(1.12); }
+}
+@keyframes blob-drift-c {
+  0%,100% { transform: translate(0, 0) scale(1); }
+  40%     { transform: translate(60px, -80px) scale(0.92); }
+  80%     { transform: translate(-100px, 40px) scale(1.1); }
+}
+@keyframes gradient-shift {
+  0%,100% { background-position: 0% 50%; }
+  50%     { background-position: 100% 50%; }
+}
+@keyframes card-glow {
+  0%,100% { box-shadow: 6px 6px 0 #000, 0 0 60px rgba(122, 60, 255, 0.35), 0 0 120px rgba(255, 61, 165, 0.18); }
+  50%     { box-shadow: 6px 6px 0 #000, 0 0 80px rgba(255, 61, 165, 0.38), 0 0 140px rgba(122, 60, 255, 0.22); }
+}
+
+.login-stage {
+  position: relative;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 800px at 15% -10%, rgba(122, 60, 255, 0.28), transparent 60%),
+    radial-gradient(900px 700px at 95% 110%, rgba(255, 61, 165, 0.22), transparent 60%),
+    linear-gradient(135deg, #05020d 0%, #0d0520 45%, #140832 100%);
+  color: var(--color-text);
+}
+
+.login-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.55;
+  z-index: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+.login-blob--purple { width: 520px; height: 520px; background: radial-gradient(circle, #7A3CFF 0%, transparent 70%); top: -16%; left: -8%;  animation: blob-drift-a 18s ease-in-out infinite; }
+.login-blob--pink   { width: 480px; height: 480px; background: radial-gradient(circle, #FF3DA5 0%, transparent 70%); bottom: -22%; right: -10%; animation: blob-drift-b 22s ease-in-out infinite; }
+.login-blob--lime   { width: 360px; height: 360px; background: radial-gradient(circle, #C6FF3C 0%, transparent 70%); top: 45%; right: 28%; opacity: 0.28; animation: blob-drift-c 26s ease-in-out infinite; filter: blur(120px); }
+
+.login-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right,  rgba(255,255,255,0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+}
+
+.login-waveform {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 160px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.35;
+  mask-image: linear-gradient(to top, black, transparent);
+  -webkit-mask-image: linear-gradient(to top, black, transparent);
+}
+
+.login-card {
+  position: relative;
+  z-index: 10;
+  max-width: 480px;
+  width: 100%;
+  padding: 32px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(31, 12, 60, 0.82) 0%, rgba(20, 8, 44, 0.88) 100%);
+  border: 2.5px solid #000;
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  animation: card-glow 8s ease-in-out infinite;
+}
