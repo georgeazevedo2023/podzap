@@ -182,8 +182,9 @@ npx inngest-cli dev
 - [x] Fase 6: filtro de relevância + agrupamento por tópicos ✅
 - [x] Fase 7: geração do resumo (Gemini 2.5 Pro) ✅
 - [x] Fase 8: aprovação humana (review + edit + approve/reject/regenerate) ✅
-- [ ] 🟡 **Fase 9: TTS (Gemini 2.5 Flash TTS → WAV no bucket `audios`) — em andamento**
-- [ ] Fase 10+: ver `ROADMAP.md`
+- [x] Fase 9: TTS (Gemini 2.5 Flash TTS → WAV no bucket `audios`) ✅
+- [ ] 🟡 **Fase 10: entrega via UAZAPI (worker `deliver-to-whatsapp` on `audio.created` + redeliver manual) — em andamento**
+- [ ] Fase 11+: ver `ROADMAP.md`
 
 ---
 
@@ -391,3 +392,41 @@ summaries.status = 'approved'
 - **Speed**: não-determinístico — apenas dica no prompt (Gemini TTS não tem knob real).
 - **Chunking**: não implementado. Resumos > ~5000 chars podem falhar (gap documentado).
 - **Erros**: `AudiosError` com `code ∈ { NOT_FOUND, ALREADY_EXISTS, TTS_ERROR, DB_ERROR }`. `ALREADY_EXISTS` em retry é sinal de sucesso idempotente.
+
+---
+
+## 16. Entrega (Fase 10)
+
+Referência completa: `docs/integrations/delivery.md`.
+
+```
+audios row criada (Fase 9)
+          │  emit audio.created
+          ▼
+┌──────────────────────────────┐  inngest/functions/deliver-to-whatsapp.ts
+│  deliver-to-whatsapp worker  │  retries: 3
+└──────────────┬───────────────┘
+               │ step.run('deliver')
+               ▼
+┌──────────────────────────────┐  lib/delivery/service.ts
+│  deliverAudio(tenantId, id)  │  load ctx → check instance → download → sendAudio → mark
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐  lib/uazapi/client.ts
+│  UAZAPI /send/media (PTT)    │  buffer WAV + caption opcional
+└──────────────┬───────────────┘
+               │
+               ▼
+  audios.delivered_to_whatsapp = true
+  audios.delivered_at          = now()
+
+  Retry manual: POST /api/audios/[id]/redeliver  (6/h/tenant)
+```
+
+- **Destino atual**: grupo de origem do resumo (`summaries.group_id → groups.uazapi_group_jid`). DM do owner / lista custom ficam pós-MVP.
+- **Caption**: hoje hardcoded `true` no worker (usa `summaries.text`); `false` no redeliver. Flag por tenant (`tenants.include_caption_on_delivery` no plano) ainda não implementada.
+- **Erros**: `DeliveryError` com `code ∈ { NOT_FOUND, NO_INSTANCE, INSTANCE_NOT_CONNECTED, UAZAPI_ERROR, DB_ERROR }` — mapeado para 404 / 409 / 409 / 502 / 500 na rota `redeliver`.
+- **Idempotência**: `deliverAudio` short-circuita se `delivered_to_whatsapp=true`; `redeliver` força a chamada.
+- **Retry**: Inngest 3x (backoff exponencial) para transientes + botão "Reenviar" manual com rate limit 6/h/tenant.
+- **Concerns abertos**: rate limit UAZAPI (~10/min), desconexão mid-flight, grupo removido (não diferenciado de outros UAZAPI_ERROR), buffer size ~16 MB (fallback URL pública não implementado), possível duplicata se `sendAudio` suceder e `markDelivered` falhar.

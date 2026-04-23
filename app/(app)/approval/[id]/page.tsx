@@ -19,6 +19,7 @@ import { getSummary, type SummaryView } from '@/lib/summaries/service';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
 
 import { AudioStatus } from './AudioStatus';
+import { DeliveryStatus } from './DeliveryStatus';
 import { SummaryEditor } from './SummaryEditor';
 
 interface ApprovalDetailPageProps {
@@ -118,6 +119,12 @@ export default async function ApprovalDetailPage({
           {summary.status === 'approved' && (
             <MetadataCard title="Áudio">
               <AudioStatus summaryId={summary.id} />
+            </MetadataCard>
+          )}
+
+          {summary.status === 'approved' && (
+            <MetadataCard title="Entrega">
+              <DeliveryStatus summaryId={summary.id} />
             </MetadataCard>
           )}
 

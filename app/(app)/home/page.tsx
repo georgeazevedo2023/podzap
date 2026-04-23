@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { TopBar } from '@/components/shell/TopBar';
 import { Sticker } from '@/components/ui/Sticker';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
+import { SettingsCard } from './SettingsCard';
 
 /**
  * Landing screen for authenticated users. This is intentionally simple for
@@ -233,6 +234,8 @@ export default async function HomePage() {
               pra outros membros chegam na Fase 2.
             </div>
           </div>
+
+          <SettingsCard />
 
           <div
             className="card"

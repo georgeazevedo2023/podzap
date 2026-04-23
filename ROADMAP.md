@@ -129,7 +129,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 9 — TTS (geração de áudio) 🟡
+### Fase 9 — TTS (geração de áudio) ✅
 **Objetivo:** resumo aprovado vira arquivo de áudio no Storage.
 
 - [ ] Integração Gemini Speech API
@@ -143,7 +143,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 10 — Entrega ⬜
+### Fase 10 — Entrega 🟡
 **Objetivo:** áudio + texto chegam no WhatsApp do usuário/grupo.
 
 - [ ] Envio via UAZAPI (áudio + legenda)

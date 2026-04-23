@@ -25,7 +25,7 @@
  */
 
 import { inngest } from "../client";
-import { summaryApproved } from "../events";
+import { audioCreated, summaryApproved } from "../events";
 import {
   createAudioForSummary,
   AudiosError,
@@ -80,6 +80,26 @@ export async function generateTtsHandler(
     storagePath: audio.storagePath,
     sizeBytes: audio.sizeBytes,
   });
+
+  // Fire-and-forget: kick off the Fase 10 delivery worker. We deliberately
+  // do NOT await inside a step — the audio row is already persisted, and a
+  // failure to enqueue the follow-up event is not a reason to retry TTS
+  // generation (which would throw ALREADY_EXISTS anyway). A schedule-based
+  // reaper elsewhere handles audios that somehow slip past undelivered.
+  void inngest
+    .send(
+      audioCreated.create({
+        audioId: audio.id,
+        tenantId,
+        summaryId,
+      }),
+    )
+    .catch((err) => {
+      logger.error("[generate-tts] failed to emit audio.created", {
+        audioId: audio.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
 
   return {
     audioId: audio.id,

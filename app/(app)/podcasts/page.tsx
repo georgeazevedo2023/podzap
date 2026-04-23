@@ -24,6 +24,8 @@ import { listSummaries, type SummaryView } from '@/lib/summaries/service';
 import { listAudios, type AudioView } from '@/lib/audios/service';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
+import { DeliveryControls } from './DeliveryControls';
+
 /** Upper bound on episodes shown. Matches `listSummaries` cap (100). */
 const EPISODE_LIMIT = 50;
 
@@ -259,6 +261,14 @@ function EpisodeCard({ episode }: { episode: Episode }) {
       ) : (
         <GeneratingBadge />
       )}
+
+      {audio ? (
+        <DeliveryControls
+          audioId={audio.id}
+          delivered={audio.deliveredToWhatsapp}
+          deliveredAt={audio.deliveredAt}
+        />
+      ) : null}
 
       <details
         style={{

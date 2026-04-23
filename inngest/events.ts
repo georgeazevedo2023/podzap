@@ -114,6 +114,23 @@ export const summaryApproved = eventType("summary.approved", {
 });
 
 /**
+ * Emitted by `inngest/functions/generate-tts.ts` once a fresh `audios`
+ * row has been persisted. The downstream Fase 10 worker
+ * (`deliver-to-whatsapp`) listens on this to ship the rendered audio
+ * to the original group via UAZAPI.
+ *
+ * Like `summaryApproved`, the payload is ids-only; the handler
+ * re-fetches the row to survive any intervening edits.
+ */
+export const audioCreated = eventType("audio.created", {
+  schema: staticSchema<{
+    audioId: string;
+    tenantId: string;
+    summaryId: string;
+  }>(),
+});
+
+/**
  * Health-check event handled by `inngest/functions/ping.ts`. Used by
  * smoke tests to confirm the worker runtime is up and the event
  * subscription is wired. Never emitted in production traffic.

@@ -24,6 +24,7 @@
 import { serve } from "inngest/next";
 
 import { inngest } from "@/inngest/client";
+import { deliverToWhatsappFunction } from "@/inngest/functions/deliver-to-whatsapp";
 import { describeImage } from "@/inngest/functions/describe-image";
 import { generateSummaryFunction } from "@/inngest/functions/generate-summary";
 import { generateTtsFunction } from "@/inngest/functions/generate-tts";
@@ -44,5 +45,6 @@ export const { GET, POST, PUT } = serve({
     transcriptionRetry,
     generateSummaryFunction,
     generateTtsFunction,
+    deliverToWhatsappFunction,
   ],
 });

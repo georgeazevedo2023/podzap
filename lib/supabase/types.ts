@@ -440,21 +440,27 @@ export type Database = {
       tenants: {
         Row: {
           created_at: string
+          delivery_target: string
           id: string
+          include_caption_on_delivery: boolean
           name: string
           plan: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          delivery_target?: string
           id?: string
+          include_caption_on_delivery?: boolean
           name: string
           plan?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          delivery_target?: string
           id?: string
+          include_caption_on_delivery?: boolean
           name?: string
           plan?: string
           updated_at?: string
