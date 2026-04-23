@@ -37,7 +37,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 2 — Conexão WhatsApp (UAZAPI) 🟡
+### Fase 2 — Conexão WhatsApp (UAZAPI) ✅
 **Objetivo:** usuário conecta instância UAZAPI via QR code e vê status da conexão.
 
 - [ ] Migration `whatsapp_instances`
@@ -50,7 +50,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 3 — Listagem e seleção de grupos 🟡
+### Fase 3 — Listagem e seleção de grupos ✅
 **Objetivo:** listar grupos da instância e marcar quais monitorar.
 
 - [ ] Migration `groups`
@@ -63,7 +63,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 4 — Captura de mensagens (webhook) ⬜
+### Fase 4 — Captura de mensagens (webhook) 🟡
 **Objetivo:** receber mensagens em tempo real e salvar no banco.
 
 - [ ] Migration `messages`

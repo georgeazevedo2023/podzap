@@ -1,0 +1,26 @@
+{
+  "event": "messages.upsert",
+  "instance": "__INSTANCE_UAZAPI_ID__",
+  "tenant_id": "__TENANT_ID__",
+  "data": {
+    "key": {
+      "id": "3EB0FIX_IMAGE_0001",
+      "remoteJid": "__GROUP_JID__",
+      "fromMe": false,
+      "participant": "5511988887777@s.whatsapp.net"
+    },
+    "pushName": "Fixture Bot — Image",
+    "messageTimestamp": 1714000200,
+    "messageType": "imageMessage",
+    "message": {
+      "imageMessage": {
+        "mimetype": "image/jpeg",
+        "caption": "Legenda de fixture de imagem.",
+        "url": "https://files.uazapi.com/fixtures/sample-photo.jpg",
+        "fileLength": 189240,
+        "width": 1280,
+        "height": 960
+      }
+    }
+  }
+}

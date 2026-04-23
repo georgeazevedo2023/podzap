@@ -344,9 +344,33 @@ const normaliseMessageContent = (data: unknown): MessageContent => {
 
 // ── Discriminated union of webhook events ───────────────────────────────
 
+/**
+ * Shared helper: is the raw payload already tagged `{ event: "<target>" }`
+ * (our own preprocessed shape), or does its `event` / `type` string look
+ * like the UAZAPI wire tag for this branch (e.g. `messages.upsert` /
+ * `connection.update`)? We use this in every per-branch preprocess so a
+ * downstream `z.union` doesn't silently accept an unrelated event type
+ * just because most fields happen to be optional — the preprocess returns
+ * `raw` untouched for mismatches, and the zod object validator then fails
+ * cleanly, letting the union try the next branch.
+ */
+const eventMatches = (
+  raw: unknown,
+  opts: { wirePrefix: string; ownTag: "message" | "connection" },
+): boolean => {
+  if (!raw || typeof raw !== "object") return false;
+  const r = raw as Record<string, unknown>;
+  if (r.event === opts.ownTag) return true;
+  const wire = (r.event ?? r.type ?? "") as unknown;
+  if (typeof wire !== "string") return false;
+  return wire.startsWith(opts.wirePrefix);
+};
+
 export const MessageUpsertEventSchema = z.preprocess(
   (raw) => {
-    if (!raw || typeof raw !== "object") return raw;
+    if (!eventMatches(raw, { wirePrefix: "message", ownTag: "message" })) {
+      return raw;
+    }
     const r = raw as Record<string, unknown>;
     const data = (r.data ?? {}) as Record<string, unknown>;
     return {
@@ -376,7 +400,14 @@ export type MessageUpsertEvent = z.infer<typeof MessageUpsertEventSchema>;
 
 export const ConnectionUpdateEventSchema = z.preprocess(
   (raw) => {
-    if (!raw || typeof raw !== "object") return raw;
+    if (
+      !eventMatches(raw, {
+        wirePrefix: "connection",
+        ownTag: "connection",
+      })
+    ) {
+      return raw;
+    }
     const r = raw as Record<string, unknown>;
     const data = (r.data ?? {}) as Record<string, unknown>;
     return {

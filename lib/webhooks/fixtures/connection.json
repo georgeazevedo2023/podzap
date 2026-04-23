@@ -1,0 +1,9 @@
+{
+  "event": "connection.update",
+  "instance": "__INSTANCE_UAZAPI_ID__",
+  "tenant_id": "__TENANT_ID__",
+  "data": {
+    "status": "connected",
+    "loggedIn": true
+  }
+}

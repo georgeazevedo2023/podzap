@@ -135,8 +135,13 @@ export type Database = {
           created_at: string
           group_id: string
           id: string
+          media_download_status: string | null
           media_duration_seconds: number | null
+          media_mime_type: string | null
+          media_size_bytes: number | null
+          media_storage_path: string | null
           media_url: string | null
+          raw_payload: Json | null
           sender_jid: string | null
           sender_name: string | null
           tenant_id: string
@@ -149,8 +154,13 @@ export type Database = {
           created_at?: string
           group_id: string
           id?: string
+          media_download_status?: string | null
           media_duration_seconds?: number | null
+          media_mime_type?: string | null
+          media_size_bytes?: number | null
+          media_storage_path?: string | null
           media_url?: string | null
+          raw_payload?: Json | null
           sender_jid?: string | null
           sender_name?: string | null
           tenant_id: string
@@ -163,8 +173,13 @@ export type Database = {
           created_at?: string
           group_id?: string
           id?: string
+          media_download_status?: string | null
           media_duration_seconds?: number | null
+          media_mime_type?: string | null
+          media_size_bytes?: number | null
+          media_storage_path?: string | null
           media_url?: string | null
+          raw_payload?: Json | null
           sender_jid?: string | null
           sender_name?: string | null
           tenant_id?: string
@@ -467,6 +482,7 @@ export type Database = {
     }
     Functions: {
       current_tenant_ids: { Args: never; Returns: string[] }
+      safe_uuid: { Args: { value: string }; Returns: string }
     }
     Enums: {
       message_type: "text" | "audio" | "image" | "video" | "other"

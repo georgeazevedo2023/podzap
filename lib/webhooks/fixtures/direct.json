@@ -1,0 +1,18 @@
+{
+  "event": "messages.upsert",
+  "instance": "__INSTANCE_UAZAPI_ID__",
+  "tenant_id": "__TENANT_ID__",
+  "data": {
+    "key": {
+      "id": "3EB0FIX_DIRECT_0001",
+      "remoteJid": "__DIRECT_JID__",
+      "fromMe": false
+    },
+    "pushName": "Direct Contact",
+    "messageTimestamp": 1714000300,
+    "messageType": "conversation",
+    "message": {
+      "conversation": "Mensagem direta (1:1) — handler deve IGNORAR pois não é grupo."
+    }
+  }
+}

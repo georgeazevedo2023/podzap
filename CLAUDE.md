@@ -175,9 +175,10 @@ npx inngest-cli dev
 - [x] Layout/design system (mockups em `podZAP/`)
 - [x] Fase 0: scaffolding Next.js + Supabase
 - [x] Fase 1: Auth + multi-tenancy (RLS, signup auto-cria tenant)
-- [ ] 🟡 **Fase 2: conexão WhatsApp (UAZAPI) — em andamento**
-- [ ] 🟡 **Fase 3: listagem e seleção de grupos — em andamento** (flip para ✅ quando integração passar)
-- [ ] Fase 4+: ver `ROADMAP.md`
+- [x] Fase 2: conexão WhatsApp (UAZAPI)
+- [x] Fase 3: listagem e seleção de grupos
+- [ ] 🟡 **Fase 4: captura de mensagens (webhook) — em andamento**
+- [ ] Fase 5+: ver `ROADMAP.md`
 
 ---
 
