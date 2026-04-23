@@ -17,10 +17,19 @@ FROM node:${NODE_VERSION} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Next standalone output reduz a imagem final em ~80%.
-# Se o next.config.ts ainda não tem `output: 'standalone'`, o código aqui
-# usa o modo padrão (copia .next inteiro).
-ENV NEXT_TELEMETRY_DISABLED=1
+
+# Next.js inlines NEXT_PUBLIC_* vars no bundle em build time (client E server).
+# Sem esses args, o código compilado fica com `undefined` e o Supabase client
+# falha em runtime mesmo com vars setadas no container. Valores são públicos
+# por design (anon key vai pro browser) — seguro passar via build-arg.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
+    NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL} \
+    NEXT_TELEMETRY_DISABLED=1
+
 RUN npm run build
 
 # ---------- runner ----------

@@ -61,6 +61,8 @@ jobs:
             type=semver,pattern={{version}}
 
       # 5) Build + push da imagem com cache do GitHub Actions
+      #    NEXT_PUBLIC_* são inlined em build time pelo Next.js — precisam
+      #    ser passados como build-args, não só env vars em runtime.
       - name: Build and push image
         id: build
         uses: docker/build-push-action@v6
@@ -74,6 +76,10 @@ jobs:
           cache-to: type=gha,mode=max
           # Portainer (algumas versões) quebra com manifests de proveniência
           provenance: false
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_APP_URL=https://podzap.wsmart.com.br
 
       # 6) Webhook do Portainer: só dispara em push pra main
       #    (não em tag nem workflow_dispatch, pra evitar redeploy acidental).
