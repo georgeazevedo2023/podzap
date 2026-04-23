@@ -21,6 +21,34 @@ import { getCurrentUserAndTenant } from '@/lib/tenant';
  * Errors (network, serialization, etc.) degrade to `'none'` — the sidebar
  * must never block the rest of the layout.
  */
+/**
+ * Counts summaries in `pending_review` state for the sidebar badge.
+ *
+ * Uses a `head: true, count: 'exact'` query — we don't need the rows, just
+ * the number. Admin client is fine here for the same reason `fetchWhatsappState`
+ * uses it: the caller's tenant was already resolved + authorised upstream,
+ * and we scope the WHERE by `tenant_id` on the server.
+ *
+ * Graceful degradation: any error (schema drift, network hiccup, RLS surprise)
+ * returns `0` so the sidebar never blocks the layout — a missing badge is
+ * always preferable to a broken shell.
+ */
+async function fetchPendingApprovalsCount(tenantId: string): Promise<number> {
+  try {
+    const admin = createAdminClient();
+    const { count, error } = await admin
+      .from('summaries')
+      .select('id', { count: 'exact', head: true })
+      .eq('tenant_id', tenantId)
+      .eq('status', 'pending_review');
+
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function fetchWhatsappState(
   tenantId: string,
 ): Promise<{ status: WhatsappStatus; phone: string | null }> {
@@ -81,7 +109,12 @@ export default async function AppLayout({
   }
 
   const { user, tenant } = context;
-  const whatsapp = await fetchWhatsappState(tenant.id);
+  // Parallelise the two sidebar-scoped fetches — they're independent and
+  // both block the layout render.
+  const [whatsapp, pendingApprovals] = await Promise.all([
+    fetchWhatsappState(tenant.id),
+    fetchPendingApprovalsCount(tenant.id),
+  ]);
 
   return (
     <div
@@ -98,6 +131,7 @@ export default async function AppLayout({
         tenantPlan={tenant.plan}
         whatsappStatus={whatsapp.status}
         whatsappPhone={whatsapp.phone}
+        pendingApprovals={pendingApprovals}
       />
       <main
         style={{

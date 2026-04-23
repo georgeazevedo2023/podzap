@@ -96,6 +96,24 @@ export const summaryRequested = eventType("summary.requested", {
 });
 
 /**
+ * Emitted by `POST /api/summaries/[id]/approve` after a reviewer flips a
+ * summary from `pending_review` → `approved`. This is the trigger for
+ * Fase 9 (TTS): the downstream worker re-fetches the row, renders audio,
+ * and persists the resulting media artefact.
+ *
+ * Keeping the payload minimal (ids only) mirrors `messageCaptured` —
+ * the handler re-reads the summary row for the freshest text, avoiding
+ * the "payload snapshot drifted from DB" failure mode if the summary
+ * is edited after emission.
+ */
+export const summaryApproved = eventType("summary.approved", {
+  schema: staticSchema<{
+    summaryId: string;
+    tenantId: string;
+  }>(),
+});
+
+/**
  * Health-check event handled by `inngest/functions/ping.ts`. Used by
  * smoke tests to confirm the worker runtime is up and the event
  * subscription is wired. Never emitted in production traffic.

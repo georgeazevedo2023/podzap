@@ -22,7 +22,8 @@ export type ErrorCode =
   | "UAZAPI_ERROR"
   | "VALIDATION_ERROR"
   | "INTERNAL_ERROR"
-  | "NO_INSTANCE";
+  | "NO_INSTANCE"
+  | "INVALID_STATE";
 
 export interface ApiError {
   code: ErrorCode;
@@ -141,6 +142,9 @@ export function mapErrorToResponse(err: unknown): NextResponse {
     }
     if (code === "VALIDATION_ERROR") {
       return errorResponse(400, "VALIDATION_ERROR", message);
+    }
+    if (code === "INVALID_STATE") {
+      return errorResponse(409, "INVALID_STATE", message);
     }
     if (code === "NO_INSTANCE") {
       return errorResponse(409, "NO_INSTANCE", message);

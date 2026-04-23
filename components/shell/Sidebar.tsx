@@ -63,6 +63,12 @@ export interface SidebarProps {
    * small secondary line under "WhatsApp" when `whatsappStatus === 'connected'`.
    */
   whatsappPhone?: string | null;
+  /**
+   * Count of summaries awaiting human review (status `pending_review`) for
+   * the current tenant. Drives the numeric badge on "Aprovação". When `0`
+   * or undefined, no badge is rendered (vs. a visible "0" pill).
+   */
+  pendingApprovals?: number;
 }
 
 export function Sidebar({
@@ -74,11 +80,21 @@ export function Sidebar({
   tenantPlan,
   whatsappStatus = 'none',
   whatsappPhone,
+  pendingApprovals,
 }: SidebarProps) {
+  // Only surface the badge when there's actual work pending — rendering a "0"
+  // is noisy and trains users to ignore the pill.
+  const approvalBadge =
+    pendingApprovals && pendingApprovals > 0 ? pendingApprovals : undefined;
   const items: NavItem[] = [
     { id: 'home', label: 'Home', icon: <Icons.Home /> },
     { id: 'groups', label: 'Grupos', icon: <Icons.Group /> },
-    { id: 'approval', label: 'Aprovação', icon: <Icons.Check />, badge: 2 },
+    {
+      id: 'approval',
+      label: 'Aprovação',
+      icon: <Icons.Check />,
+      badge: approvalBadge,
+    },
     { id: 'history', label: 'Histórico', icon: <Icons.History /> },
     { id: 'schedule', label: 'Agenda', icon: <Icons.Calendar /> },
   ];

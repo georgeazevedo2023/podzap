@@ -102,7 +102,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 7 — Geração do resumo 🟡
+### Fase 7 — Geração do resumo ✅
 **Objetivo:** LLM produz resumo narrativo estilo podcast.
 
 - [ ] Prompt engineering (tom leve, cita participantes, narrativa fluida)
@@ -115,7 +115,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 8 — Aprovação humana ⬜ ⭐ (feature principal)
+### Fase 8 — Aprovação humana 🟡 ⭐ (feature principal)
 **Objetivo:** usuário edita/aprova/rejeita antes do áudio.
 
 - [ ] Tela aprovação (mockup: `screen_approval.jsx`)

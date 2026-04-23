@@ -51,6 +51,15 @@ export interface AppSidebarProps {
   whatsappStatus?: WhatsappStatus;
   /** Phone attached to the connected instance, when available. */
   whatsappPhone?: string | null;
+  /**
+   * Count of summaries in `pending_review` state for the current tenant.
+   * Drives the numeric badge on the "Aprovação" nav entry. `0` (or omitted)
+   * renders without a badge.
+   *
+   * Resolved server-side in `app/(app)/layout.tsx` so the number refreshes on
+   * every navigation without any client polling.
+   */
+  pendingApprovals?: number;
 }
 
 /**
@@ -64,6 +73,7 @@ export function AppSidebar({
   tenantPlan,
   whatsappStatus,
   whatsappPhone,
+  pendingApprovals,
 }: AppSidebarProps) {
   const pathname = usePathname() ?? '/home';
   const router = useRouter();
@@ -78,6 +88,7 @@ export function AppSidebar({
       tenantPlan={tenantPlan}
       whatsappStatus={whatsappStatus}
       whatsappPhone={whatsappPhone}
+      pendingApprovals={pendingApprovals}
     />
   );
 }

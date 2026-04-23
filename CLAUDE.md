@@ -180,8 +180,9 @@ npx inngest-cli dev
 - [x] Fase 4: captura de mensagens (webhook) ✅
 - [x] Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) ✅
 - [x] Fase 6: filtro de relevância + agrupamento por tópicos ✅
-- [ ] 🟡 **Fase 7: geração do resumo (Gemini 2.5 Pro) — em andamento**
-- [ ] Fase 8+: ver `ROADMAP.md`
+- [x] Fase 7: geração do resumo (Gemini 2.5 Pro) ✅
+- [ ] 🟡 **Fase 8: aprovação humana (review + edit + approve/reject/regenerate) — em andamento**
+- [ ] Fase 9+: ver `ROADMAP.md`
 
 ---
 
@@ -324,3 +325,30 @@ Tons disponíveis:
 | `formal`    | B2B, comunicados corporativos, jurídico           |
 | `fun`       | Grupos sociais, comunidades (default)             |
 | `corporate` | Times internos, stand-ups assíncronos             |
+
+---
+
+## 14. Fluxo de aprovação (Fase 8)
+
+Referência completa: `docs/integrations/approval.md`.
+
+```
+summaries.status = pending_review  (saída da Fase 7)
+          │
+          ▼
+   /approval (lista) ──► /approval/[id] (detail + editor)
+          │                       │
+          │                       ├─ PATCH  /api/summaries/[id]            (edit text)
+          │                       ├─ POST   /api/summaries/[id]/approve    → approved + emite summary.approved (→ Fase 9 TTS)
+          │                       ├─ POST   /api/summaries/[id]/reject     → rejected (reason obrigatório)
+          │                       └─ POST   /api/summaries/[id]/regenerate → NOVA row pending (original intocada)
+          │
+          ▼
+  Sidebar badge = count(status='pending_review') por tenant
+  (resolvido server-side em app/(app)/layout.tsx, refresca por request)
+```
+
+- **Service layer**: `lib/summaries/service.ts` — `approveSummary`, `rejectSummary`, `updateSummaryText`, `listSummaries({status})`.
+- **Imutabilidade pós-terminal**: `approved` e `rejected` são finais. Editar texto só em `pending_review`.
+- **Regenerate não transiciona a original**: mantém as duas rows pending pra permitir comparação lado-a-lado; auto-rejeição superseded fica pós-MVP.
+- **Modos (PRD §9)**: `automático | aprovação opcional | aprovação obrigatória` — Fase 8 implementa todos como obrigatório. `schedules.approval_mode` (Fase 11) passa a roteá-los.
