@@ -2,6 +2,12 @@
 // This page imports `getSignedUrl` from it — once that module lands the
 // build type-checks without changes. Same pattern as Fase 3's parallel
 // agent dance.
+//
+// Fase 5: the `messages` query now pulls nested `transcripts(…)` rows so
+// each row carries the transcription text produced by the Inngest pipeline
+// (Groq Whisper for audio, Gemini Vision for images). Rows without a
+// matching transcript surface as `null` and the UI renders a "transcribing"
+// state so operators can see which messages are still in flight.
 
 import { redirect } from 'next/navigation';
 
@@ -11,7 +17,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
-import { MessagesList, type HistoryItem } from './MessagesList';
+import {
+  MessagesList,
+  type HistoryItem,
+  type HistoryTranscript,
+} from './MessagesList';
 import { RefreshButton } from './RefreshButton';
 
 /** Upper bound of messages shown on first render. Matches `GET /api/history`. */
@@ -29,6 +39,10 @@ const HISTORY_LIMIT = 50;
  */
 async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
   const admin = createAdminClient();
+  // Nested `transcripts(…)` is a left-join — messages without a transcript
+  // come back with an empty array (or `null` depending on postgrest), so we
+  // normalise to a single object or `null` in the mapper below. Pulling the
+  // transcript inline avoids an N+1 round-trip against the 50-row cap.
   const { data, error } = await admin
     .from('messages')
     .select(
@@ -44,7 +58,8 @@ async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
       media_storage_path,
       media_mime_type,
       media_duration_seconds,
-      groups:group_id ( name, picture_url )
+      groups:group_id ( name, picture_url ),
+      transcripts ( text, language, model, created_at )
       `,
     )
     .eq('tenant_id', tenantId)
@@ -56,6 +71,17 @@ async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
   const items: HistoryItem[] = await Promise.all(
     data.map(async (row) => {
       const group = Array.isArray(row.groups) ? row.groups[0] : row.groups;
+      const transcriptRow = Array.isArray(row.transcripts)
+        ? row.transcripts[0]
+        : row.transcripts;
+      const transcript: HistoryTranscript | null = transcriptRow
+        ? {
+            text: transcriptRow.text,
+            language: transcriptRow.language ?? null,
+            model: transcriptRow.model ?? null,
+            createdAt: transcriptRow.created_at,
+          }
+        : null;
       let mediaSignedUrl: string | null = null;
       if (row.media_storage_path) {
         try {
@@ -76,6 +102,7 @@ async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
         mediaMimeType: row.media_mime_type ?? null,
         mediaDurationSeconds: row.media_duration_seconds ?? null,
         mediaSignedUrl,
+        transcript,
       };
     }),
   );
@@ -103,7 +130,7 @@ export default async function HistoryPage() {
         title="Histórico"
         subtitle="Últimas mensagens capturadas"
         accent="pink"
-        breadcrumb="podZAP · Fase 4"
+        breadcrumb="podZAP · Fase 5"
         actions={<RefreshButton />}
       />
 

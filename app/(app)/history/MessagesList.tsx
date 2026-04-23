@@ -7,6 +7,21 @@ import type { Database } from '@/lib/supabase/types';
 type MessageType = Database['public']['Enums']['message_type'];
 
 /**
+ * Transcript projection attached to an audio/image message. Produced by the
+ * Inngest pipeline (Fase 5): Groq Whisper for audio, Gemini Vision for
+ * images. `null` on `HistoryItem` means the pipeline hasn't landed a row yet
+ * — the UI surfaces a "transcribing…" / "analisando imagem…" state so it's
+ * obvious the work is in flight (vs. a permanent failure, which will be a
+ * separate future state once Fase 5 adds `transcription_failed` tracking).
+ */
+export interface HistoryTranscript {
+  text: string;
+  language: string | null;
+  model: string | null;
+  createdAt: string;
+}
+
+/**
  * Flat, UI-ready shape for a single message row. Server component resolves
  * the media signed URL up-front so the client never needs service-role
  * credentials and we don't pay a round-trip per audio tag.
@@ -24,6 +39,9 @@ export interface HistoryItem {
   mediaDurationSeconds: number | null;
   /** Pre-signed storage URL; `null` when no media or signing failed. */
   mediaSignedUrl: string | null;
+  /** Transcription row from `transcripts`; `null` if the worker hasn't
+   *  produced one yet (async Inngest pipeline). */
+  transcript: HistoryTranscript | null;
 }
 
 export interface MessagesListProps {
@@ -195,7 +213,7 @@ function MessageBody({
       return <MediaPending label="áudio sendo processado…" />;
     }
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <audio
           controls
           preload="none"
@@ -215,6 +233,14 @@ function MessageBody({
             {formatDuration(item.mediaDurationSeconds)}
           </span>
         ) : null}
+        {item.transcript ? (
+          <TranscriptBlock
+            transcript={item.transcript}
+            kind="audio"
+          />
+        ) : (
+          <TranscriptPendingBadge label="transcrevendo…" />
+        )}
       </div>
     );
   }
@@ -264,6 +290,14 @@ function MessageBody({
             {truncate(item.content, 240)}
           </span>
         )}
+        {item.transcript ? (
+          <TranscriptBlock
+            transcript={item.transcript}
+            kind="image"
+          />
+        ) : (
+          <TranscriptPendingBadge label="analisando imagem…" />
+        )}
       </div>
     );
   }
@@ -306,6 +340,99 @@ function MediaPending({ label }: { label: string }) {
     >
       ⏳ {label}
     </div>
+  );
+}
+
+/**
+ * Rendered text output from the transcription pipeline. Audio → Whisper
+ * transcript; image → Gemini Vision description. We prefix with a small
+ * icon + label so the viewer can tell it apart from user-typed content
+ * (especially on images where `item.content` is WhatsApp's caption and the
+ * transcript is the AI description).
+ */
+function TranscriptBlock({
+  transcript,
+  kind,
+}: {
+  transcript: HistoryTranscript;
+  kind: 'audio' | 'image';
+}) {
+  const icon = kind === 'audio' ? '📝' : '👁';
+  const label = kind === 'audio' ? 'transcrição' : 'descrição';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '8px 12px',
+        border: '2px solid var(--stroke)',
+        borderRadius: 'var(--r-md)',
+        background: 'var(--bg-1)',
+        alignSelf: 'stretch',
+        maxWidth: '100%',
+      }}
+    >
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          color: 'var(--text-dim)',
+        }}
+      >
+        <span aria-hidden style={{ marginRight: 4 }}>
+          {icon}
+        </span>
+        {label}
+        {transcript.language ? ` · ${transcript.language}` : ''}
+      </span>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: 'var(--text)',
+          wordBreak: 'break-word',
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {truncate(transcript.text, 600)}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * "Pending" state for a media row whose transcript hasn't landed yet. Uses
+ * the shared `.sticker` style so it reads visually as a status badge rather
+ * than a failure. The subtle pulse tells the user "still working" — once
+ * the Inngest worker writes the `transcripts` row, a page refresh swaps
+ * this out for a `TranscriptBlock`.
+ */
+function TranscriptPendingBadge({ label }: { label: string }) {
+  return (
+    <span
+      className="sticker"
+      style={{
+        alignSelf: 'flex-start',
+        background: 'var(--bg-2)',
+        color: 'var(--text-dim)',
+        animation: 'podzapPulse 1.4s ease-in-out infinite',
+      }}
+    >
+      <span aria-hidden style={{ marginRight: 6 }}>
+        ⏳
+      </span>
+      {label}
+      <style>{`
+        @keyframes podzapPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.55; }
+        }
+      `}</style>
+    </span>
   );
 }
 

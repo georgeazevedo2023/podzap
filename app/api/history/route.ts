@@ -24,6 +24,13 @@ import {
 
 const HISTORY_LIMIT = 50;
 
+export interface HistoryApiTranscript {
+  text: string;
+  language: string | null;
+  model: string | null;
+  createdAt: string;
+}
+
 export interface HistoryApiItem {
   id: string;
   capturedAt: string;
@@ -36,6 +43,9 @@ export interface HistoryApiItem {
   mediaMimeType: string | null;
   mediaDurationSeconds: number | null;
   mediaSignedUrl: string | null;
+  /** Transcription row (Fase 5); `null` when the worker hasn't produced one
+   *  yet. Audio → Whisper transcript, image → Gemini Vision description. */
+  transcript: HistoryApiTranscript | null;
 }
 
 export async function GET() {
@@ -61,7 +71,8 @@ export async function GET() {
         media_storage_path,
         media_mime_type,
         media_duration_seconds,
-        groups:group_id ( name, picture_url )
+        groups:group_id ( name, picture_url ),
+        transcripts ( text, language, model, created_at )
         `,
       )
       .eq('tenant_id', tenant.id)
@@ -75,6 +86,17 @@ export async function GET() {
     const items: HistoryApiItem[] = await Promise.all(
       (data ?? []).map(async (row) => {
         const group = Array.isArray(row.groups) ? row.groups[0] : row.groups;
+        const transcriptRow = Array.isArray(row.transcripts)
+          ? row.transcripts[0]
+          : row.transcripts;
+        const transcript: HistoryApiTranscript | null = transcriptRow
+          ? {
+              text: transcriptRow.text,
+              language: transcriptRow.language ?? null,
+              model: transcriptRow.model ?? null,
+              createdAt: transcriptRow.created_at,
+            }
+          : null;
         let mediaSignedUrl: string | null = null;
         if (row.media_storage_path) {
           try {
@@ -95,6 +117,7 @@ export async function GET() {
           mediaMimeType: row.media_mime_type ?? null,
           mediaDurationSeconds: row.media_duration_seconds ?? null,
           mediaSignedUrl,
+          transcript,
         };
       }),
     );

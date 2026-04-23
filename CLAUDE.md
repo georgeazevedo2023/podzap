@@ -177,8 +177,9 @@ npx inngest-cli dev
 - [x] Fase 1: Auth + multi-tenancy (RLS, signup auto-cria tenant)
 - [x] Fase 2: conexão WhatsApp (UAZAPI)
 - [x] Fase 3: listagem e seleção de grupos
-- [ ] 🟡 **Fase 4: captura de mensagens (webhook) — em andamento**
-- [ ] Fase 5+: ver `ROADMAP.md`
+- [x] Fase 4: captura de mensagens (webhook) ✅
+- [ ] 🟡 **Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) — em andamento**
+- [ ] Fase 6+: ver `ROADMAP.md`
 
 ---
 
@@ -213,3 +214,32 @@ Referência completa: `docs/integrations/uazapi.md` (endpoints verificados live 
 - **QR quirk**: servidor devolve `data:image/png;base64,…` com prefixo; o client em `lib/uazapi/client.ts` tira o prefixo e o caller adiciona de volta uma única vez.
 - **Rate limit**: `UazapiClient` tem token bucket interno; API routes têm rate limit in-memory 30/min/tenant. Em produção, considerar Upstash para limitar cross-instance.
 - **Sidebar indicator**: `app/(app)/layout.tsx` faz `SELECT status, phone FROM whatsapp_instances WHERE tenant_id=… LIMIT 1` via admin client e passa pro `AppSidebar` → `Sidebar` (prop `whatsappStatus` + `whatsappPhone`). Falhas degradam silenciosamente para `'none'`.
+
+---
+
+## 11. Pipeline de transcrição (Fase 5+)
+
+Referência completa: `docs/integrations/inngest.md` (setup dev/prod, events, troubleshooting).
+
+Fluxo de alto nível — tudo assíncrono, desacoplado do webhook:
+
+```
+UAZAPI webhook
+      │
+      ▼
+/api/webhooks/uazapi  →  lib/webhooks/persist.ts
+      │                        │
+      │                        └─ insert messages row + emit `message.captured`
+      ▼
+Inngest  (app/api/inngest/route.ts + inngest/functions/*)
+      ├─ transcribe-audio      (trigger: message.captured com type=audio) → Groq Whisper  → transcripts
+      ├─ describe-image        (trigger: message.captured com type=image) → Gemini Vision → transcripts
+      ├─ retry-pending-downloads    (cron */5m)   safety net p/ media_download_status='pending'
+      └─ transcription-retry        (cron */15m)  safety net p/ áudio/imagem sem transcripts
+```
+
+- **Events canônicos** (`inngest/events.ts`): `message.captured`, `message.transcription.requested`, `media.download.retry`. Case-sensitive — erro comum é usar underscore.
+- **Em dev**: `INNGEST_DEV=1` em `.env.local` + `npx inngest-cli@latest dev -u http://localhost:3001/api/inngest` em paralelo ao `npm run dev`. Dashboard em `http://127.0.0.1:8288`.
+- **Em prod**: `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` no Vercel; crons rodam pela Inngest Cloud.
+- **Retry**: default Inngest (3x backoff exponencial); falhas determinísticas (Gemini safety block) marcam e não re-agendam.
+- **UI**: `/history` mostra transcrição inline sob cada mensagem áudio/imagem; quando ainda não existe, aparece badge pulsante "transcrevendo…" / "analisando imagem…".

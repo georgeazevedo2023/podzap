@@ -63,7 +63,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 4 — Captura de mensagens (webhook) 🟡
+### Fase 4 — Captura de mensagens (webhook) ✅
 **Objetivo:** receber mensagens em tempo real e salvar no banco.
 
 - [ ] Migration `messages`
@@ -77,7 +77,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 5 — Transcrição multimodal ⬜
+### Fase 5 — Transcrição multimodal 🟡
 **Objetivo:** toda mensagem de áudio/imagem vira texto no banco.
 
 - [ ] Worker Inngest: `transcribe-audio` (Groq Whisper)

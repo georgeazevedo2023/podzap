@@ -22,6 +22,8 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadAndStore } from "@/lib/media/download";
+import { inngest } from "@/inngest/client";
+import { messageCaptured } from "@/inngest/events";
 import type {
   MessageUpsertEvent,
   ConnectionUpdateEvent,
@@ -341,6 +343,25 @@ export async function persistIncomingMessage(
       console.error("[webhooks/persist] media download failed:", err);
     });
   }
+
+  // Fire-and-forget Inngest event. Fans out to downstream workers
+  // (transcribe-audio / describe-image / future consumers). Same
+  // philosophy as the media download above: if the event can't be
+  // delivered we log it but do NOT fail the webhook — UAZAPI will retry
+  // the whole payload on a non-2xx and that would double-insert. A
+  // failure here only delays transcription; the row is already safe in
+  // the DB and the retry-pending cron will eventually re-emit.
+  void inngest
+    .send(
+      messageCaptured.create({
+        messageId: row.id,
+        tenantId,
+        type: insertRow.type,
+      }),
+    )
+    .catch((err: unknown) => {
+      console.error("[webhooks/persist] inngest.send failed:", err);
+    });
 
   return { status: "persisted", messageId: row.id };
 }
