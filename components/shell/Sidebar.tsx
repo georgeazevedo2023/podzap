@@ -14,6 +14,7 @@ export type NavId =
   | 'home'
   | 'groups'
   | 'approval'
+  | 'podcasts'
   | 'history'
   | 'schedule'
   | 'onboarding'
@@ -95,6 +96,7 @@ export function Sidebar({
       icon: <Icons.Check />,
       badge: approvalBadge,
     },
+    { id: 'podcasts', label: 'Podcasts', icon: <Icons.Play /> },
     { id: 'history', label: 'Histórico', icon: <Icons.History /> },
     { id: 'schedule', label: 'Agenda', icon: <Icons.Calendar /> },
   ];

@@ -12,6 +12,7 @@ const ROUTES: Record<NavId, string> = {
   home: '/home',
   groups: '/groups',
   approval: '/approval',
+  podcasts: '/podcasts',
   history: '/history',
   schedule: '/schedule',
   onboarding: '/onboarding',

@@ -20,10 +20,12 @@ export type ErrorCode =
   | "NOT_FOUND"
   | "RATE_LIMITED"
   | "UAZAPI_ERROR"
+  | "TTS_ERROR"
   | "VALIDATION_ERROR"
   | "INTERNAL_ERROR"
   | "NO_INSTANCE"
-  | "INVALID_STATE";
+  | "INVALID_STATE"
+  | "ALREADY_EXISTS";
 
 export interface ApiError {
   code: ErrorCode;
@@ -151,6 +153,12 @@ export function mapErrorToResponse(err: unknown): NextResponse {
     }
     if (code === "UAZAPI_ERROR") {
       return errorResponse(502, "UAZAPI_ERROR", message);
+    }
+    if (code === "TTS_ERROR") {
+      return errorResponse(502, "TTS_ERROR", message);
+    }
+    if (code === "ALREADY_EXISTS") {
+      return errorResponse(409, "ALREADY_EXISTS", message);
     }
     if (code === "DB_ERROR") {
       return errorResponse(500, "INTERNAL_ERROR", message);

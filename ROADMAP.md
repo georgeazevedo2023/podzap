@@ -115,7 +115,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 8 — Aprovação humana 🟡 ⭐ (feature principal)
+### Fase 8 — Aprovação humana ✅ ⭐ (feature principal)
 **Objetivo:** usuário edita/aprova/rejeita antes do áudio.
 
 - [ ] Tela aprovação (mockup: `screen_approval.jsx`)
@@ -129,7 +129,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 
 ---
 
-### Fase 9 — TTS (geração de áudio) ⬜
+### Fase 9 — TTS (geração de áudio) 🟡
 **Objetivo:** resumo aprovado vira arquivo de áudio no Storage.
 
 - [ ] Integração Gemini Speech API
@@ -139,7 +139,7 @@ Legenda: ⬜ não iniciado · 🟡 em andamento · ✅ concluído · 🧊 pós-M
 - [ ] Upload para Supabase Storage
 - [ ] URL assinada para download
 
-**Aceite:** aprovar resumo → áudio MP3 acessível em <3min.
+**Aceite:** aprovar resumo → áudio WAV acessível via signed URL em <3min. (MP3 pós-MVP.)
 
 ---
 

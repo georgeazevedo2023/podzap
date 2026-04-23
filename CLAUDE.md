@@ -181,8 +181,9 @@ npx inngest-cli dev
 - [x] Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) ✅
 - [x] Fase 6: filtro de relevância + agrupamento por tópicos ✅
 - [x] Fase 7: geração do resumo (Gemini 2.5 Pro) ✅
-- [ ] 🟡 **Fase 8: aprovação humana (review + edit + approve/reject/regenerate) — em andamento**
-- [ ] Fase 9+: ver `ROADMAP.md`
+- [x] Fase 8: aprovação humana (review + edit + approve/reject/regenerate) ✅
+- [ ] 🟡 **Fase 9: TTS (Gemini 2.5 Flash TTS → WAV no bucket `audios`) — em andamento**
+- [ ] Fase 10+: ver `ROADMAP.md`
 
 ---
 
@@ -352,3 +353,41 @@ summaries.status = pending_review  (saída da Fase 7)
 - **Imutabilidade pós-terminal**: `approved` e `rejected` são finais. Editar texto só em `pending_review`.
 - **Regenerate não transiciona a original**: mantém as duas rows pending pra permitir comparação lado-a-lado; auto-rejeição superseded fica pós-MVP.
 - **Modos (PRD §9)**: `automático | aprovação opcional | aprovação obrigatória` — Fase 8 implementa todos como obrigatório. `schedules.approval_mode` (Fase 11) passa a roteá-los.
+
+---
+
+## 15. TTS (Fase 9)
+
+Referência completa: `docs/integrations/tts.md`.
+
+```
+summaries.status = 'approved'
+          │  emit summary.approved
+          ▼
+┌──────────────────────────┐  inngest/functions/generate-tts.ts
+│  generate-tts worker     │  retries: 2
+└─────────┬────────────────┘
+          │ step.run('create-audio')
+          ▼
+┌──────────────────────────┐  lib/audios/service.ts
+│ createAudioForSummary    │  load → check dup → TTS → upload → insert
+└─────────┬────────────────┘
+          │
+          ▼
+┌──────────────────────────┐  lib/ai/gemini-tts.ts
+│ Gemini 2.5 Flash TTS     │  PCM 24kHz mono → WAV inline (RIFF header)
+└─────────┬────────────────┘
+          │
+          ▼
+  Storage bucket `audios` (privado)  + row em `audios` + trackAiCall
+  path: <tenantId>/<yyyy>/<summaryId>.wav
+          │
+          ▼
+  GET /api/audios/[summaryId]/signed-url  → UI toca áudio
+```
+
+- **Formato**: WAV (24 kHz · mono · 16-bit PCM). MP3 é pós-MVP.
+- **Vozes**: `female='Kore'` (default), `male='Charon'` — mapeadas em `VOICE_MAP`.
+- **Speed**: não-determinístico — apenas dica no prompt (Gemini TTS não tem knob real).
+- **Chunking**: não implementado. Resumos > ~5000 chars podem falhar (gap documentado).
+- **Erros**: `AudiosError` com `code ∈ { NOT_FOUND, ALREADY_EXISTS, TTS_ERROR, DB_ERROR }`. `ALREADY_EXISTS` em retry é sinal de sucesso idempotente.

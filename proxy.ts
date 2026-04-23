@@ -16,6 +16,7 @@ const PROTECTED_PREFIXES = [
   '/home',
   '/groups',
   '/approval',
+  '/podcasts',
   '/history',
   '/schedule',
   '/settings',
