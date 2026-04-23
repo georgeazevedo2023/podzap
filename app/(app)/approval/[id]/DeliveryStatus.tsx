@@ -64,7 +64,7 @@ async function fetchStatus(
   | { kind: 'error'; message: string }
 > {
   const res = await fetch(
-    `/api/audios/${encodeURIComponent(summaryId)}/signed-url`,
+    `/api/summaries/${encodeURIComponent(summaryId)}/audio/signed-url`,
     { cache: 'no-store', signal },
   );
   if (res.ok) {
