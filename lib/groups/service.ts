@@ -312,9 +312,10 @@ export async function syncGroups(
   // Pre-load existing rows for this tenant keyed by JID so we can:
   //   a) decide insert vs update
   //   b) preserve `is_monitored` on update (never regress)
+  //   c) preserve admin-edited name when UAZAPI devolve vazio
   const { data: existingData, error: existingErr } = await supabase
     .from("groups")
-    .select("id,uazapi_group_jid,is_monitored")
+    .select("id,uazapi_group_jid,is_monitored,name")
     .eq("tenant_id", tenantId);
   if (existingErr) {
     throw new GroupsError(
@@ -325,14 +326,15 @@ export async function syncGroups(
   }
   const existingByJid = new Map<
     string,
-    { id: string; is_monitored: boolean }
+    { id: string; is_monitored: boolean; name: string | null }
   >();
   for (const r of (existingData ?? []) as Array<
-    Pick<GroupRow, "id" | "uazapi_group_jid" | "is_monitored">
+    Pick<GroupRow, "id" | "uazapi_group_jid" | "is_monitored" | "name">
   >) {
     existingByJid.set(r.uazapi_group_jid, {
       id: r.id,
       is_monitored: r.is_monitored,
+      name: r.name,
     });
   }
 
@@ -340,11 +342,11 @@ export async function syncGroups(
   for (const g of groups) {
     const existing = existingByJid.get(g.jid);
     // UAZAPI às vezes retorna `name: ""` (string vazia) pra grupos que
-    // não têm subject setado no WhatsApp. `??` só cobriria null/undefined,
-    // então empty string passaria direto e o user não acharia o grupo
-    // na busca nem entenderia o que é. Fallback pro JID quando vazio.
+    // têm emoji no subject, fazem parte de community, ou anúncios oficiais.
+    // Observado: pelo menos 22 grupos com >900 membros do Wsmart vieram
+    // com name vazio. Fallback pro JID pra não deixar row "sem nome".
     const trimmedName = typeof g.name === "string" ? g.name.trim() : "";
-    const name = trimmedName.length > 0 ? trimmedName : g.jid;
+    const uazapiNameIsMeaningful = trimmedName.length > 0;
     const pictureUrl = g.pictureUrl ?? null;
     const memberCount =
       typeof g.size === "number"
@@ -354,10 +356,27 @@ export async function syncGroups(
           : null;
 
     if (existing) {
+      // PRESERVE NAMES MANUALMENTE EDITADOS. Quando UAZAPI devolve empty
+      // string, o admin pode ter corrigido o nome manualmente no DB
+      // (batizando o grupo "sem nome"). Sobrescrever pelo JID aí apagaria
+      // a correção. Regra:
+      //   - UAZAPI tem nome → sempre usa (fonte autoritativa)
+      //   - UAZAPI vazio + existing meaningful (≠ JID) → preserva
+      //   - UAZAPI vazio + existing vazio/igual ao JID → mantém JID fallback
+      const existingName =
+        typeof existing.name === "string" ? existing.name.trim() : "";
+      const existingIsMeaningful =
+        existingName.length > 0 && existingName !== g.jid;
+      const finalName = uazapiNameIsMeaningful
+        ? trimmedName
+        : existingIsMeaningful
+          ? existing.name ?? g.jid
+          : g.jid;
+
       const { error: upErr } = await supabase
         .from("groups")
         .update({
-          name,
+          name: finalName,
           picture_url: pictureUrl,
           member_count: memberCount,
           last_synced_at: nowIso,
@@ -377,7 +396,7 @@ export async function syncGroups(
         tenant_id: tenantId,
         instance_id: instance.id,
         uazapi_group_jid: g.jid,
-        name,
+        name: uazapiNameIsMeaningful ? trimmedName : g.jid,
         picture_url: pictureUrl,
         member_count: memberCount,
         last_synced_at: nowIso,
