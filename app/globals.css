@@ -1,7 +1,17 @@
 /* podZAP — Tailwind v4 + design tokens */
 
-/* Google Fonts — Biscoito x Vida Infinita type stack (must precede all other rules) */
-@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Bungee&family=Fraunces:opsz,wght@9..144,800;9..144,900&display=swap');
+/*
+ * Fontes Biscoito x Vida Infinita: Archivo Black, Bricolage Grotesque,
+ * Space Grotesk, JetBrains Mono são carregadas via `next/font/google` em
+ * `app/layout.tsx` (self-hosted no build, imunes a CSP / CDN downtime)
+ * e expostas como --font-brand-archivo, --font-display-bricolage,
+ * --font-body-space, --font-mono-jetbrains.
+ *
+ * Os aliases semânticos (--font-brand, --font-display, etc.) abaixo
+ * referenciam essas vars. O @import antigo do fonts.googleapis.com
+ * não estava carregando em prod (document.fonts vazio → fallback
+ * system-ui → logo totalmente diferente do protótipo).
+ */
 @import "tailwindcss";
 
 /* -------------------------------------------------------------------------- */
@@ -62,11 +72,14 @@
   --color-brand-card-3: var(--brand-card-3);
   --color-brand-card-4: var(--brand-card-4);
 
-  /* Fonts */
-  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
-  --font-body:    'Space Grotesk', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', monospace;
-  --font-brand:   'Archivo Black', system-ui, sans-serif;
+  /* Fonts — usa as vars injetadas por next/font (app/layout.tsx) com
+   * fallback pro nome família caso o componente renderize fora do
+   * RootLayout (edge cases tipo páginas de erro do Next que não têm
+   * a className). */
+  --font-display: var(--font-display-bricolage, 'Bricolage Grotesque'), system-ui, sans-serif;
+  --font-body:    var(--font-body-space, 'Space Grotesk'), system-ui, sans-serif;
+  --font-mono:    var(--font-mono-jetbrains, 'JetBrains Mono'), monospace;
+  --font-brand:   var(--font-brand-archivo, 'Archivo Black'), system-ui, sans-serif;
   --font-sans:    var(--font-body); /* Tailwind default alias */
 
   /* Radii */
