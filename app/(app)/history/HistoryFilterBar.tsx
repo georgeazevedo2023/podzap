@@ -45,6 +45,9 @@ export function HistoryFilterBar({
   );
 
   const handleChange = (next: string) => {
+    // Reset pagination when changing filter — otherwise a user on page 3 of
+    // group A landing on page 3 of group B would see an empty feed and
+    // disabled "next" even though group B has only 1 page.
     const url = next ? `/history?group=${encodeURIComponent(next)}` : '/history';
     router.push(url);
   };

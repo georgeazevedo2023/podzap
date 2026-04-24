@@ -18,6 +18,7 @@ import { getCurrentUserAndTenant } from '@/lib/tenant';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
 import { HistoryFilterBar } from './HistoryFilterBar';
+import { HistoryPagination } from './HistoryPagination';
 import {
   MessagesList,
   type HistoryItem,
@@ -25,8 +26,13 @@ import {
 } from './MessagesList';
 import { RefreshButton } from './RefreshButton';
 
-/** Upper bound of messages shown on first render. Matches `GET /api/history`. */
-const HISTORY_LIMIT = 50;
+/**
+ * Page size for the history feed. Fixed (not exposed on UI) — matches the
+ * `.range()` window in `loadHistory` and the "N msgs" badge in the filter
+ * bar. Bump if you want fatter pages; the `signEpisodeUrl`-per-row cost
+ * scales linearly with this (~30-50 parallel signs still fine).
+ */
+const HISTORY_PAGE_SIZE = 50;
 
 interface GroupOption {
   id: string;
@@ -66,12 +72,20 @@ async function loadMonitoredGroups(tenantId: string): Promise<GroupOption[]> {
 async function loadHistory(
   tenantId: string,
   groupId: string | null,
-): Promise<HistoryItem[]> {
+  page: number,
+): Promise<{ items: HistoryItem[]; total: number }> {
   const admin = createAdminClient();
+  const from = (page - 1) * HISTORY_PAGE_SIZE;
+  const to = from + HISTORY_PAGE_SIZE - 1;
   // Nested `transcripts(…)` is a left-join — messages without a transcript
   // come back with an empty array (or `null` depending on postgrest), so we
   // normalise to a single object or `null` in the mapper below. Pulling the
   // transcript inline avoids an N+1 round-trip against the 50-row cap.
+  //
+  // `{ count: 'exact' }` piggybacks the total row count on the same request
+  // so the pagination footer doesn't need a second round-trip. Slightly
+  // heavier at the Postgres level but negligible for a tenant-scoped table
+  // with a `(tenant_id, captured_at)` index.
   let query = admin
     .from('messages')
     .select(
@@ -90,16 +104,17 @@ async function loadHistory(
       groups:group_id ( name, picture_url ),
       transcripts ( text, language, model, created_at )
       `,
+      { count: 'exact' },
     )
     .eq('tenant_id', tenantId);
   if (groupId) {
     query = query.eq('group_id', groupId);
   }
-  const { data, error } = await query
+  const { data, error, count } = await query
     .order('captured_at', { ascending: false })
-    .limit(HISTORY_LIMIT);
+    .range(from, to);
 
-  if (error || !data) return [];
+  if (error || !data) return { items: [], total: 0 };
 
   const items: HistoryItem[] = await Promise.all(
     data.map(async (row) => {
@@ -140,23 +155,37 @@ async function loadHistory(
     }),
   );
 
-  return items;
+  return { items, total: count ?? items.length };
 }
 
 /**
- * `/history` — scrollable feed of the latest captured messages for this
- * tenant. Supports filtering by a monitored group via `?group=<uuid>` and
- * launching the "gerar resumo agora" modal (same modal used on `/home`)
- * with the filtered group pre-selected.
+ * Parse a `?page=N` param safely — clamped to `[1, Infinity]`. Anything
+ * non-numeric / negative falls back to page 1. Upper bound is enforced
+ * later against the actual row count (out-of-range pages render an empty
+ * feed with the "no messages" state and working prev/next).
+ */
+function parsePage(raw: string | string[] | undefined): number {
+  const s = Array.isArray(raw) ? raw[0] : raw;
+  const n = Number.parseInt(s ?? '', 10);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return n;
+}
+
+/**
+ * `/history` — paginated feed of captured messages for this tenant.
+ * Supports:
+ *   - `?group=<uuid>` — filter by a monitored group (validated against
+ *     this tenant's groups; invalid ids silently fall back to "todos").
+ *   - `?page=<N>` — 1-indexed page, default 1. Page size fixed at
+ *     `HISTORY_PAGE_SIZE`.
  *
- * `searchParams` is a Promise in Next 15 — await once, extract `group`,
- * and validate it belongs to this tenant before filtering (prevents a
- * malicious id leaking another tenant's group count via the filter bar).
+ * `searchParams` is a Promise in Next 15 — awaited in parallel with the
+ * monitored-groups query so the two network hops overlap.
  */
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ group?: string | string[] }>;
+  searchParams: Promise<{ group?: string | string[]; page?: string | string[] }>;
 }) {
   const context = await getCurrentUserAndTenant();
   if (!context) {
@@ -178,9 +207,12 @@ export default async function HistoryPage({
     ? rawGroup
     : '';
 
-  const items = await loadHistory(
+  const page = parsePage(resolvedParams.page);
+
+  const { items, total } = await loadHistory(
     tenant.id,
     selectedGroupId ? selectedGroupId : null,
+    page,
   );
 
   return (
@@ -205,12 +237,20 @@ export default async function HistoryPage({
         <HistoryFilterBar
           groups={groups}
           selectedGroupId={selectedGroupId}
-          totalCount={items.length}
+          totalCount={total}
         />
         {items.length === 0 ? (
           <EmptyState filtered={!!selectedGroupId} />
         ) : (
-          <MessagesList initial={items} />
+          <>
+            <MessagesList initial={items} />
+            <HistoryPagination
+              page={page}
+              total={total}
+              pageSize={HISTORY_PAGE_SIZE}
+              groupId={selectedGroupId || null}
+            />
+          </>
         )}
       </div>
     </div>
