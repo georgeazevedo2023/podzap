@@ -28,6 +28,7 @@ import { inngest } from "@/inngest/client";
 import { summaryRequested } from "@/inngest/events";
 import { getSummary } from "@/lib/summaries/service";
 import {
+  applyRateLimit,
   errorResponse,
   mapErrorToResponse,
   readJsonBody,
@@ -38,6 +39,17 @@ const RegenerateBodySchema = z.object({
   tone: z.enum(["formal", "fun", "corporate"]).optional(),
 });
 
+/**
+ * Share the rate-limit bucket with `POST /api/summaries/generate` — both
+ * endpoints emit `summary.requested` and incur the same Gemini 2.5 Pro
+ * cost, so a separate bucket would let a caller bypass the ceiling by
+ * alternating between them. 10/hour combined. Documented in
+ * `docs/api/auth-matrix.md` (inconsistência #1).
+ */
+const RATE_LIMIT_KEY = "summary-generate";
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW_MS = 3_600_000;
+
 export async function POST(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -45,6 +57,14 @@ export async function POST(
   const auth = await requireAuth();
   if ("response" in auth) return auth.response;
   const { tenant } = auth;
+
+  const limited = applyRateLimit(
+    tenant.id,
+    RATE_LIMIT_KEY,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_MS,
+  );
+  if (limited) return limited;
 
   const { id } = await ctx.params;
   if (!id || typeof id !== "string") {
