@@ -67,13 +67,23 @@ describe("buildSummaryPrompt — system prompt by tone", () => {
     expect(systemPrompts.size).toBe(TONES.length);
   });
 
-  it("every system prompt contains the podZAP base contract", () => {
+  it("every system prompt contains the narrator base contract (no self-ref)", () => {
     for (const tone of TONES) {
       const { systemPrompt } = buildSummaryPrompt(conv(), tone);
-      expect(systemPrompt).toContain("roteirista-apresentador do podZAP");
-      expect(systemPrompt).toContain("primeira pessoa plural");
+      // Narrator framing without product self-reference (v2 rewrite):
+      expect(systemPrompt).toContain("narrador neutro");
       expect(systemPrompt).toContain("APENAS informação presente nas mensagens");
       expect(systemPrompt).toContain("sem markdown");
+      // Anti-greeting / anti-self-reference guards (why v2 exists):
+      // Anti-saudação: o prompt deve explicitar bloqueio de "bem-vindos".
+      // Evita regex com acentos (pega pegada de encoding Unicode) — usa
+      // toContain direto.
+      expect(systemPrompt).toContain("bem-vindos");
+      expect(systemPrompt).toContain("Entra direto no conteúdo");
+      // podZAP as a brand name must NOT appear in the system prompt body
+      // (keyword test — if someone re-introduces it, the LLM starts
+      // greeting the audience as "bem-vindos ao podZAP" again).
+      expect(systemPrompt).not.toContain("podZAP");
     }
   });
 
@@ -225,12 +235,12 @@ describe("buildSummaryPrompt — metadata", () => {
     expect(big.estimatedTokens).toBeGreaterThan(small.estimatedTokens);
   });
 
-  it("promptVersion matches `podzap-summary/v1-<tone>` for every tone", () => {
-    const pattern = /^podzap-summary\/v1-(formal|fun|corporate)$/;
+  it("promptVersion matches `podzap-summary/v2-<tone>` for every tone", () => {
+    const pattern = /^podzap-summary\/v2-(formal|fun|corporate)$/;
     for (const tone of TONES) {
       const { promptVersion } = buildSummaryPrompt(conv(), tone);
       expect(promptVersion).toMatch(pattern);
-      expect(promptVersion).toBe(`podzap-summary/v1-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v2-${tone}`);
     }
   });
 });

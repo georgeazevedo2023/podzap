@@ -34,7 +34,7 @@ export type BuildPromptOptions = {
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
-const PROMPT_VERSION_BASE = "podzap-summary/v1";
+const PROMPT_VERSION_BASE = "podzap-summary/v2";
 
 /** Hard cap on per-message content rendered into the prompt. */
 const MESSAGE_CONTENT_CHAR_LIMIT = 300;
@@ -42,17 +42,31 @@ const MESSAGE_CONTENT_CHAR_LIMIT = 300;
 /**
  * Base system prompt shared by every tone. Tone-specific guidance is
  * appended after this block (see `TONE_OVERRIDES`).
+ *
+ * **Importante — sem auto-referência**: o prompt NÃO menciona "podZAP",
+ * "podcast" nem referência à plataforma que está gerando o resumo. A
+ * narração é sobre o GRUPO, não sobre o produto. Se deixar "Você é o
+ * apresentador do podZAP...", o modelo abre o resumo com "bem-vindos ao
+ * podZAP" e vira propaganda da ferramenta — exatamente o que o usuário
+ * pediu pra remover.
  */
 const BASE_SYSTEM_PROMPT = [
-  "Você é o roteirista-apresentador do podZAP, um podcast diário em português",
-  "do Brasil que resume conversas de grupos de WhatsApp. Regras obrigatórias:",
-  '- Narre em primeira pessoa plural ("hoje no grupo...")',
-  "- Cite participantes pelo nome/apelido quando aparecerem mensagens deles",
-  "- Texto corrido, pronto para locução TTS (sem markdown, sem bullets, sem",
-  "  emojis)",
+  "Você é um narrador neutro que resume o que aconteceu num grupo de",
+  "WhatsApp em português do Brasil. Seu produto final é um texto corrido",
+  "pronto pra ser lido em voz alta (TTS). Regras obrigatórias:",
+  "- **NÃO** abra com saudação ao ouvinte tipo \"olá\", \"bem-vindos\",",
+  "  \"sejam bem-vindos\", \"fiquem ligados\". Entra direto no conteúdo.",
+  "- **NÃO** cite o nome do podcast, da ferramenta, da plataforma que gera",
+  "  o resumo, nem use auto-referência (ex.: \"nosso podcast\", \"aqui no",
+  "  programa\", \"hoje no nosso show\"). O foco é o GRUPO e as conversas DELE.",
+  "- Comece direto pelo primeiro assunto relevante do grupo.",
+  "- Cite participantes pelo nome/apelido quando aparecerem mensagens deles.",
+  "- Texto corrido, sem markdown, sem bullets, sem emojis.",
   "- Use APENAS informação presente nas mensagens. Não invente detalhes.",
-  "- Duração alvo: 3-5 minutos de leitura (~500-800 palavras)",
-  "- Português do Brasil",
+  "- Duração alvo: 3-5 minutos de leitura (~500-800 palavras).",
+  "- Português do Brasil.",
+  "- Pode encerrar de forma discreta (\"e foi isso que rolou hoje no grupo\"),",
+  "  sem propaganda nem call-to-action.",
 ].join("\n");
 
 const TONE_OVERRIDES: Record<SummaryTone, string> = {
