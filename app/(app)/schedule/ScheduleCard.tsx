@@ -347,12 +347,6 @@ function ApprovalPill({ mode }: { mode: ScheduleApprovalMode }) {
     ScheduleApprovalMode,
     { label: string; emoji: string; bg: string; fg: string }
   > = {
-    auto: {
-      label: 'auto',
-      emoji: '🚀',
-      bg: 'var(--zap-500)',
-      fg: '#fff',
-    },
     optional: {
       label: 'revisão opcional',
       emoji: '👀',

@@ -593,7 +593,7 @@ export type Database = {
     }
     Enums: {
       message_type: "text" | "audio" | "image" | "video" | "other"
-      schedule_approval_mode: "auto" | "optional" | "required"
+      schedule_approval_mode: "optional" | "required"
       schedule_frequency: "daily" | "weekly" | "custom"
       schedule_trigger_type: "fixed_time" | "inactivity" | "dynamic_window"
       summary_status: "pending_review" | "approved" | "rejected"
@@ -732,7 +732,7 @@ export const Constants = {
   public: {
     Enums: {
       message_type: ["text", "audio", "image", "video", "other"],
-      schedule_approval_mode: ["auto", "optional", "required"],
+      schedule_approval_mode: ["optional", "required"],
       schedule_frequency: ["daily", "weekly", "custom"],
       schedule_trigger_type: ["fixed_time", "inactivity", "dynamic_window"],
       summary_status: ["pending_review", "approved", "rejected"],

@@ -71,15 +71,9 @@ const APPROVAL_MODES: readonly {
   emoji: string;
 }[] = [
   {
-    value: 'auto',
-    label: 'automático',
-    desc: 'gera e manda sem revisar',
-    emoji: '🚀',
-  },
-  {
     value: 'optional',
     label: 'aprovação opcional',
-    desc: 'alerta; envia sozinho em 24h se ignorado',
+    desc: 'alerta; ainda exige clique em /approval antes de ir pro grupo',
     emoji: '👀',
   },
   {

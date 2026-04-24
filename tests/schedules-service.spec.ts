@@ -37,7 +37,7 @@ type ScheduleRow = {
   time_of_day: string | null;
   day_of_week: number | null;
   trigger_type: "fixed_time" | "inactivity" | "dynamic_window";
-  approval_mode: "auto" | "optional" | "required";
+  approval_mode: "optional" | "required";
   voice: string | null;
   tone: "formal" | "fun" | "corporate";
   is_active: boolean;
@@ -391,13 +391,13 @@ describe("createSchedule", () => {
       timeOfDay: "09:00:00",
       dayOfWeek: null,
       triggerType: "fixed_time",
-      approvalMode: "auto",
+      approvalMode: "optional",
       voice: null,
       tone: "fun",
       isActive: true,
     });
     expect(view.id).toBeTruthy();
-    expect(view.approvalMode).toBe("auto");
+    expect(view.approvalMode).toBe("optional");
     expect(db.schedules).toHaveLength(1);
   });
 
@@ -460,12 +460,12 @@ describe("updateSchedule", () => {
     });
 
     const view = await service.updateSchedule(TENANT_A, row.id, {
-      approvalMode: "auto",
+      approvalMode: "optional",
       isActive: false,
       tone: "formal",
     });
 
-    expect(view.approvalMode).toBe("auto");
+    expect(view.approvalMode).toBe("optional");
     expect(view.isActive).toBe(false);
     expect(view.tone).toBe("formal");
     // untouched fields stay intact

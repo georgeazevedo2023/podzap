@@ -309,58 +309,6 @@ export async function approveSummary(
 }
 
 /**
- * Auto-approve path — used by the Fase 11 cron runner for schedules with
- * `approval_mode='auto'`. Mirrors {@link approveSummary} but records
- * `approved_by = null` (no human reviewer). Still guards the state
- * machine so a double-fire (cron retry) can't mutate an already-
- * approved/rejected row.
- *
- * Deliberately separate from `approveSummary` so the human path keeps
- * its non-null `userId` invariant and route-level audit trail — this
- * helper is for trusted background callers only.
- */
-export async function autoApproveSummary(
-  tenantId: string,
-  summaryId: string,
-): Promise<SummaryView> {
-  const current = await loadStatus(tenantId, summaryId);
-  if (current === null) {
-    throw new SummariesError(
-      "NOT_FOUND",
-      `Summary ${summaryId} not found for tenant ${tenantId}`,
-    );
-  }
-  if (current !== "pending_review") {
-    throw new SummariesError(
-      "INVALID_STATE",
-      `only pending_review can be auto-approved; current state: ${current}`,
-    );
-  }
-
-  const admin = createAdminClient();
-  const nowIso = new Date().toISOString();
-  const { error } = await admin
-    .from("summaries")
-    .update({
-      status: "approved",
-      approved_by: null,
-      approved_at: nowIso,
-      updated_at: nowIso,
-    })
-    .eq("id", summaryId)
-    .eq("tenant_id", tenantId);
-
-  if (error) {
-    throw new SummariesError(
-      "DB_ERROR",
-      `Failed to auto-approve summary ${summaryId}: ${error.message}`,
-      error,
-    );
-  }
-  return reloadView(tenantId, summaryId);
-}
-
-/**
  * Transition a summary from `pending_review` → `rejected`. Requires a
  * non-blank `reason`; also records `approved_by` (who rejected) and
  * stamps `updated_at`. NOT_FOUND / INVALID_STATE semantics identical to

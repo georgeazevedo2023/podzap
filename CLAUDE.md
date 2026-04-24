@@ -464,26 +464,25 @@ Inngest cron  */5 * * * *
   step.run('enqueue-<id>')
                │
                ▼
-  inngest.send(summary.requested { tenantId, groupId, periodStart, periodEnd,
-                                   tone, autoApprove: mode==='auto' })
+  inngest.send(summary.requested { tenantId, groupId, periodStart, periodEnd, tone })
                │
                ▼
-  Fase 7 → (Fase 8 auto/humano) → Fase 9 → Fase 10
+  Fase 7 → Fase 8 (sempre humano) → Fase 9 → Fase 10
 ```
 
-- **Schema `schedules`**: 1 row/grupo (UNIQUE `group_id`), `tenant_id` escopado, `frequency ∈ {daily, weekly, custom}`, `time_of_day` (sem tz), `day_of_week` 0-6 (Dom-Sáb), `trigger_type ∈ {fixed_time, inactivity, dynamic_window}` (só `fixed_time` disparando), `approval_mode ∈ {auto, optional, required}`, `voice`, `tone`, `is_active`.
+- **Regra base**: áudio só vai pro grupo após clique humano em `/approval/[id]`. Migration 0011 adicionou CHECK em `schedules.approval_mode <> 'auto'`; o enum DB ainda lista `auto` mas writes falham.
+- **Schema `schedules`**: 1 row/grupo (UNIQUE `group_id`), `tenant_id` escopado, `frequency ∈ {daily, weekly, custom}`, `time_of_day` (sem tz), `day_of_week` 0-6 (Dom-Sáb), `trigger_type ∈ {fixed_time, inactivity, dynamic_window}` (só `fixed_time` disparando), `approval_mode ∈ {optional, required}`, `voice`, `tone`, `is_active`.
 - **Janelas de mensagens**: `daily` = últimas 24h; `weekly` = últimos 7 dias.
 - **Timezone**: fixo em `America/Sao_Paulo` — conversão via `Intl.DateTimeFormat` (sem lib externa). Multi-tz por tenant é pós-MVP.
-- **Modos de aprovação**:
-  - `auto` → pipeline completo sem humano (`generate-summary` emite `summary.approved` logo após o insert quando recebe `autoApprove: true`).
-  - `optional` → cria `pending_review`; **o auto-approve em 24h não está implementado** — hoje se comporta como `required`.
+- **Modos de aprovação** (ambos caem em `pending_review`; worker nunca emite `autoApprove`):
+  - `optional` → placeholder pro futuro auto-approve em 24h. **Não implementado** — hoje se comporta como `required`.
   - `required` → `pending_review` até humano aprovar via `/approval/[id]`.
 - **Dedup**: `summaries` com overlap (`period_start <= end AND period_end >= start`) para o mesmo `(tenant_id, group_id)` aborta o emit — cobre cron skew, retry manual, invocação dupla no dashboard.
 - **API** (`app/api/schedules/`): `GET /api/schedules`, `POST /api/schedules`, `PATCH /api/schedules/[id]`, `DELETE /api/schedules/[id]`. Erros `SchedulesError` → 404 / 409 / 422 / 500.
 - **Limitações MVP**:
   - Crons Inngest **não disparam em dev** — invocar `run-schedules` manualmente no dashboard (`http://127.0.0.1:8288`). Em prod (Inngest Cloud) o cron roda.
   - `trigger_type` só `fixed_time` está ativo (`inactivity`/`dynamic_window` são placeholders do enum — rows com esses valores nunca disparam).
-  - `approval_mode='optional'` auto-approve após 24h não implementado.
+  - `approval_mode='optional'` auto-approve após 24h não implementado — quando vier, será via evento backend, nunca bypass do pipeline.
   - `frequency='custom'` reservado mas ignorado pelo worker.
 
 ---

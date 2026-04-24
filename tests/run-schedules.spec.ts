@@ -6,7 +6,8 @@
  *
  * Coverage:
  *   - enqueues a `summary.requested` event for each due schedule
- *   - sets `autoApprove: true` when approval_mode === 'auto'
+ *   - never sets `autoApprove` (manual-approval-only policy — schedules
+ *     always land in `pending_review`)
  *   - skips when a summary for that window already exists
  *   - returns accurate `{ due, enqueued, skipped }` counters
  */
@@ -155,10 +156,10 @@ beforeEach(() => {
 // ──────────────────────────────────────────────────────────────────────────
 
 describe("runSchedulesHandler", () => {
-  it("enqueues summary.requested for each due schedule", async () => {
+  it("enqueues summary.requested for each due schedule without autoApprove", async () => {
     dueFixture.push(
       mkSchedule({ id: "s1", groupId: "g1", approvalMode: "required" }),
-      mkSchedule({ id: "s2", groupId: "g2", approvalMode: "auto" }),
+      mkSchedule({ id: "s2", groupId: "g2", approvalMode: "optional" }),
     );
 
     const result = await runSchedulesHandler({
@@ -169,15 +170,12 @@ describe("runSchedulesHandler", () => {
 
     expect(result).toEqual({ due: 2, enqueued: 2, skipped: 0 });
     expect(sendCalls).toHaveLength(2);
-    const s1 = sendCalls.find(
-      (c) => (c.data as { groupId: string }).groupId === "g1",
-    );
-    const s2 = sendCalls.find(
-      (c) => (c.data as { groupId: string }).groupId === "g2",
-    );
-    expect(s1!.name).toBe("summary.requested");
-    expect((s1!.data as { autoApprove?: boolean }).autoApprove).toBe(false);
-    expect((s2!.data as { autoApprove?: boolean }).autoApprove).toBe(true);
+    for (const call of sendCalls) {
+      expect(call.name).toBe("summary.requested");
+      // autoApprove must never be emitted — delivery is gated on a
+      // manual click in /approval/[id] regardless of approval_mode.
+      expect(call.data).not.toHaveProperty("autoApprove");
+    }
   });
 
   it("skips schedules when a summary for the window already exists", async () => {

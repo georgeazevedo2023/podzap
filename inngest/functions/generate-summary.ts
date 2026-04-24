@@ -36,16 +36,14 @@
  */
 
 import { inngest } from "../client";
-import { summaryApproved, summaryRequested } from "../events";
+import { summaryRequested } from "../events";
 import {
   generateSummary,
   type SummaryTone,
 } from "@/lib/summary/generator";
-import { autoApproveSummary } from "@/lib/summaries/service";
 
 export type GenerateSummaryResult = {
   summaryId: string;
-  autoApproved: boolean;
 };
 
 /**
@@ -62,7 +60,6 @@ export type GenerateSummaryHandlerCtx = {
       periodEnd: string;
       tone?: SummaryTone;
       voiceMode?: "single" | "duo";
-      autoApprove?: boolean;
     };
   };
   step: {
@@ -120,28 +117,7 @@ export async function generateSummaryHandler(
     model: record.model,
   });
 
-  // Fase 11 auto-approve: when the cron runner says so, flip the freshly-
-  // generated summary straight to `approved` and emit `summary.approved`
-  // so the Fase 9 TTS worker picks it up without human intervention. We
-  // do this as a dedicated step so Inngest can memoise it on retry (we
-  // don't want to re-generate the summary if auto-approve fails
-  // transiently).
-  let autoApproved = false;
-  if (event.data.autoApprove === true) {
-    await step.run("auto-approve", async () => {
-      await autoApproveSummary(event.data.tenantId, record.id);
-      await inngest.send(
-        summaryApproved.create({
-          summaryId: record.id,
-          tenantId: event.data.tenantId,
-        }),
-      );
-    });
-    autoApproved = true;
-    logger.info("[generate-summary] auto-approved", { summaryId: record.id });
-  }
-
-  return { summaryId: record.id, autoApproved };
+  return { summaryId: record.id };
 }
 
 /**

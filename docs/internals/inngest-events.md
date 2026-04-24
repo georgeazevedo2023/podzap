@@ -14,8 +14,8 @@ Relacionado: [`docs/integrations/inngest.md`](../integrations/inngest.md) (setup
 | `message.captured` | `lib/webhooks/persist.ts:424` após INSERT em `messages` | `transcribe-audio.ts` (se `type==='audio'`)<br>`describe-image.ts` (se `type==='image'`) | INSERT em `transcripts`; updates de `media_download_status` |
 | `message.transcription.requested` | Admin tooling manual | `transcription-retry.ts` | Re-runs transcription (aceita `force: true`) |
 | `media.download.retry` | `retry-pending.ts` cron | `media-download-retry.ts` | `downloadAndStore` chamado; updates em `messages` |
-| `summary.requested` | `POST /api/summaries/generate`<br>`run-schedules.ts` (cron)<br>`POST /api/summaries/[id]/regenerate` | `generate-summary.ts` | INSERT em `summaries` status `pending_review`<br>Se `autoApprove=true` (schedule auto mode): também emite `summary.approved` |
-| `summary.approved` | `POST /api/summaries/[id]/approve`<br>`generate-summary.ts` (auto mode) | `generate-tts.ts` | INSERT em `audios` + upload WAV no bucket `audios` |
+| `summary.requested` | `POST /api/summaries/generate`<br>`run-schedules.ts` (cron)<br>`POST /api/summaries/[id]/regenerate` | `generate-summary.ts` | INSERT em `summaries` status `pending_review` |
+| `summary.approved` | `POST /api/summaries/[id]/approve` (humano via UI) | `generate-tts.ts` | INSERT em `audios` + upload WAV no bucket `audios` |
 | `audio.created` | `generate-tts.ts` após INSERT em `audios` | `deliver-to-whatsapp.ts` | UAZAPI `/send/media` + update `delivered_to_whatsapp`/`delivered_at` |
 | `test.ping` | Smoke tests | `ping.ts` | No-op; confirma worker runtime up |
 | `(cron */5m)` | Inngest schedule | `retry-pending.ts` | Para cada `messages.media_download_status='pending'` TTL-expired → emit `media.download.retry` |
@@ -44,8 +44,7 @@ flowchart TD
     RS -->|emit per schedule| SR
     SR --> GS[generate-summary]
 
-    APPR[POST /api/summaries/id/approve] -->|emit| SA[summary.approved]
-    GS -->|autoApprove=true| SA
+    APPR[POST /api/summaries/id/approve<br>clique humano em /approval/id] -->|emit| SA[summary.approved]
     SA --> GT[generate-tts]
     GT -->|emit| AC[audio.created]
     AC --> DTW[deliver-to-whatsapp]

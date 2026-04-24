@@ -7,15 +7,17 @@
 
 ## Overview
 
-Agendamento é a camada que transforma o podZAP num produto **passivo** —
-o usuário configura uma vez ("todo dia 18h resumir o grupo X") e a partir
-daí resumos em áudio são gerados e entregues sem intervenção.
+Agendamento é a camada que automatiza a **geração** dos resumos — o
+usuário configura uma vez ("todo dia 18h resumir o grupo X") e a partir
+daí resumos em áudio surgem em `/approval` sem precisar clicar "gerar
+agora". A **entrega ao grupo** continua exigindo clique humano em
+`/approval/[id]` — regra do produto, ver §"Modos de aprovação" abaixo.
 
 Um cron Inngest com cadência `*/5 * * * *` percorre a tabela `schedules`,
 seleciona os que estão vencendo na janela atual (America/Sao_Paulo) e
-dispara o pipeline completo (Fases 7 → 8 → 9 → 10) via eventos. O modo
-de aprovação do schedule decide se a Fase 8 exige humano ou se o pipeline
-segue reto para TTS + entrega.
+dispara Fases 7 → 8 → (aprove manual) → 9 → 10 via eventos. O modo de
+aprovação só afeta **quão urgente** é o lembrete pro admin — nunca
+ignora o gate humano.
 
 - **Unicidade**: um schedule por grupo (UNIQUE `group_id` no DB).
 - **Multi-tenant**: todo CRUD é escopado por `tenant_id`. O worker
@@ -63,8 +65,7 @@ segue reto para TTS + entrega.
         │    summary.requested {        │
         │      tenantId, groupId,       │
         │      periodStart, periodEnd,  │
-        │      tone,                    │
-        │      autoApprove: mode==auto  │
+        │      tone                     │
         │    })                         │
         └───────────────┬───────────────┘
                         │
@@ -74,14 +75,13 @@ segue reto para TTS + entrega.
 │   · monta NormalizedConversation                              │
 │   · chama Gemini 2.5 Pro                                      │
 │   · INSERT summaries (status='pending_review')                │
-│   · if autoApprove:                                           │
-│       inngest.send(summary.approved) — bypassa review humano  │
 └────────────────────────────┬─────────────────────────────────┘
                              │
+                             │  aguardando clique humano em /approval/[id]
                              ▼
           ┌──────────────────────────────────┐
           │  summary.approved                │
-          │  (Fase 8 — humano OU autoApprove)│
+          │  (Fase 8 — sempre humano)        │
           └────────────────┬─────────────────┘
                            │
                            ▼
@@ -113,7 +113,7 @@ o dashboard Inngest expõe esses números por tick para observabilidade.
 | `time_of_day`   | `time` (nullable)                   | `HH:MM:SS` sem timezone — interpretado em America/Sao_Paulo          |
 | `day_of_week`   | `smallint` 0-6 (nullable)           | 0=domingo, 6=sábado. Obrigatório quando `frequency='weekly'`          |
 | `trigger_type`  | enum `schedule_trigger_type`        | `fixed_time` (único implementado) \| `inactivity` \| `dynamic_window` |
-| `approval_mode` | enum `schedule_approval_mode`       | `auto` \| `optional` \| `required`                                   |
+| `approval_mode` | enum `schedule_approval_mode` + CHECK | `optional` \| `required` (`auto` bloqueado pela migration 0011)     |
 | `voice`         | `text` (nullable)                   | Override do mapeamento default de voz                                |
 | `tone`          | enum `summary_tone`                 | `formal` \| `fun` \| `corporate`                                     |
 | `is_active`     | `boolean` default `true`            | Pausar sem deletar                                                   |
@@ -161,18 +161,21 @@ pós-MVP.
 
 ## Modos de aprovação
 
-O campo `schedules.approval_mode` dita como o pipeline se comporta após
-o resumo ser gerado.
+**Regra do produto (migration 0011):** áudio só é entregue ao grupo do
+WhatsApp depois do clique humano em "aprovar" em `/approval/[id]`.
+Schedules com `approval_mode='auto'` eram a exceção e foram removidos;
+o enum DB ainda tem o valor `auto` mas uma CHECK constraint rejeita
+INSERT/UPDATE com esse valor.
 
 | Modo       | Comportamento                                                                          | Status no MVP                                |
 | ---------- | -------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `auto`     | Pipeline roda sem intervenção humana — `summary.requested` carrega `autoApprove: true`, `generate-summary` emite `summary.approved` logo após o insert, TTS + entrega disparam em sequência. | ✅ Implementado                              |
-| `optional` | Resumo fica `pending_review`, mas com hint de **auto-aprovar em 24h** se ninguém agir. | ⚠️ Cria a row `pending_review`; o auto-approve em 24h **não está implementado** (timer Inngest pendente). |
-| `required` | Resumo fica `pending_review` até humano aprovar em `/approval/[id]`. Fluxo idêntico à Fase 8 manual.                              | ✅ Implementado                              |
+| `optional` | Resumo fica `pending_review`, com hint de **auto-aprovar em 24h** se ninguém agir.     | ⚠️ Cria a row `pending_review`; o timer de 24h **não está implementado**. Hoje se comporta igual a `required`. |
+| `required` | Resumo fica `pending_review` até humano aprovar em `/approval/[id]`. Fluxo idêntico à Fase 8 manual. | ✅ Implementado                              |
 
-Mapeamento no worker: `autoApprove = schedule.approvalMode === 'auto'`.
-`optional` e `required` hoje se comportam igual — ambos caem em
-`pending_review` sem timer adicional.
+O worker **nunca** emite `autoApprove` no `summary.requested`
+independente do modo — o gate humano é universal. Um dia `optional` vai
+ganhar o timer de 24h, mas mesmo ele é uma aprovação implícita registrada
+via rota backend (ainda atrás do modo da UI, nunca bypass do pipeline).
 
 ---
 

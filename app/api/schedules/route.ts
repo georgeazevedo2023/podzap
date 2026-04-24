@@ -47,7 +47,7 @@ const CreateBodySchema = z.object({
   timeOfDay: TimeOfDaySchema.nullable(),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   triggerType: z.enum(["fixed_time", "inactivity", "dynamic_window"]),
-  approvalMode: z.enum(["auto", "optional", "required"]),
+  approvalMode: z.enum(["optional", "required"]),
   voice: z.string().min(1).nullable().optional(),
   tone: z.enum(["formal", "fun", "corporate"]),
   isActive: z.boolean(),

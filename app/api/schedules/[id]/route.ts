@@ -62,7 +62,7 @@ const PatchBodySchema = z
     triggerType: z
       .enum(["fixed_time", "inactivity", "dynamic_window"])
       .optional(),
-    approvalMode: z.enum(["auto", "optional", "required"]).optional(),
+    approvalMode: z.enum(["optional", "required"]).optional(),
     voice: z.string().min(1).nullable().optional(),
     tone: z.enum(["formal", "fun", "corporate"]).optional(),
     isActive: z.boolean().optional(),

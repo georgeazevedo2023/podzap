@@ -13,10 +13,10 @@
  *      rejected). This defends against the inevitable edge case where
  *      two 5-minute ticks land on the same schedule (cron skew, manual
  *      invocation from the Inngest dashboard, etc).
- *   3. Emit `summary.requested` with the schedule's `tone` and an
- *      `autoApprove: true` flag when `approval_mode === 'auto'`. The
- *      generate-summary worker picks up the auto-approve flag and
- *      emits `summary.approved` itself after persisting the row.
+ *   3. Emit `summary.requested` with the schedule's `tone`. The
+ *      generated summary always lands in `pending_review` — delivery
+ *      to the WhatsApp group requires an explicit human approve on
+ *      `/approval/[id]`, regardless of the schedule's `approval_mode`.
  *
  * Returns `{ due, enqueued, skipped }` counters so the dashboard shows
  * a clear signal of what each tick did.
@@ -149,7 +149,6 @@ export async function runSchedulesHandler(
           periodStart: start.toISOString(),
           periodEnd: end.toISOString(),
           tone: schedule.tone,
-          autoApprove: schedule.approvalMode === "auto",
         }),
       );
     });

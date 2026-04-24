@@ -237,8 +237,7 @@ export async function createAudioForSummary(
 
   // ── 3. Call Gemini TTS ────────────────────────────────────────────────
   // voice_mode lido do summary row — foi decidido no tempo da request
-  // (modal /home ou autoApprove do schedule). Legado / retries caem em
-  // 'single' via default do schema.
+  // (modal /home). Legado / retries caem em 'single' via default do schema.
   const voice = opts?.voice;
   const speed = opts?.speed;
   const mode = summaryRow.voice_mode ?? "single";
