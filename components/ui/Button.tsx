@@ -3,9 +3,14 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 /**
  * Thin wrapper over the global `.btn` class defined in globals.css.
  *
- * The variants map to the modifier classes the mockups use: `.btn.purple`,
- * `.btn.pink`, `.btn.zap`, `.btn.ghost`, etc. — color tokens are owned by
- * the CSS, not by this component.
+ * The variants map to the hyphenated modifier classes in
+ * `app/globals.css`: `.btn-purple`, `.btn-pink`, `.btn-zap`, `.btn-ghost`,
+ * etc. — color tokens are owned by the CSS, not by this component.
+ *
+ * Historical note: earlier versions emitted `btn purple` (two classes),
+ * aligning with the legacy `tokens.css` (`.btn.purple`) but NOT with our
+ * Tailwind v4 component layer — variants silently degraded to the default
+ * lime fill. Ported to the hyphen form on 2026-04-24.
  */
 export type ButtonVariant =
   | 'default'
@@ -28,7 +33,7 @@ export function Button({
   type = 'button',
   ...rest
 }: ButtonProps) {
-  const variantClass = variant === 'default' ? '' : variant;
+  const variantClass = variant === 'default' ? '' : `btn-${variant}`;
   const classes = ['btn', variantClass, className].filter(Boolean).join(' ');
   return (
     <button type={type} className={classes} {...rest}>

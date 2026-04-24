@@ -131,7 +131,15 @@ export function AdminSidebar({ userEmail }: AdminSidebarProps) {
               letterSpacing: '-0.02em',
             }}
           >
-            super<span style={{ color: 'var(--pink-500)' }}>admin</span>
+            super
+            <span
+              style={{
+                color: 'var(--pink-500)',
+                textShadow: '2px 2px 0 var(--stroke)',
+              }}
+            >
+              admin
+            </span>
           </div>
           <div
             style={{

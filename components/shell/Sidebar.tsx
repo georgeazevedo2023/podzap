@@ -167,7 +167,10 @@ export function Sidebar({
         position: 'relative',
       }}
     >
-      {/* Logo */}
+      {/* Logo — lettering stack matches podZAP/shell.jsx 1:1. The pink drop
+         shadow on "ZAP" is the signature detail from the standalone
+         prototype (podZAP _standalone_.html) that was missing from the
+         initial port; the base lettering size matches the mockup (22px). */}
       <div
         style={{
           display: 'flex',
@@ -187,6 +190,7 @@ export function Sidebar({
             placeItems: 'center',
             boxShadow: '3px 3px 0 var(--stroke)',
             transform: 'rotate(-4deg)',
+            flexShrink: 0,
           }}
         >
           <span
@@ -209,7 +213,15 @@ export function Sidebar({
               letterSpacing: '-0.02em',
             }}
           >
-            pod<span style={{ color: 'var(--pink-500)' }}>ZAP</span>
+            pod
+            <span
+              style={{
+                color: 'var(--pink-500)',
+                textShadow: '2px 2px 0 var(--stroke)',
+              }}
+            >
+              ZAP
+            </span>
           </div>
           <div
             style={{
@@ -218,7 +230,7 @@ export function Sidebar({
               textTransform: 'uppercase',
               color: 'var(--text-dim)',
               fontWeight: 700,
-              marginTop: 2,
+              marginTop: 4,
             }}
           >
             zap → podcast
