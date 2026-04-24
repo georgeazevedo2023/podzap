@@ -16,6 +16,55 @@ interface GroupOption {
   name: string;
 }
 
+/**
+ * Chave do ticket de "gerando resumo" gravado em localStorage logo após o
+ * POST /api/summaries/generate retornar 202. O banner em /approval
+ * (`GeneratingBanner.tsx`) lê esse ticket pra mostrar o countdown e some
+ * sozinho quando a row pending_review chega. Mantém em sincronia com
+ * `STORAGE_KEY` de `app/(app)/approval/GeneratingBanner.tsx`.
+ */
+const GENERATING_STORAGE_KEY = 'podzap_generating';
+
+interface GeneratingTicket {
+  requestId: string;
+  groupId: string;
+  groupName: string;
+  tone: Tone;
+  startedAt: string;
+}
+
+/**
+ * Lê o ticket atual do localStorage. Retorna `null` se não tiver, tiver
+ * expirado (> 60s), ou vier corrompido. 60s casa com o timeout hard do
+ * banner — depois disso faz mais sentido deixar o usuário tentar de novo
+ * do que travar o botão pra sempre.
+ */
+function readActiveTicket(): GeneratingTicket | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(GENERATING_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<GeneratingTicket>;
+    if (
+      !parsed.requestId ||
+      !parsed.groupId ||
+      !parsed.groupName ||
+      !parsed.tone ||
+      !parsed.startedAt
+    ) {
+      return null;
+    }
+    const age = Date.now() - new Date(parsed.startedAt).getTime();
+    if (!Number.isFinite(age) || age > 60_000) {
+      window.localStorage.removeItem(GENERATING_STORAGE_KEY);
+      return null;
+    }
+    return parsed as GeneratingTicket;
+  } catch {
+    return null;
+  }
+}
+
 interface GenerateNowModalProps {
   open: boolean;
   onClose: () => void;
@@ -52,6 +101,14 @@ export function GenerateNowModal({
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Ticket ativo de geração — se já tem um, a gente bloqueia novo submit
+   * pra evitar duplicata enquanto o banner em /approval ainda está
+   * cozinhando. Recalculado toda vez que o modal abre.
+   */
+  const [activeTicket, setActiveTicket] = useState<GeneratingTicket | null>(
+    null,
+  );
 
   // Reset + load monitored groups on open.
   useEffect(() => {
@@ -60,6 +117,7 @@ export function GenerateNowModal({
     setError(null);
     setSubmitting(false);
     setFetching(true);
+    setActiveTicket(readActiveTicket());
 
     let cancelled = false;
     fetch('/api/groups?monitoredOnly=true&pageSize=100', { cache: 'no-store' })
@@ -102,6 +160,14 @@ export function GenerateNowModal({
       setError('selecione um grupo');
       return;
     }
+    // Guarda-chuva anti-duplicata: se já tem ticket em voo, redireciona
+    // em vez de disparar outra geração.
+    if (readActiveTicket()) {
+      onClose();
+      router.push('/approval');
+      router.refresh();
+      return;
+    }
     setSubmitting(true);
     setError(null);
 
@@ -123,6 +189,29 @@ export function GenerateNowModal({
         };
         throw new Error(body.message ?? body.error ?? `HTTP ${res.status}`);
       }
+
+      // Grava o ticket pro GeneratingBanner pegar ao renderizar /approval.
+      // O `requestId` é só um nonce — o banner bate por `groupId` +
+      // `startedAt` pra descobrir que a row chegou.
+      const groupName =
+        groups.find((g) => g.id === groupId)?.name ?? 'grupo';
+      const ticket: GeneratingTicket = {
+        requestId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        groupId,
+        groupName,
+        tone,
+        startedAt: now.toISOString(),
+      };
+      try {
+        window.localStorage.setItem(
+          GENERATING_STORAGE_KEY,
+          JSON.stringify(ticket),
+        );
+      } catch {
+        // storage indisponível (private mode, cota cheia) — o fluxo segue,
+        // só não mostra o banner.
+      }
+
       onClose();
       router.push('/approval');
       router.refresh();
@@ -133,7 +222,9 @@ export function GenerateNowModal({
   };
 
   const hasGroups = groups.length > 0;
-  const canSubmit = hasGroups && !!groupId && !submitting && !fetching;
+  const hasActiveTicket = activeTicket !== null;
+  const canSubmit =
+    hasGroups && !!groupId && !submitting && !fetching && !hasActiveTicket;
 
   const errorBoxStyle: CSSProperties = {
     background: 'rgba(255, 77, 60, 0.12)',
@@ -177,6 +268,10 @@ export function GenerateNowModal({
           >
             {submitting ? (
               'gerando…'
+            ) : hasActiveTicket ? (
+              <>
+                <Icons.Sparkle /> já tem um cozinhando
+              </>
             ) : (
               <>
                 <Icons.Sparkle /> fazer podcast
@@ -225,6 +320,31 @@ export function GenerateNowModal({
         />
 
         {error ? <div style={errorBoxStyle}>{error}</div> : null}
+
+        {hasActiveTicket ? (
+          <div
+            style={{
+              background: 'rgba(124, 92, 255, 0.12)',
+              border: '1.5px solid var(--purple-600)',
+              borderRadius: 12,
+              padding: '10px 12px',
+              color: 'var(--text)',
+              fontSize: 13,
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span aria-hidden>🔥</span>
+            <span>
+              a IA ainda tá cozinhando o resumo de{' '}
+              <strong>{activeTicket?.groupName}</strong> — espera ele aparecer
+              em <a href="/approval" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>/aprovações</a>{' '}
+              antes de pedir outro.
+            </span>
+          </div>
+        ) : null}
 
         <p style={{ ...mutedStyle, fontSize: 12 }}>
           o resumo leva ~30s pra ficar pronto. ele vai aparecer em{' '}

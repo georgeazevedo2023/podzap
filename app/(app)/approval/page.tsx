@@ -5,6 +5,7 @@ import { Sticker } from '@/components/ui/Sticker';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
 import { listSummaries, type SummaryView } from '@/lib/summaries/service';
 
+import { GeneratingBanner } from './GeneratingBanner';
 import { StatusFilter, type ApprovalStatusFilter } from './StatusFilter';
 import { SummaryCard } from './SummaryCard';
 
@@ -88,6 +89,11 @@ export default async function ApprovalPage({
           gap: 20,
         }}
       >
+        {/* Banner "IA cozinhando" aparece quando há um ticket ativo em
+            localStorage (disparado pelo GenerateNowModal). Some sozinho
+            quando a row pending_review chega. */}
+        <GeneratingBanner />
+
         {summaries.length === 0 ? (
           <EmptyState status={status} />
         ) : (
