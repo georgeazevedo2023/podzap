@@ -98,17 +98,36 @@ function pcmToWav(pcm: Buffer): Buffer {
 }
 
 function buildPromptText(input: TtsInput): string {
-  // Duo mode: o texto já vem com prefixos `Ana:` / `Beto:`. Gemini lê
-  // direto — prefaciar com instrução de narração atrapalha (o modelo
-  // tenta ler a instrução também). Passa o texto raw.
+  // Duo mode: as linhas já vêm com prefixos `Ana:` / `Beto:` e cues de
+  // emoção entre parênteses (ex.: "(rindo)", "(animada)"). Prefixamos o
+  // texto com uma instrução natural pra Gemini TTS modular energia +
+  // interpretar as marcações como estilo, em vez de lê-las literalmente.
   if (input.mode === 'duo') {
-    return input.text;
+    return [
+      'Leia em português do Brasil a conversa entre Ana e Beto abaixo,',
+      'duas apresentadoras de podcast com MUITA energia e naturalidade.',
+      'Ana é descontraída, risonha, curiosa. Beto é bem-humorado, empolgado,',
+      'observador. Quando aparecer uma marcação entre parênteses',
+      '(ex.: "(rindo)", "(animada)", "(empolgado)", "(surpreso)",',
+      '"(gargalhando)"), interprete como INDICAÇÃO DE ESTILO pra aquela',
+      'fala — NÃO leia o parêntese em voz alta. Varie entonação, ritmo,',
+      'risadas curtas e reações expressivas. O áudio deve soar vivo, como',
+      'dois apresentadores se divertindo ao vivo, nunca monótono:',
+      '',
+      input.text,
+    ].join('\n');
   }
+  const styleDirective =
+    'Narre em português do Brasil, com tom de locutor de podcast ' +
+    'descontraído e ANIMADO. Quando aparecer uma marcação entre ' +
+    'parênteses (ex.: "(animado)", "(rindo)", "(empolgado)", "(surpreso)"), ' +
+    'interprete como indicação de estilo daquela frase — NÃO leia o ' +
+    'parêntese em voz alta. Varie entonação e ritmo pra não soar monótono';
   if (input.speed && input.speed !== 1) {
     const pace = input.speed > 1 ? 'um pouco mais rápido que o normal' : 'em ritmo pausado';
-    return `Narre em português do Brasil, com tom natural de locutor de podcast, ${pace}:\n\n${input.text}`;
+    return `${styleDirective}, ${pace}:\n\n${input.text}`;
   }
-  return `Narre em português do Brasil, com tom natural de locutor de podcast:\n\n${input.text}`;
+  return `${styleDirective}:\n\n${input.text}`;
 }
 
 /**

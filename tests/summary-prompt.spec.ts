@@ -233,12 +233,12 @@ describe("buildSummaryPrompt — metadata", () => {
     expect(big.estimatedTokens).toBeGreaterThan(small.estimatedTokens);
   });
 
-  it("promptVersion matches `podzap-summary/v3-<mode>-<tone>` for every tone (default mode=single)", () => {
-    const pattern = /^podzap-summary\/v3-(single|duo)-(formal|fun|corporate)$/;
+  it("promptVersion matches `podzap-summary/v4-<mode>-<tone>` for every tone (default mode=single)", () => {
+    const pattern = /^podzap-summary\/v4-(single|duo)-(formal|fun|corporate)$/;
     for (const tone of TONES) {
       const { promptVersion } = buildSummaryPrompt(conv(), tone);
       expect(promptVersion).toMatch(pattern);
-      expect(promptVersion).toBe(`podzap-summary/v3-single-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v4-single-${tone}`);
     }
   });
 
@@ -247,7 +247,7 @@ describe("buildSummaryPrompt — metadata", () => {
       const { promptVersion } = buildSummaryPrompt(conv(), tone, {
         voiceMode: "duo",
       });
-      expect(promptVersion).toBe(`podzap-summary/v3-duo-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v4-duo-${tone}`);
     }
   });
 
@@ -260,5 +260,41 @@ describe("buildSummaryPrompt — metadata", () => {
     // A regra crítica: prefixos obrigatórios.
     expect(systemPrompt).toMatch(/`Ana:`|Ana:\s/);
     expect(systemPrompt).toMatch(/`Beto:`|Beto:\s/);
+  });
+
+  it("duo system prompt instrui cues de animação inline", () => {
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun", {
+      voiceMode: "duo",
+    });
+    // Deve mencionar marcações de estilo em parênteses.
+    expect(systemPrompt).toMatch(/\(rindo\)|\(animada\)|\(empolgado\)/);
+    expect(systemPrompt).toContain("estilo");
+  });
+});
+
+describe("buildSummaryPrompt — time-of-day grounding", () => {
+  // Dates pinned in UTC; Sao Paulo is UTC-3 (no DST since 2019). So:
+  //   12:30 UTC  → 09:30 SP (manhã → "bom dia")
+  //   18:00 UTC  → 15:00 SP (tarde → "boa tarde")
+  //   03:00 UTC  → 00:00 SP (noite → "boa noite")
+  //   22:00 UTC  → 19:00 SP (noite → "boa noite")
+  it.each([
+    ["2026-04-24T12:30:00.000Z", "bom dia"],
+    ["2026-04-24T18:00:00.000Z", "boa tarde"],
+    ["2026-04-24T03:00:00.000Z", "boa noite"],
+    ["2026-04-24T22:00:00.000Z", "boa noite"],
+  ])("now=%s → saudação %s", (iso, greeting) => {
+    const { userPrompt } = buildSummaryPrompt(conv(), "fun", {
+      now: new Date(iso),
+    });
+    expect(userPrompt).toContain(`Hora atual (America/Sao_Paulo):`);
+    expect(userPrompt).toContain(`Saudação obrigatória na abertura: "${greeting}"`);
+  });
+
+  it("uses new Date() by default (no throw, emits a valid greeting)", () => {
+    const { userPrompt } = buildSummaryPrompt(conv(), "fun");
+    expect(userPrompt).toMatch(
+      /Saudação obrigatória na abertura: "(bom dia|boa tarde|boa noite)"/,
+    );
   });
 });
