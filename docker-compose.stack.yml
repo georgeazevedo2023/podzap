@@ -82,6 +82,13 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       CRON_SECRET: ${CRON_SECRET}
 
+      # --- n8n cron tick ---
+      # Bearer token usado pelo workflow n8n "Every 30s → Tick podzap"
+      # contra POST /api/worker/tick. Sem essa env, o endpoint retorna
+      # 503 NOT_CONFIGURED e os 3 crons (run-schedules,
+      # retry-pending-downloads, transcription-retry) não rodam.
+      WORKER_TICK_TOKEN: ${WORKER_TICK_TOKEN}
+
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
       interval: 30s
