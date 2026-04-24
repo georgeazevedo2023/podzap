@@ -43,6 +43,100 @@ type MissingRow = {
 const BATCH_SIZE = 50;
 const LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
+export type TranscriptionRetryResult = {
+  found: number;
+  emitted: number;
+};
+
+export type TranscriptionRetryLogger = {
+  info: (msg: string, meta?: Record<string, unknown>) => void;
+  warn: (msg: string, meta?: Record<string, unknown>) => void;
+  error: (msg: string, meta?: Record<string, unknown>) => void;
+};
+
+export type TranscriptionRetryHandlerCtx = {
+  step: {
+    run<T>(name: string, fn: () => Promise<T> | T): Promise<T>;
+  };
+  logger: TranscriptionRetryLogger;
+};
+
+/**
+ * Pure handler — extraído do Inngest wrapper pra ser chamado também do
+ * endpoint `/api/worker/tick` (n8n cron).
+ */
+export async function transcriptionRetryHandler(
+  ctx: TranscriptionRetryHandlerCtx,
+): Promise<TranscriptionRetryResult> {
+  const { step, logger } = ctx;
+
+  const missing = await step.run(
+    "find-missing-transcripts",
+    async (): Promise<MissingRow[]> => {
+      const admin = createAdminClient();
+      const lookbackAfter = new Date(Date.now() - LOOKBACK_MS).toISOString();
+
+      const { data: candidates, error } = await admin
+        .from("messages")
+        .select("id, tenant_id, type")
+        .in("type", ["audio", "image"])
+        .eq("media_download_status", "downloaded")
+        .gt("created_at", lookbackAfter)
+        .order("created_at", { ascending: false })
+        .limit(BATCH_SIZE * 4);
+
+      if (error) {
+        throw new Error(`transcription-retry find failed: ${error.message}`);
+      }
+
+      const rows = (candidates ?? []) as MissingRow[];
+      if (rows.length === 0) return [];
+
+      const ids = rows.map((r) => r.id);
+      const { data: existingTranscripts, error: tErr } = await admin
+        .from("transcripts")
+        .select("message_id")
+        .in("message_id", ids);
+
+      if (tErr) {
+        throw new Error(
+          `transcription-retry transcripts lookup failed: ${tErr.message}`,
+        );
+      }
+
+      const transcribed = new Set(
+        (existingTranscripts ?? []).map((t) => t.message_id as string),
+      );
+      const untranscribed = rows.filter((r) => !transcribed.has(r.id));
+      return untranscribed.slice(0, BATCH_SIZE);
+    },
+  );
+
+  if (missing.length === 0) {
+    logger.info("[transcription-retry] nothing to do");
+    return { found: 0, emitted: 0 };
+  }
+
+  await step.run("emit-captured-events", async () => {
+    await inngest.send(
+      missing.map((row) =>
+        messageCaptured.create({
+          messageId: row.id,
+          tenantId: row.tenant_id,
+          type: row.type,
+        }),
+      ),
+    );
+  });
+
+  const counts: TranscriptionRetryResult = {
+    found: missing.length,
+    emitted: missing.length,
+  };
+  logger.info("[transcription-retry] done", counts);
+  return counts;
+}
+
 export const transcriptionRetry = inngest.createFunction(
   {
     id: "transcription-retry",
@@ -50,70 +144,9 @@ export const transcriptionRetry = inngest.createFunction(
     triggers: [{ cron: "*/15 * * * *" }],
   },
   async ({ step, logger }) => {
-    const missing = await step.run(
-      "find-missing-transcripts",
-      async (): Promise<MissingRow[]> => {
-        const admin = createAdminClient();
-        const lookbackAfter = new Date(Date.now() - LOOKBACK_MS).toISOString();
-
-        // First: pull recently-downloaded audio/image rows.
-        const { data: candidates, error } = await admin
-          .from("messages")
-          .select("id, tenant_id, type")
-          .in("type", ["audio", "image"])
-          .eq("media_download_status", "downloaded")
-          .gt("created_at", lookbackAfter)
-          .order("created_at", { ascending: false })
-          .limit(BATCH_SIZE * 4);
-
-        if (error) {
-          throw new Error(`transcription-retry find failed: ${error.message}`);
-        }
-
-        const rows = (candidates ?? []) as MissingRow[];
-        if (rows.length === 0) return [];
-
-        // Then: pull the transcripts.message_id set so we can filter. A
-        // NOT EXISTS subquery would be cleaner but Supabase's query builder
-        // doesn't let us express it cheaply — two queries + in-memory diff
-        // is fine for BATCH_SIZE * 4 candidates.
-        const ids = rows.map((r) => r.id);
-        const { data: existingTranscripts, error: tErr } = await admin
-          .from("transcripts")
-          .select("message_id")
-          .in("message_id", ids);
-
-        if (tErr) {
-          throw new Error(`transcription-retry transcripts lookup failed: ${tErr.message}`);
-        }
-
-        const transcribed = new Set(
-          (existingTranscripts ?? []).map((t) => t.message_id as string),
-        );
-        const untranscribed = rows.filter((r) => !transcribed.has(r.id));
-        return untranscribed.slice(0, BATCH_SIZE);
-      },
-    );
-
-    if (missing.length === 0) {
-      logger.info("[transcription-retry] nothing to do");
-      return { found: 0, emitted: 0 };
-    }
-
-    await step.run("emit-captured-events", async () => {
-      await inngest.send(
-        missing.map((row) =>
-          messageCaptured.create({
-            messageId: row.id,
-            tenantId: row.tenant_id,
-            type: row.type,
-          }),
-        ),
-      );
+    return transcriptionRetryHandler({
+      step: step as TranscriptionRetryHandlerCtx["step"],
+      logger: logger as TranscriptionRetryLogger,
     });
-
-    const counts = { found: missing.length, emitted: missing.length };
-    logger.info("[transcription-retry] done", counts);
-    return counts;
   },
 );
