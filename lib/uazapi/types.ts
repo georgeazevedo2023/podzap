@@ -342,6 +342,58 @@ const normaliseMessageContent = (data: unknown): MessageContent => {
   return { kind: "other", rawType };
 };
 
+/**
+ * Normalise the `message` block of the UAZAPI wsmart shape into our
+ * internal `MessageContent`.
+ *
+ * NOTE: apenas TEXT é tratado aqui. Áudio e imagem (e outros tipos de mídia)
+ * serão adicionados num próximo roadmap — por ora caem em `{ kind: "other" }`
+ * para que o `persist.ts` armazene como `type=other` sem disparar a pipeline
+ * de transcrição (Groq / Gemini Vision).
+ */
+const normaliseUazapiMessageContent = (msg: unknown): MessageContent => {
+  if (!msg || typeof msg !== "object") {
+    return { kind: "other", rawType: "unknown" };
+  }
+  const m = msg as Record<string, unknown>;
+  const type = typeof m.type === "string" ? m.type : "";
+  const messageType = typeof m.messageType === "string" ? m.messageType : "";
+
+  const isText =
+    type === "text" ||
+    messageType === "Conversation" ||
+    messageType === "ExtendedText";
+
+  if (isText) {
+    const text = (m.text ?? m.content ?? "") as unknown;
+    return { kind: "text", text: String(text ?? "") };
+  }
+
+  return {
+    kind: "other",
+    rawType: String(messageType || type || "unknown"),
+  };
+};
+
+/**
+ * Detect whether `raw` is a UAZAPI wsmart-style envelope (as opposed to the
+ * legacy Evolution/Baileys shape that the rest of this module was built for).
+ * UAZAPI wsmart uses `EventType` (capitalised) + a flat `message` object at
+ * the top level; Evolution nests the content under `data.message`.
+ */
+const isUazapiShape = (raw: unknown, eventType: "messages" | "connection"): boolean => {
+  if (!raw || typeof raw !== "object") return false;
+  const r = raw as Record<string, unknown>;
+  const et = r.EventType;
+  if (typeof et !== "string") return false;
+  // Accept singular `message`/`connection` or plural `messages`/`connections`
+  if (eventType === "messages") {
+    if (et !== "messages" && et !== "message") return false;
+    return typeof r.message === "object" && r.message !== null;
+  }
+  return et === "connection" || et === "connections";
+};
+
 // ── Discriminated union of webhook events ───────────────────────────────
 
 /**
@@ -368,6 +420,39 @@ const eventMatches = (
 
 export const MessageUpsertEventSchema = z.preprocess(
   (raw) => {
+    // Shape #1: UAZAPI wsmart (what prod actually sends). Detect FIRST so we
+    // don't accidentally fall through to the Evolution-path with an empty
+    // `data` object.
+    if (isUazapiShape(raw, "messages")) {
+      const r = raw as Record<string, unknown>;
+      const msg = (r.message ?? {}) as Record<string, unknown>;
+      const chat = (r.chat ?? {}) as Record<string, unknown>;
+
+      const rawTs = msg.messageTimestamp;
+      const timestamp =
+        typeof rawTs === "number"
+          ? rawTs > 9_999_999_999
+            ? rawTs
+            : rawTs * 1000
+          : undefined;
+
+      return {
+        event: "message" as const,
+        instance: (r.instanceName || r.token || "") as string,
+        key: {
+          id: (msg.messageid ?? msg.id ?? "") as string,
+          remoteJid: (msg.chatid ?? chat.wa_chatid ?? "") as string,
+          fromMe: Boolean(msg.fromMe),
+          participant: msg.sender as string | undefined,
+        },
+        pushName: msg.senderName as string | undefined,
+        timestamp,
+        content: normaliseUazapiMessageContent(msg),
+      };
+    }
+
+    // Shape #2 (legacy): Evolution / Baileys envelope. Untouched from the
+    // original impl — kept for backwards-compat with existing fixtures/tests.
     if (!eventMatches(raw, { wirePrefix: "message", ownTag: "message" })) {
       return raw;
     }
@@ -400,6 +485,26 @@ export type MessageUpsertEvent = z.infer<typeof MessageUpsertEventSchema>;
 
 export const ConnectionUpdateEventSchema = z.preprocess(
   (raw) => {
+    // Shape #1: UAZAPI wsmart. Exact payload shape for `connection` events
+    // isn't fully documented — we extract defensively and fall back to
+    // `"unknown"` so the row validates instead of being dropped silently.
+    if (isUazapiShape(raw, "connection")) {
+      const r = raw as Record<string, unknown>;
+      const rawStatus =
+        (typeof r.state === "string" && r.state) ||
+        (typeof r.status === "string" && r.status) ||
+        "unknown";
+
+      return {
+        event: "connection" as const,
+        instance: (r.instanceName || r.token || "") as string,
+        status: rawStatus,
+        loggedIn: Boolean(r.loggedIn),
+        reason: typeof r.reason === "string" ? r.reason : undefined,
+      };
+    }
+
+    // Shape #2 (legacy): Evolution / Baileys. Unchanged.
     if (
       !eventMatches(raw, {
         wirePrefix: "connection",
@@ -439,8 +544,14 @@ export const IncomingWebhookEventSchema = z.preprocess(
   (raw) => {
     if (!raw || typeof raw !== "object") return raw;
     const r = raw as Record<string, unknown>;
-    const ev = (r.event ?? r.type ?? "") as string;
-    if (ev.startsWith("messages") || ev === "message" || ev === "messages.upsert") {
+    // Accept both legacy Evolution (`event` / `type`) and UAZAPI wsmart
+    // (`EventType`) top-level discriminators.
+    const ev = (r.event ?? r.type ?? r.EventType ?? "") as string;
+    if (
+      ev.startsWith("messages") ||
+      ev === "message" ||
+      ev === "messages.upsert"
+    ) {
       return raw;                                // MessageUpsertEventSchema handles it
     }
     if (ev.startsWith("connection") || ev === "connection.update") {

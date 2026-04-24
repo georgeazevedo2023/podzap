@@ -365,6 +365,7 @@ export async function attachInstance(
     .insert({
       tenant_id: tenantId,
       uazapi_instance_id: inst.id,
+      uazapi_instance_name: inst.name,
       uazapi_token_encrypted: tokenEncrypted,
       status: toDbStatus(normaliseStatus(inst.status)),
       phone: phoneFromOwner(inst.owner),
@@ -530,6 +531,7 @@ export async function createAndAttach(
     .insert({
       tenant_id: tenantId,
       uazapi_instance_id: created.id,
+      uazapi_instance_name: created.name,
       uazapi_token_encrypted: tokenEncrypted,
       status: toDbStatus(normaliseStatus(created.status)),
       phone: phoneFromOwner(created.owner),

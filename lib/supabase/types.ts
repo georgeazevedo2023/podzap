@@ -539,6 +539,7 @@ export type Database = {
           status: Database["public"]["Enums"]["whatsapp_instance_status"]
           tenant_id: string
           uazapi_instance_id: string
+          uazapi_instance_name: string | null
           uazapi_token_encrypted: string | null
           updated_at: string
         }
@@ -551,6 +552,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["whatsapp_instance_status"]
           tenant_id: string
           uazapi_instance_id: string
+          uazapi_instance_name?: string | null
           uazapi_token_encrypted?: string | null
           updated_at?: string
         }
@@ -563,6 +565,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["whatsapp_instance_status"]
           tenant_id?: string
           uazapi_instance_id?: string
+          uazapi_instance_name?: string | null
           uazapi_token_encrypted?: string | null
           updated_at?: string
         }

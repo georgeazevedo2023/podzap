@@ -299,9 +299,85 @@ skill also mentions `status` and the wildcard `all` but neither was
 round-tripped — handle unknown event strings defensively in the webhook
 route.
 
-Our single webhook route fans-out by `event` / `type`.
+Our single webhook route fans-out by `event` / `type` / `EventType` and
+accepts **two** envelope shapes (see `MessageUpsertEventSchema` in
+`lib/uazapi/types.ts`):
 
-#### Incoming message envelope (text)
+1. **UAZAPI wsmart shape** — what `wsmart.uazapi.com` actually delivers in
+   production (captured live 2026-04-23 via the n8n forwarding flow).
+   This is the canonical path.
+2. **Evolution/Baileys shape** — what the first pass of Fase 4 was built
+   against, before a real scanned instance was available. Kept alive as
+   a fallback so existing fixtures and legacy integrations keep working;
+   new code should target the wsmart shape.
+
+#### Incoming message envelope (text) — UAZAPI wsmart shape
+
+```json
+{
+  "BaseUrl": "https://wsmart.uazapi.com",
+  "EventType": "messages",
+  "instanceName": "podzap-13d4eb57-1776932610527",
+  "chat": {
+    "wa_chatid": "120363012345678@g.us",
+    "wa_isGroup": true,
+    "name": "Group Name"
+  },
+  "message": {
+    "messageid": "3EB089F8ECEDAC7A9E4BFD",
+    "id": "558193856099:3EB089F8ECEDAC7A9E4BFD",
+    "chatid": "120363012345678@g.us",
+    "fromMe": false,
+    "sender": "27578253496368:37@lid",
+    "senderName": "Soyaux",
+    "messageTimestamp": 1776993684000,
+    "messageType": "Conversation",
+    "type": "text",
+    "text": "Hello from WhatsApp",
+    "content": "Hello from WhatsApp",
+    "wasSentByApi": false
+  },
+  "owner": "558193856099",
+  "token": "88ffe2b8-095c-4942-b37d-a8d365187b55"
+}
+```
+
+Field normalisation (wsmart → internal):
+
+| internal (`MessageUpsertEvent`) | source on the wire | notes |
+|---|---|---|
+| `event`                   | literal `"message"`                     | discriminator |
+| `instance`                | `instanceName` (fallback `token`)       | **routes to `whatsapp_instances` — see instance lookup below** |
+| `key.id`                  | `message.messageid` (fallback `message.id`) | dedup key |
+| `key.remoteJid`           | `message.chatid` (fallback `chat.wa_chatid`) |  |
+| `key.fromMe`              | `message.fromMe`                         |  |
+| `key.participant`         | `message.sender`                         | LID-format sender |
+| `pushName`                | `message.senderName`                     |  |
+| `timestamp`               | `message.messageTimestamp`               | already in ms on the wire; values `< 10^10` are multiplied by 1000 for paridade with the Evolution shape |
+| `content.kind="text"`     | `message.type === "text"` OR `messageType ∈ {Conversation, ExtendedText}` | text body from `message.text` / `message.content` |
+| `content.kind="other"`    | everything else                          | audio / image / video / sticker / doc — currently dropped to `other` (next roadmap) |
+
+##### Instance lookup (lookup precedence)
+
+The wsmart envelope does **not** include the short internal id that we
+used to store as `whatsapp_instances.uazapi_instance_id` (e.g.
+`"r096894b4a51062"`). Migration
+[`0009_uazapi_instance_name.sql`](../../db/migrations/0009_uazapi_instance_name.sql)
+added a nullable `uazapi_instance_name` column for the `instanceName`
+and backfilled the single pre-existing production row.
+`lib/webhooks/persist.ts::findInstanceByUazapiRef` looks up in this
+order:
+
+1. `eq("uazapi_instance_name", event.instance)` — prod path. Matches on
+   the `instanceName` the webhook carries.
+2. `eq("uazapi_instance_id", event.instance)` — legacy / Evolution-shape
+   fallback. Matches on the short id for rows created before the
+   migration (or fixtures still using the old envelope).
+
+Both queries are issued sequentially with `.eq()` rather than `.or()`
+so the externally-provided ref can't smuggle PostgREST grammar.
+
+#### Incoming message envelope (text) — Evolution / Baileys shape (legacy)
 
 ```json
 {
@@ -324,7 +400,22 @@ Our single webhook route fans-out by `event` / `type`.
 }
 ```
 
-#### Audio
+#### Audio / Image / Video — status
+
+> **Next roadmap.** As of 2026-04-23 only **text** is normalised from the
+> UAZAPI wsmart shape. Audio / image / video / sticker / document all
+> degrade to `content.kind="other"` and are persisted as `type=other`
+> without firing the transcription or vision pipeline. This is intentional
+> — the fields to extract (`mediaUrl`, `mimetype`, `seconds`, `caption`)
+> were not present in the payload sample we had, and we didn't want to
+> guess the shape.
+>
+> When adding media support: capture a real audio/image payload from the
+> n8n execution log, then extend `normaliseUazapiMessageContent` in
+> `lib/uazapi/types.ts`. The Evolution-shape branches for audio/image/
+> video (below) still work for test fixtures.
+
+#### Audio — Evolution / Baileys shape (legacy / fixtures only)
 
 ```json
 {

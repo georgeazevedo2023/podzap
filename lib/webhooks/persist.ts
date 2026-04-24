@@ -44,6 +44,70 @@ type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
 type MessageInsert = Database["public"]["Tables"]["messages"]["Insert"];
 type MessageType = Database["public"]["Enums"]["message_type"];
 
+type InstanceLookupRow = { id: string; tenant_id: string };
+type InstanceLookupResult = {
+  data: InstanceLookupRow | null;
+  error: { message: string } | null;
+};
+
+/**
+ * Resolve a `whatsapp_instances` row from whatever identifier UAZAPI sent us.
+ *
+ * Why two lookups: the real UAZAPI webhook payload ships `instanceName`
+ * (e.g. `"podzap-13d4eb57-1776932610527"`) in the envelope, whereas our
+ * legacy/test fixtures (Evolution-shape) ship the short `instance` id
+ * (e.g. `"r096894b4a51062"`). Agente 1 added the nullable
+ * `uazapi_instance_name` column in migration 0009 and backfills it on new
+ * inserts; Agente 2 made the zod preprocess normalise `event.instance` to
+ * the right field per shape. Here we try the name first (prod path), then
+ * fall back to the short id (legacy + fixtures).
+ *
+ * Two sequential queries instead of a single `.or()` because the ref comes
+ * from an external webhook and could in theory contain characters that
+ * need escaping inside PostgREST's `.or()` grammar (commas, parens). Two
+ * `.eq()` calls sidestep the whole concern — neither query can be coerced
+ * into reading anything outside its column.
+ *
+ * Returns the same `{ data, error }` shape as `.maybeSingle()`: `data=null,
+ * error=null` means "not found", a non-null `error` means the query itself
+ * failed.
+ */
+async function findInstanceByUazapiRef(
+  supabase: ReturnType<typeof createAdminClient>,
+  ref: string,
+): Promise<InstanceLookupResult> {
+  // 1. Try by name first — the prod UAZAPI-shape path.
+  const byName = await supabase
+    .from("whatsapp_instances")
+    .select("id, tenant_id")
+    .eq("uazapi_instance_name", ref)
+    .maybeSingle();
+
+  if (byName.error) {
+    return { data: null, error: { message: byName.error.message } };
+  }
+  if (byName.data) {
+    return { data: byName.data as InstanceLookupRow, error: null };
+  }
+
+  // 2. Fall back to short id — legacy/Evolution-shape path + older rows
+  //    created before migration 0009 that don't have a name yet.
+  const byId = await supabase
+    .from("whatsapp_instances")
+    .select("id, tenant_id")
+    .eq("uazapi_instance_id", ref)
+    .maybeSingle();
+
+  if (byId.error) {
+    return { data: null, error: { message: byId.error.message } };
+  }
+
+  return {
+    data: byId.data ? (byId.data as InstanceLookupRow) : null,
+    error: null,
+  };
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 //  Helpers
 // ──────────────────────────────────────────────────────────────────────────
@@ -221,11 +285,8 @@ export async function persistIncomingMessage(
     return { status: "ignored", reason: "missing instance id" };
   }
 
-  const { data: instanceRow, error: instanceErr } = await supabase
-    .from("whatsapp_instances")
-    .select("id, tenant_id")
-    .eq("uazapi_instance_id", instanceUazapiId)
-    .maybeSingle();
+  const { data: instanceRow, error: instanceErr } =
+    await findInstanceByUazapiRef(supabase, instanceUazapiId);
 
   if (instanceErr) {
     return {
@@ -402,11 +463,8 @@ export async function updateInstanceConnection(
     return { status: "ignored", reason: "missing instance id" };
   }
 
-  const { data: instanceRow, error: lookupErr } = await supabase
-    .from("whatsapp_instances")
-    .select("id, tenant_id")
-    .eq("uazapi_instance_id", instanceUazapiId)
-    .maybeSingle();
+  const { data: instanceRow, error: lookupErr } =
+    await findInstanceByUazapiRef(supabase, instanceUazapiId);
 
   if (lookupErr) {
     return {

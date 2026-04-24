@@ -323,3 +323,138 @@ describe("parseWebhookBody", () => {
     expect(res).toMatchObject({ ok: false, status: 400 });
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+//  parseWebhookBody — UAZAPI wsmart shape
+//  Real payload shape captured from wsmart.uazapi.com on 2026-04-23 via the
+//  n8n forwarding flow. See docs/integrations/uazapi.md for the full sample.
+// ──────────────────────────────────────────────────────────────────────────
+
+describe("parseWebhookBody — UAZAPI wsmart shape", () => {
+  it("accepts a text message from the real UAZAPI payload", () => {
+    const body = {
+      BaseUrl: "https://wsmart.uazapi.com",
+      EventType: "messages",
+      instanceName: "podzap-13d4eb57-1776932610527",
+      chat: {
+        wa_chatid: "120363424039524910@g.us",
+        wa_isGroup: true,
+        name: "PRO TOOLS BOX| NETWORK PRIME",
+      },
+      message: {
+        messageid: "3EB089F8ECEDAC7A9E4BFD",
+        id: "558193856099:3EB089F8ECEDAC7A9E4BFD",
+        chatid: "120363424039524910@g.us",
+        fromMe: false,
+        sender: "27578253496368:37@lid",
+        senderName: "Soyaux",
+        messageTimestamp: 1776993684000,
+        messageType: "Conversation",
+        type: "text",
+        text: "teste de texto",
+        content: "teste de texto",
+        wasSentByApi: false,
+      },
+      owner: "558193856099",
+      token: "88ffe2b8-095c-4942-b37d-a8d365187b55",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.instance).toBe("podzap-13d4eb57-1776932610527");
+      expect(res.event.key.id).toBe("3EB089F8ECEDAC7A9E4BFD");
+      expect(res.event.key.remoteJid).toBe("120363424039524910@g.us");
+      expect(res.event.key.fromMe).toBe(false);
+      expect(res.event.pushName).toBe("Soyaux");
+      // messageTimestamp already in ms → passes through unchanged.
+      expect(res.event.timestamp).toBe(1776993684000);
+      expect(res.event.content.kind).toBe("text");
+      if (res.event.content.kind === "text") {
+        expect(res.event.content.text).toBe("teste de texto");
+      }
+    }
+  });
+
+  it("degrades audio messages to kind='other' (media is next roadmap)", () => {
+    const body = {
+      EventType: "messages",
+      instanceName: "podzap-xyz",
+      message: {
+        messageid: "AUDIO01",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        senderName: "Alice",
+        messageTimestamp: 1776993684000,
+        messageType: "AudioMessage",
+        type: "audio",
+      },
+      token: "tkn",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.content.kind).toBe("other");
+      if (res.event.content.kind === "other") {
+        expect(res.event.content.rawType).toBe("AudioMessage");
+      }
+    }
+  });
+
+  it("falls back to token when instanceName is absent", () => {
+    const body = {
+      EventType: "messages",
+      message: {
+        messageid: "M1",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        messageTimestamp: 1776993684000,
+        type: "text",
+        text: "hi",
+      },
+      token: "tok-abc",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.instance).toBe("tok-abc");
+    }
+  });
+
+  it("upscales timestamp from seconds to milliseconds when small", () => {
+    const body = {
+      EventType: "messages",
+      instanceName: "inst-1",
+      message: {
+        messageid: "M2",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        messageTimestamp: 1776993684, // seconds
+        type: "text",
+        text: "hi",
+      },
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.timestamp).toBe(1776993684_000);
+    }
+  });
+
+  it("accepts a UAZAPI connection event defensively", () => {
+    const body = {
+      EventType: "connection",
+      instanceName: "inst-1",
+      status: "connected",
+      loggedIn: true,
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.event.event).toBe("connection");
+      if (res.event.event === "connection") {
+        expect(res.event.instance).toBe("inst-1");
+        expect(res.event.status).toBe("connected");
+      }
+    }
+  });
+});

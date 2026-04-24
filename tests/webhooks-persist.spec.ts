@@ -23,6 +23,7 @@ type InstanceRow = {
   id: string;
   tenant_id: string;
   uazapi_instance_id: string;
+  uazapi_instance_name: string | null;
   status: string;
   last_seen_at: string | null;
   created_at: string;
@@ -243,6 +244,7 @@ function seedInstance(overrides: Partial<InstanceRow> = {}): InstanceRow {
     id: randomUUID(),
     tenant_id: TENANT,
     uazapi_instance_id: UAZ_INSTANCE,
+    uazapi_instance_name: null,
     status: "connected",
     last_seen_at: now,
     created_at: now,
@@ -654,5 +656,138 @@ describe("handleWebhookEvent — dispatch", () => {
       },
     });
     expect(res).toMatchObject({ ok: false, status: 400 });
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+//  UAZAPI wsmart shape — real-world payload end-to-end
+//
+//  Regression guard for the bug fixed in 0009_uazapi_instance_name.sql +
+//  the corresponding preprocess/persist changes: UAZAPI `wsmart.uazapi.com`
+//  sends `{ EventType, instanceName, message, ... }` rather than the
+//  Evolution-shape the original parser assumed.
+// ──────────────────────────────────────────────────────────────────────────
+
+const UAZAPI_INSTANCE_NAME = "podzap-13d4eb57-1776932610527";
+
+function uazapiTextBody(overrides: Partial<{
+  instanceName: string;
+  token: string;
+  messageid: string;
+  chatid: string;
+  senderName: string;
+  text: string;
+  fromMe: boolean;
+}> = {}) {
+  return {
+    BaseUrl: "https://wsmart.uazapi.com",
+    EventType: "messages",
+    instanceName: overrides.instanceName ?? UAZAPI_INSTANCE_NAME,
+    chat: {
+      wa_chatid: overrides.chatid ?? GROUP_JID,
+      wa_isGroup: true,
+      name: "Some Group",
+    },
+    message: {
+      messageid: overrides.messageid ?? "UAZ_" + randomUUID(),
+      id: "558193856099:ABC",
+      chatid: overrides.chatid ?? GROUP_JID,
+      fromMe: overrides.fromMe ?? false,
+      sender: "27578253496368:37@lid",
+      senderName: overrides.senderName ?? "Soyaux",
+      messageTimestamp: 1776993684000,
+      messageType: "Conversation",
+      type: "text",
+      text: overrides.text ?? "hello from prod",
+      content: overrides.text ?? "hello from prod",
+      wasSentByApi: false,
+    },
+    owner: "558193856099",
+    token: overrides.token ?? "88ffe2b8-095c-4942-b37d-a8d365187b55",
+  };
+}
+
+describe("persistIncomingMessage — UAZAPI wsmart shape", () => {
+  it("resolves the tenant via uazapi_instance_name (real prod path)", async () => {
+    const inst = seedInstance({
+      uazapi_instance_id: "r096894b4a51062",
+      uazapi_instance_name: UAZAPI_INSTANCE_NAME,
+    });
+    seedGroup(inst, { is_monitored: true });
+
+    const parsed = IncomingWebhookEventSchema.safeParse(uazapiTextBody());
+    if (!parsed.success) throw new Error("UAZAPI shape rejected by schema");
+    if (parsed.data.event !== "message") throw new Error("expected message");
+
+    const res = await persistIncomingMessage(parsed.data);
+    expect(res.status).toBe("persisted");
+    expect(db.messages).toHaveLength(1);
+    const stored = db.messages[0];
+    expect(stored.content).toBe("hello from prod");
+    expect(stored.sender_name).toBe("Soyaux");
+    expect(stored.type).toBe("text");
+  });
+
+  it("falls back to uazapi_instance_id when name column is still null", async () => {
+    // Legacy row attached before migration 0009 — name is NULL but the
+    // webhook payload shipped `instanceName`. persist.ts should try by
+    // name (miss), then fall back to id. To exercise the fallback, the
+    // payload's instance ref has to match the short id, which happens
+    // when something manually re-posts an Evolution-shape payload.
+    const inst = seedInstance({
+      uazapi_instance_id: "r_legacy_123",
+      uazapi_instance_name: null,
+    });
+    seedGroup(inst, { is_monitored: true });
+
+    const event = textMessageEvent({ instance: "r_legacy_123", text: "legacy" });
+    if (event.event !== "message") throw new Error("expected message");
+
+    const res = await persistIncomingMessage(event);
+    expect(res.status).toBe("persisted");
+    expect(db.messages[0].content).toBe("legacy");
+  });
+
+  it("ignores when neither name nor id match anything in the DB", async () => {
+    const inst = seedInstance({
+      uazapi_instance_id: "r_other",
+      uazapi_instance_name: "podzap-other",
+    });
+    seedGroup(inst, { is_monitored: true });
+
+    const parsed = IncomingWebhookEventSchema.safeParse(
+      uazapiTextBody({ instanceName: "podzap-does-not-exist" }),
+    );
+    if (!parsed.success) throw new Error("UAZAPI shape rejected by schema");
+    if (parsed.data.event !== "message") throw new Error("expected message");
+
+    const res = await persistIncomingMessage(parsed.data);
+    expect(res.status).toBe("ignored");
+    expect(res.reason).toMatch(/unknown instance/);
+  });
+
+  it("UAZAPI audio degrades to type=other, media_download_status=skipped", async () => {
+    const inst = seedInstance({
+      uazapi_instance_id: "r096894b4a51062",
+      uazapi_instance_name: UAZAPI_INSTANCE_NAME,
+    });
+    seedGroup(inst, { is_monitored: true });
+
+    const audioBody = uazapiTextBody();
+    // Mutate to audio shape — no mediaUrl, no text.
+    audioBody.message.type = "audio";
+    audioBody.message.messageType = "AudioMessage";
+    audioBody.message.text = "";
+    audioBody.message.content = "";
+
+    const parsed = IncomingWebhookEventSchema.safeParse(audioBody);
+    if (!parsed.success) throw new Error("UAZAPI shape rejected by schema");
+    if (parsed.data.event !== "message") throw new Error("expected message");
+
+    const res = await persistIncomingMessage(parsed.data);
+    expect(res.status).toBe("persisted");
+    expect(db.messages[0].type).toBe("other");
+    // No mediaUrl extracted → not queued for download.
+    expect(db.messages[0].media_download_status).toBe("skipped");
   });
 });

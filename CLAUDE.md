@@ -219,7 +219,8 @@ Referência completa: `docs/integrations/uazapi.md` (endpoints verificados live 
   4. UI renderiza `<img src="data:image/png;base64,${qrCodeBase64}">` + inicia polling
   5. Polling `getInstanceStatus(instanceToken)` a cada 2-3s até `'connected'`
   6. (Fase 4) webhook `connection` atualiza DB em tempo real
-- **Webhooks**: `POST /webhook` body `{ url, events: ['messages', 'connection'], enabled: true }` com token de instância. Evento `event` na payload de entrada fan-out por tipo.
+- **Webhooks**: `POST /webhook` body `{ url, events: ['messages', 'connection'], enabled: true }` com token de instância. Payload real do `wsmart.uazapi.com` usa shape `{ EventType, instanceName, message: {...} }` (**não** Evolution/Baileys). Schema em `lib/uazapi/types.ts` aceita ambos: UAZAPI-shape primeiro (prod), Evolution-shape fallback (fixtures). Só **texto** está implementado para wsmart-shape — áudio/imagem degradam pra `type=other` (próximo roadmap).
+- **Lookup de instância no webhook**: `lib/webhooks/persist.ts::findInstanceByUazapiRef` tenta `whatsapp_instances.uazapi_instance_name` (UAZAPI shape traz `instanceName`) primeiro, fallback pra `uazapi_instance_id` (Evolution shape / legacy). Coluna `uazapi_instance_name` adicionada em migration `0009_uazapi_instance_name.sql`.
 - **Delete**: `DELETE /instance` com **token de instância** (não admin — retorna 401).
 - **QR quirk**: servidor devolve `data:image/png;base64,…` com prefixo; o client em `lib/uazapi/client.ts` tira o prefixo e o caller adiciona de volta uma única vez.
 - **Rate limit**: `UazapiClient` tem token bucket interno; API routes têm rate limit in-memory 30/min/tenant. Em produção, considerar Upstash para limitar cross-instance.
