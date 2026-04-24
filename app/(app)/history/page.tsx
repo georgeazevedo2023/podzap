@@ -231,7 +231,10 @@ export default async function HistoryPage({
           display: 'flex',
           flexDirection: 'column',
           gap: 18,
-          maxWidth: 960,
+          // 2-column grid de mensagens precisa de mais largura; estava em
+          // 960 (confortável pra 1-col). 1320 segura 2 cards de ~620 + gap
+          // sem ficar espalhado.
+          maxWidth: 1320,
         }}
       >
         <HistoryFilterBar
@@ -243,21 +246,12 @@ export default async function HistoryPage({
           <EmptyState filtered={!!selectedGroupId} />
         ) : (
           <>
-            {/*
-              Pagination at BOTH top and bottom of the list. Bottom is where
-              you land after scrolling the current page; top is where you
-              land after clicking "próxima" (the next page's content starts
-              below it). Without the top copy, users mid-scroll had no visual
-              affordance that more pages existed — reported as "paginação
-              ainda não disponível" even when it was rendering below fold.
-            */}
-            <HistoryPagination
-              page={page}
-              total={total}
-              pageSize={HISTORY_PAGE_SIZE}
-              groupId={selectedGroupId || null}
-            />
             <MessagesList initial={items} />
+            {/*
+              Padrão clássico: paginação só no rodapé. Testamos top+bottom
+              e o usuário preferiu a forma limpa (pedido direto — preserva
+              o padrão mental de "chegou ao fim → escolho página").
+            */}
             <HistoryPagination
               page={page}
               total={total}

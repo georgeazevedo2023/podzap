@@ -85,13 +85,27 @@ export function MessagesList({ initial }: MessagesListProps) {
         </span>
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-        }}
-      >
+      {/*
+        Grid 2-col em viewports wide, 1-col em mobile. Altura intrínseca por
+        card (grid auto-rows:auto), sem forçar equal-height — caption/transcript
+        podem inflar um card e deixar o outro curto sem buraco visual.
+
+        Inline <style> scoped por className local pra evitar edição em
+        globals.css por uma única tela. Threshold 900px bate com o breakpoint
+        já usado em /home.
+      */}
+      <style>{`
+        .history-grid {
+          display: grid;
+          gap: 12px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          align-items: start;
+        }
+        @media (max-width: 900px) {
+          .history-grid { grid-template-columns: minmax(0, 1fr); }
+        }
+      `}</style>
+      <div className="history-grid">
         {initial.map((item) => (
           <MessageRow
             key={item.id}
