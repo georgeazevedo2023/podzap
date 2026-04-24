@@ -52,26 +52,49 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
 
   // Also fetch the monitored count separately — the paged result gives us
   // only rows for this page, but the subtitle needs the full count.
-  const [instance, groupsPage, monitoredCountResult] = await Promise.all([
-    getCurrentInstance(tenant.id),
-    listGroups(tenant.id, { page, pageSize: PAGE_SIZE, search, monitoredOnly }),
-    listGroups(tenant.id, { monitoredOnly: true, pageSize: 1 }),
-  ]);
+  const [instance, groupsPage, monitoredCountResult, totalCountResult] =
+    await Promise.all([
+      getCurrentInstance(tenant.id),
+      listGroups(tenant.id, {
+        page,
+        pageSize: PAGE_SIZE,
+        search,
+        monitoredOnly,
+      }),
+      listGroups(tenant.id, { monitoredOnly: true, pageSize: 1 }),
+      // Total real (sem search nem filtro) — antes o subtitle usava
+      // groupsPage.total que reflete o resultado filtrado, causando
+      // "4 monitorados de 0" quando a busca não casava ninguém.
+      listGroups(tenant.id, { pageSize: 1 }),
+    ]);
 
   const monitoredCount = monitoredCountResult.total;
+  const totalCount = totalCountResult.total;
   const hasInstance = instance !== null;
   const hasConnectedInstance =
     hasInstance && instance.status === 'connected';
+
+  let subtitle: string;
+  if (!hasInstance) {
+    subtitle = 'conecta o WhatsApp pra listar seus grupos';
+  } else if (search && search.length > 0) {
+    subtitle =
+      groupsPage.total === 0
+        ? `nenhum grupo bate com "${search}" (${totalCount} no total)`
+        : `${groupsPage.total} bate${
+            groupsPage.total === 1 ? '' : 'm'
+          } com "${search}" · ${monitoredCount} monitorados no total`;
+  } else if (monitoredOnly) {
+    subtitle = `${monitoredCount} monitorados`;
+  } else {
+    subtitle = `${monitoredCount} monitorados de ${totalCount}`;
+  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
       <TopBar
         title="Grupos"
-        subtitle={
-          hasInstance
-            ? `${monitoredCount} monitorados de ${groupsPage.total}`
-            : 'conecta o WhatsApp pra listar seus grupos'
-        }
+        subtitle={subtitle}
         accent="purple"
         breadcrumb="podZAP · Fase 3"
         actions={hasConnectedInstance ? <SyncButton /> : null}

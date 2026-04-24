@@ -198,7 +198,14 @@ export async function listGroups(
   }
   if (opts?.search && opts.search.trim().length > 0) {
     const q = opts.search.trim();
-    query = query.ilike("name", `%${q}%`);
+    // Busca casa no name OU no JID (com ou sem @g.us). Alguns grupos
+    // vêm do UAZAPI com `subject/name` vazio — pro user conseguir
+    // achar pelo ID copiado do WhatsApp, a busca cobre os dois campos.
+    // PostgREST syntax: `or=(name.ilike.*q*,uazapi_group_jid.ilike.*q*)`.
+    const escaped = q.replace(/[,()]/g, " ").trim();
+    query = query.or(
+      `name.ilike.%${escaped}%,uazapi_group_jid.ilike.%${escaped}%`,
+    );
   }
 
   const { data, error, count } = await query
@@ -332,7 +339,12 @@ export async function syncGroups(
   let synced = 0;
   for (const g of groups) {
     const existing = existingByJid.get(g.jid);
-    const name = g.name ?? g.jid;
+    // UAZAPI às vezes retorna `name: ""` (string vazia) pra grupos que
+    // não têm subject setado no WhatsApp. `??` só cobriria null/undefined,
+    // então empty string passaria direto e o user não acharia o grupo
+    // na busca nem entenderia o que é. Fallback pro JID quando vazio.
+    const trimmedName = typeof g.name === "string" ? g.name.trim() : "";
+    const name = trimmedName.length > 0 ? trimmedName : g.jid;
     const pictureUrl = g.pictureUrl ?? null;
     const memberCount =
       typeof g.size === "number"

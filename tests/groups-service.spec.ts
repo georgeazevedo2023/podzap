@@ -67,7 +67,8 @@ type AnyRow = Record<string, unknown>;
 type FilterOp =
   | { kind: "eq"; col: string; val: unknown }
   | { kind: "neq"; col: string; val: unknown }
-  | { kind: "ilike"; col: string; pattern: string };
+  | { kind: "ilike"; col: string; pattern: string }
+  | { kind: "or"; clauses: Array<{ col: string; pattern: string }> };
 
 /**
  * Chainable query builder that matches the subset of supabase-js the
@@ -100,6 +101,18 @@ function makeBuilder(table: keyof typeof db) {
       state.filters.every((f) => {
         if (f.kind === "eq") return r[f.col] === f.val;
         if (f.kind === "neq") return r[f.col] !== f.val;
+        if (f.kind === "or") {
+          return f.clauses.some((c) => {
+            const v = r[c.col];
+            if (typeof v !== "string") return false;
+            const escaped = c.pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+            const rx = new RegExp(
+              "^" + escaped.replace(/%/g, ".*") + "$",
+              "i",
+            );
+            return rx.test(v);
+          });
+        }
         if (f.kind === "ilike") {
           const v = r[f.col];
           if (typeof v !== "string") return false;
@@ -181,6 +194,19 @@ function makeBuilder(table: keyof typeof db) {
       col: col as string,
       pattern: pattern as string,
     });
+    return api;
+  };
+  // `.or("name.ilike.%q%,uazapi_group_jid.ilike.%q%")` — só implementamos
+  // o subset ilike porque é o que o service usa. Cada cláusula é "col.op.pattern".
+  api.or = (expr: unknown) => {
+    const clauses = (expr as string)
+      .split(",")
+      .map((raw) => {
+        const m = /^([^.]+)\.ilike\.(.+)$/.exec(raw.trim());
+        return m ? { col: m[1], pattern: m[2] } : null;
+      })
+      .filter((c): c is { col: string; pattern: string } => c !== null);
+    state.filters.push({ kind: "or", clauses });
     return api;
   };
   api.order = (col: unknown, opts?: unknown) => {
