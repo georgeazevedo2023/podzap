@@ -25,6 +25,7 @@ import { listAudios, type AudioView } from '@/lib/audios/service';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
 import { DeliveryControls } from './DeliveryControls';
+import { PodcastsHero } from './PodcastsHero';
 
 /** Upper bound on episodes shown. Matches `listSummaries` cap (100). */
 const EPISODE_LIMIT = 50;
@@ -107,6 +108,17 @@ export default async function PodcastsPage() {
   const { tenant } = context;
   const episodes = await loadEpisodes(tenant.id);
 
+  // Stats agregados pro hero — calculados dos mesmos rows já carregados
+  // pra evitar round-trip extra.
+  const totalEpisodes = episodes.length;
+  const totalMinutes = Math.round(
+    episodes.reduce((sum, ep) => sum + (ep.audio?.durationSeconds ?? 0), 0) /
+      60,
+  );
+  const uniqueGroups = new Set(
+    episodes.map((ep) => ep.summary.groupId).filter(Boolean),
+  ).size;
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <TopBar
@@ -124,6 +136,14 @@ export default async function PodcastsPage() {
           gap: 18,
         }}
       >
+        <PodcastsHero
+          stats={{
+            totalEpisodes,
+            totalMinutes,
+            uniqueGroups,
+          }}
+        />
+
         {episodes.length === 0 ? (
           <EmptyState />
         ) : (

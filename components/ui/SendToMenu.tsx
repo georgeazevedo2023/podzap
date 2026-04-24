@@ -13,11 +13,24 @@
  * Se não tiver, exibe link "cadastrar meu WhatsApp" que abre um
  * segundo modal pra o user preencher.
  *
- * Component reusável entre HeroPlayer (/home) e RedeliverButton
+ * Component reusável entre HeroPlayer (/home) e DeliveryControls
  * (/podcasts) — ambos têm o mesmo quadro de decisão sobre destino.
+ *
+ * **Portal**: o menu, toast e modais renderizam via `createPortal` para
+ * `document.body` — o HeroPlayer (e outros containers) usam
+ * `overflow: hidden` pros blobs decorativos, que clippa elementos
+ * absolutos internos. Portal escapa o clip e posiciona via
+ * `getBoundingClientRect` do botão âncora.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 
 export type SendTarget = 'listen' | 'group' | 'me' | 'contact';
 
@@ -121,12 +134,42 @@ export function SendToMenu({
   const [phoneModal, setPhoneModal] = useState(false);
   const [contactModal, setContactModal] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  // Close on outside click.
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Update anchor rect whenever the menu opens or the viewport changes
+  // so the portal tracks the button even after scroll / resize.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      if (btnRef.current) {
+        setAnchorRect(btnRef.current.getBoundingClientRect());
+      }
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open]);
+
+  // Close on outside click. Since the menu is portaled, we have to check
+  // both the button container AND the menu itself before dismissing.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -186,9 +229,22 @@ export function SendToMenu({
 
   const buttonClass = variant === 'primary' ? 'btn btn-zap' : 'btn btn-ghost';
 
+  // Posição do menu portalado: 8px abaixo da borda inferior do botão,
+  // alinhado à direita. Usa viewport coords (position: fixed) porque o
+  // portal vive em document.body, não no container do botão.
+  const menuStyle: React.CSSProperties | undefined = anchorRect
+    ? {
+        position: 'fixed',
+        top: anchorRect.bottom + 8,
+        left: anchorRect.right - 280,
+        minWidth: 260,
+      }
+    : undefined;
+
   return (
     <div ref={rootRef} style={{ position: 'relative', display: 'inline-block' }}>
       <button
+        ref={btnRef}
         type="button"
         className={buttonClass}
         disabled={busy}
@@ -209,74 +265,80 @@ export function SendToMenu({
         </span>
       </button>
 
-      {open && !busy && (
-        <div
-          role="menu"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            minWidth: 260,
-            background: 'var(--surface)',
-            border: '2.5px solid var(--stroke)',
-            borderRadius: 'var(--radius-md)',
-            boxShadow: 'var(--shadow-chunk)',
-            padding: 6,
-            zIndex: 50,
-          }}
-        >
-          <MenuItem
-            icon="🔊"
-            title="Só escutar"
-            desc="toca o preview aqui; nada é enviado"
-            onClick={() => handlePick('listen')}
-          />
-          <MenuItem
-            icon="👥"
-            title="Enviar ao grupo"
-            desc="manda no grupo de origem (whatsApp)"
-            onClick={() => handlePick('group')}
-            danger
-          />
-          <MenuItem
-            icon="📱"
-            title="Enviar pra mim"
-            desc="pro meu WhatsApp cadastrado"
-            onClick={() => handlePick('me')}
-          />
-          <MenuItem
-            icon="👤"
-            title="Outro contato…"
-            desc="digita um número na hora"
-            onClick={() => handlePick('contact')}
-          />
-        </div>
-      )}
+      {mounted &&
+        open &&
+        !busy &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{
+              ...menuStyle,
+              background: 'var(--surface)',
+              border: '2.5px solid var(--stroke)',
+              borderRadius: 'var(--radius-md)',
+              boxShadow: 'var(--shadow-chunk)',
+              padding: 6,
+              zIndex: 10000,
+            }}
+          >
+            <MenuItem
+              icon="🔊"
+              title="Só escutar"
+              desc="toca o preview aqui; nada é enviado"
+              onClick={() => handlePick('listen')}
+            />
+            <MenuItem
+              icon="👥"
+              title="Enviar ao grupo"
+              desc="manda no grupo de origem (whatsApp)"
+              onClick={() => handlePick('group')}
+              danger
+            />
+            <MenuItem
+              icon="📱"
+              title="Enviar pra mim"
+              desc="pro meu WhatsApp cadastrado"
+              onClick={() => handlePick('me')}
+            />
+            <MenuItem
+              icon="👤"
+              title="Outro contato…"
+              desc="digita um número na hora"
+              onClick={() => handlePick('contact')}
+            />
+          </div>,
+          document.body,
+        )}
 
-      {toast && (
-        <div
-          role="status"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            right: 0,
-            padding: '6px 12px',
-            background: toastOk ? 'var(--zap-500)' : 'var(--red-500)',
-            color: '#fff',
-            border: '2.5px solid var(--stroke)',
-            borderRadius: 'var(--radius-pill)',
-            fontSize: 12,
-            fontWeight: 800,
-            boxShadow: 'var(--shadow-chunk)',
-            whiteSpace: 'nowrap',
-            zIndex: 40,
-          }}
-        >
-          {toast}
-        </div>
-      )}
+      {mounted &&
+        toast &&
+        anchorRect &&
+        createPortal(
+          <div
+            role="status"
+            style={{
+              position: 'fixed',
+              top: anchorRect.bottom + 8,
+              left: anchorRect.right - 200,
+              padding: '6px 12px',
+              background: toastOk ? 'var(--zap-500)' : 'var(--red-500)',
+              color: '#fff',
+              border: '2.5px solid var(--stroke)',
+              borderRadius: 'var(--radius-pill)',
+              fontSize: 12,
+              fontWeight: 800,
+              boxShadow: 'var(--shadow-chunk)',
+              whiteSpace: 'nowrap',
+              zIndex: 10000,
+            }}
+          >
+            {toast}
+          </div>,
+          document.body,
+        )}
 
-      {phoneModal && (
+      {mounted && phoneModal && (
         <PhonePromptModal
           onCancel={() => setPhoneModal(false)}
           onSaved={async () => {
@@ -286,7 +348,7 @@ export function SendToMenu({
         />
       )}
 
-      {contactModal && (
+      {mounted && contactModal && (
         <ContactPromptModal
           onCancel={() => setContactModal(false)}
           onSubmit={async (jid) => {
@@ -548,7 +610,10 @@ function ModalShell({
   children: React.ReactNode;
   onClose: () => void;
 }) {
-  return (
+  // Portal → body pra escapar clip ancestral do HeroPlayer
+  // (overflow: hidden no card roxo). z-index alto pra ficar acima do
+  // dropdown (que já tá em 10000).
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -562,7 +627,7 @@ function ModalShell({
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        zIndex: 100,
+        zIndex: 10001,
       }}
     >
       <div
@@ -599,6 +664,7 @@ function ModalShell({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
