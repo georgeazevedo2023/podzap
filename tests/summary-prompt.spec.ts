@@ -233,12 +233,12 @@ describe("buildSummaryPrompt — metadata", () => {
     expect(big.estimatedTokens).toBeGreaterThan(small.estimatedTokens);
   });
 
-  it("promptVersion matches `podzap-summary/v4-<mode>-<tone>` for every tone (default mode=single)", () => {
-    const pattern = /^podzap-summary\/v4-(single|duo)-(formal|fun|corporate)$/;
+  it("promptVersion matches `podzap-summary/v5-<mode>-<tone>` for every tone (default mode=single)", () => {
+    const pattern = /^podzap-summary\/v5-(single|duo)-(formal|fun|corporate)$/;
     for (const tone of TONES) {
       const { promptVersion } = buildSummaryPrompt(conv(), tone);
       expect(promptVersion).toMatch(pattern);
-      expect(promptVersion).toBe(`podzap-summary/v4-single-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v5-single-${tone}`);
     }
   });
 
@@ -247,7 +247,7 @@ describe("buildSummaryPrompt — metadata", () => {
       const { promptVersion } = buildSummaryPrompt(conv(), tone, {
         voiceMode: "duo",
       });
-      expect(promptVersion).toBe(`podzap-summary/v4-duo-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v5-duo-${tone}`);
     }
   });
 
@@ -269,6 +269,23 @@ describe("buildSummaryPrompt — metadata", () => {
     // Deve mencionar marcações de estilo em parênteses.
     expect(systemPrompt).toMatch(/\(rindo\)|\(animada\)|\(empolgado\)/);
     expect(systemPrompt).toContain("estilo");
+  });
+
+  it("duo system prompt enquadra o narrador como 'aqui', não 'lá'", () => {
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun", {
+      voiceMode: "duo",
+    });
+    // Contrato: o áudio toca dentro do grupo; narradores são insiders.
+    expect(systemPrompt).toContain("aqui");
+    expect(systemPrompt.toLowerCase()).toContain("dentro do próprio grupo");
+    // E bane explicitamente o framing distante.
+    expect(systemPrompt).toMatch(/por lá[\s\S]*Evite|Evite[\s\S]*por lá/);
+  });
+
+  it("solo system prompt também enquadra como 'aqui'", () => {
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun");
+    expect(systemPrompt.toLowerCase()).toContain("dentro do próprio grupo");
+    expect(systemPrompt).toContain("aqui");
   });
 });
 
