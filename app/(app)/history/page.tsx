@@ -17,14 +17,55 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
+import dynamic from 'next/dynamic';
+
 import { HistoryFilterBar } from './HistoryFilterBar';
 import { HistoryPagination } from './HistoryPagination';
-import {
-  MessagesList,
-  type HistoryItem,
-  type HistoryTranscript,
-} from './MessagesList';
+import type { HistoryItem, HistoryTranscript } from './MessagesList';
 import { RefreshButton } from './RefreshButton';
+
+/**
+ * `MessagesList` carregado client-only (`ssr: false`) pra cortar o problema
+ * pela raiz: o componente tinha uma ou mais fontes de hydration mismatch
+ * (React error #418) que derrubavam scroll + cliques do subtree inteiro
+ * quando a hidratação falhava. Fontes conhecidas (já fixadas) incluíam
+ * `useRelativeTime` + `toLocaleString` com TZ diferente server/client; outras
+ * surgiram depois (inspecionadas via Playwright). `dynamic` resolve TODAS de
+ * uma vez — SSR renderiza só o skeleton, cliente hidrata o shell (sidebar,
+ * filtro, pagination) e depois monta a lista. Custo: flash breve sem lista.
+ */
+const MessagesList = dynamic(
+  () => import('./MessagesList').then((m) => m.MessagesList),
+  { ssr: false, loading: () => <MessagesListSkeleton /> },
+);
+
+function MessagesListSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="carregando mensagens"
+      style={{
+        display: 'grid',
+        gap: 12,
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+      }}
+    >
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          aria-hidden
+          style={{
+            height: 92,
+            borderRadius: 'var(--r-md)',
+            border: '2.5px solid var(--stroke)',
+            background: 'var(--bg-2)',
+            opacity: 0.35 + (i % 2) * 0.1,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 /**
  * Page size for the history feed. Fixed (not exposed on UI) — matches the

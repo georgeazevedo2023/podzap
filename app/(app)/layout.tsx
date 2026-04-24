@@ -126,7 +126,12 @@ export default async function AppLayout({
       data-theme="dark"
       style={{
         display: 'flex',
-        minHeight: '100vh',
+        // CRÍTICO: altura FIXA (não minHeight). body já tem overflow:hidden,
+        // então a única forma de scrollar o conteúdo é `<main>` ter
+        // overflow-y:auto com altura capada. Com minHeight, o flex growia
+        // pra acomodar o filho e main nunca tinha overflow → scroll travava
+        // (repro: https://playwright → scrollHeight === clientHeight).
+        height: '100vh',
         background: 'var(--bg)',
         color: 'var(--text)',
       }}
@@ -145,6 +150,9 @@ export default async function AppLayout({
           flex: 1,
           overflowY: 'auto',
           minWidth: 0,
+          // height herdada via flex — agora que o parent é 100vh fixo, main
+          // é exatamente 100vh e o overflow-y:auto de fato dispara quando o
+          // conteúdo (lista + paginação) ultrapassar a altura.
         }}
       >
         {children}
