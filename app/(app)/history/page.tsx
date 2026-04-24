@@ -32,7 +32,7 @@ import { RefreshButton } from './RefreshButton';
  * bar. Bump if you want fatter pages; the `signEpisodeUrl`-per-row cost
  * scales linearly with this (~30-50 parallel signs still fine).
  */
-const HISTORY_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 20;
 
 interface GroupOption {
   id: string;
@@ -80,7 +80,7 @@ async function loadHistory(
   // Nested `transcripts(…)` is a left-join — messages without a transcript
   // come back with an empty array (or `null` depending on postgrest), so we
   // normalise to a single object or `null` in the mapper below. Pulling the
-  // transcript inline avoids an N+1 round-trip against the 50-row cap.
+  // transcript inline avoids an N+1 round-trip against the page-size cap.
   //
   // `{ count: 'exact' }` piggybacks the total row count on the same request
   // so the pagination footer doesn't need a second round-trip. Slightly

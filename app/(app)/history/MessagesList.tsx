@@ -81,7 +81,7 @@ export function MessagesList({ initial }: MessagesListProps) {
             fontWeight: 600,
           }}
         >
-          mais recentes primeiro · até 50 últimas
+          mais recentes primeiro · 20 por página
         </span>
       </div>
 
