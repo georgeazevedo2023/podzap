@@ -24,8 +24,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { SendToMenu, type SendResult } from '@/components/ui/SendToMenu';
+
 import { DeliveryBadge } from '../../podcasts/DeliveryBadge';
-import { RedeliverButton } from '../../podcasts/RedeliverButton';
 
 export interface DeliveryStatusProps {
   summaryId: string;
@@ -171,29 +172,34 @@ export function DeliveryStatus({ summaryId }: DeliveryStatusProps) {
         deliveredAt={state.deliveredAt}
         error={state.error}
       />
-      <RedeliverButton
+      <SendToMenu
         audioId={state.audioId}
-        delivered={state.delivered}
-        onResult={(result) => {
+        label={state.delivered ? 'enviar novamente' : 'enviar'}
+        variant={state.delivered ? 'secondary' : 'primary'}
+        onResult={(result: SendResult) => {
           if (!result.ok) {
             setState((curr) =>
               curr.kind === 'ready' ? { ...curr, error: true } : curr,
             );
             return;
           }
-          // Endpoint /redeliver é síncrono: quando ok=true, o áudio já
-          // foi enviado ao grupo e o row já está com delivered_to_whatsapp=true.
-          setState((curr) =>
-            curr.kind === 'ready'
-              ? {
-                  ...curr,
-                  delivered: true,
-                  deliveredAt:
-                    result.deliveredAt ?? new Date().toISOString(),
-                  error: false,
-                }
-              : curr,
-          );
+          // Badge reflete APENAS entrega ao GRUPO.
+          if (result.target === 'group') {
+            setState((curr) =>
+              curr.kind === 'ready'
+                ? {
+                    ...curr,
+                    delivered: true,
+                    deliveredAt: new Date().toISOString(),
+                    error: false,
+                  }
+                : curr,
+            );
+          } else {
+            setState((curr) =>
+              curr.kind === 'ready' ? { ...curr, error: false } : curr,
+            );
+          }
         }}
       />
     </div>

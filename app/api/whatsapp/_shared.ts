@@ -30,7 +30,10 @@ export type ErrorCode =
   | "ALREADY_EXISTS"
   | "CONFLICT"
   | "AUTH_ERROR"
-  | "DELIVERY_ERROR";
+  | "DELIVERY_ERROR"
+  | "PHONE_NOT_SET"
+  | "INVALID_CONTACT"
+  | "GROUP_NOT_FOUND";
 
 export interface ApiError {
   code: ErrorCode;

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Icons } from '@/components/icons/Icons';
 import { PlayerWave } from '@/components/ui/PlayerWave';
 import { PodCover } from '@/components/ui/PodCover';
+import { SendToMenu } from '@/components/ui/SendToMenu';
 
 import { GenerateNowModal } from './GenerateNowModal';
 
@@ -28,6 +29,8 @@ import { GenerateNowModal } from './GenerateNowModal';
 
 export type HeroEpisode = {
   summaryId: string;
+  /** `audios.id` — used by "mandar no zap" dropdown to POST /redeliver. */
+  audioId: string;
   groupName: string;
   title: string;
   messagesCount: number;
@@ -503,55 +506,15 @@ export function HeroPlayer({
               <Icons.Skip />
             </button>
             <div style={{ flex: 1 }} />
-            <button
-              type="button"
-              title="compartilhar no zap"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow =
-                  '0 8px 24px rgba(34,197,94,0.5), inset 0 1px 0 rgba(255,255,255,0.3)';
+            <SendToMenu
+              audioId={episode.audioId}
+              label="mandar no zap"
+              variant="primary"
+              onListen={() => {
+                const el = audioRef.current;
+                if (el && el.paused) void el.play();
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow =
-                  '0 4px 14px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.25)';
-              }}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '11px 18px 11px 14px',
-                background:
-                  'linear-gradient(135deg, #22C55E 0%, #16A34A 100%)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 999,
-                fontFamily: 'var(--font-body)',
-                fontWeight: 700,
-                fontSize: 13,
-                letterSpacing: '0.01em',
-                cursor: 'pointer',
-                boxShadow:
-                  '0 4px 14px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.25)',
-                transition:
-                  'transform 0.18s cubic-bezier(0.2,0.9,0.3,1.4), box-shadow 0.18s ease',
-              }}
-            >
-              <span
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.2)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  backdropFilter: 'blur(4px)',
-                }}
-              >
-                <Icons.Send />
-              </span>
-              mandar no zap
-            </button>
+            />
           </div>
         </div>
       </div>

@@ -39,6 +39,8 @@ const VALID_TONES: readonly SummaryTone[] = [
 
 export type HomeStatsEpisode = {
   summaryId: string;
+  /** `audios.id` — used by the SendToMenu to POST /api/audios/[id]/redeliver. */
+  audioId: string;
   groupName: string;
   createdAt: string;
   durationSeconds: number | null;
@@ -150,6 +152,7 @@ async function countWhere(
 
 type LatestEpisodeRow = {
   summary_id: string;
+  audio_id: string;
   created_at: string;
   group_id: string;
   group_name: string;
@@ -174,6 +177,7 @@ async function loadLatestEpisodeRows(
     .from("audios")
     .select(
       `
+      id,
       created_at,
       duration_seconds,
       storage_path,
@@ -198,6 +202,7 @@ async function loadLatestEpisodeRows(
   }
 
   type RawAudioWithSummary = {
+    id: string;
     created_at: string;
     duration_seconds: number | null;
     storage_path: string;
@@ -238,6 +243,7 @@ async function loadLatestEpisodeRows(
     if (!g) continue;
     out.push({
       summary_id: s.id,
+      audio_id: r.id,
       created_at: s.created_at,
       group_id: g.id,
       group_name: g.name,
@@ -485,6 +491,7 @@ export async function getHomeStats(tenantId: string): Promise<HomeStats> {
 
   const latestEpisodes: HomeStatsEpisode[] = latestRows.map((r, i) => ({
     summaryId: r.summary_id,
+    audioId: r.audio_id,
     groupName: r.group_name,
     createdAt: r.created_at,
     durationSeconds: r.duration_seconds,

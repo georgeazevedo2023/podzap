@@ -284,7 +284,17 @@ async function markDelivered(
 async function runDelivery(
   tenantId: string,
   audioId: string,
-  opts: { includeCaption?: boolean; skipAlreadyDelivered: boolean },
+  opts: {
+    includeCaption?: boolean;
+    skipAlreadyDelivered: boolean;
+    /**
+     * Override UAZAPI destination. Default = source group's JID (legacy
+     * behaviour). When set, the DB still records delivery against the
+     * audio row (delivered flag + delivered_at) but the targetJid in
+     * the returned view reflects the actual destination used.
+     */
+    targetJidOverride?: string;
+  },
 ): Promise<DeliveryView> {
   // 1. Load audio + summary + group, tenant-scoped.
   const { audio, summary, group } = await loadContext(tenantId, audioId);
@@ -326,7 +336,7 @@ async function runDelivery(
 
   // 5. Ship it.
   const client = getUazapiClient();
-  const targetJid = group.uazapi_group_jid;
+  const targetJid = opts.targetJidOverride ?? group.uazapi_group_jid;
   const caption = opts.includeCaption ? summary.text : undefined;
   try {
     await client.sendAudio(instanceToken, targetJid, audioBuffer, caption);
@@ -345,13 +355,21 @@ async function runDelivery(
     );
   }
 
-  // 6. Mark delivered.
-  const { deliveredAt } = await markDelivered(tenantId, audioId);
+  // 6. Mark delivered — SEMÂNTICA: `delivered_to_whatsapp` só vira
+  // true quando o destino foi o GRUPO de origem. Envios pra "mim" ou
+  // pra um contato avulso contam como teste/compartilhamento e não
+  // alteram o status do row (o badge em /podcasts fala especificamente
+  // de entrega ao grupo).
+  const deliveredToGroup = targetJid === group.uazapi_group_jid;
+  let deliveredAt: string | null = audio.delivered_at;
+  if (deliveredToGroup) {
+    ({ deliveredAt } = await markDelivered(tenantId, audioId));
+  }
 
   return {
     audioId: audio.id,
     summaryId: audio.summary_id,
-    deliveredToWhatsapp: true,
+    deliveredToWhatsapp: deliveredToGroup || audio.delivered_to_whatsapp,
     deliveredAt,
     targetJid,
     error: null,
@@ -371,25 +389,29 @@ async function runDelivery(
 export async function deliverAudio(
   tenantId: string,
   audioId: string,
-  opts?: { includeCaption?: boolean },
+  opts?: { includeCaption?: boolean; targetJid?: string },
 ): Promise<DeliveryView> {
   return runDelivery(tenantId, audioId, {
     includeCaption: opts?.includeCaption ?? false,
     skipAlreadyDelivered: true,
+    targetJidOverride: opts?.targetJid,
   });
 }
 
 /**
  * Force a re-delivery, even if `delivered_to_whatsapp=true`. Mirrors
- * `deliverAudio` but always calls UAZAPI.
+ * `deliverAudio` but always calls UAZAPI. `targetJid` overrides the
+ * default group destination (used by HeroPlayer / RedeliverButton to
+ * send the podcast to the user's own WhatsApp or a custom contact).
  */
 export async function redeliver(
   tenantId: string,
   audioId: string,
-  opts?: { includeCaption?: boolean },
+  opts?: { includeCaption?: boolean; targetJid?: string },
 ): Promise<DeliveryView> {
   return runDelivery(tenantId, audioId, {
     includeCaption: opts?.includeCaption ?? false,
     skipAlreadyDelivered: false,
+    targetJidOverride: opts?.targetJid,
   });
 }
