@@ -52,11 +52,16 @@ export function DeliveryControls({
       />
       <RedeliverButton
         audioId={audioId}
+        delivered={delivered}
         onResult={(result) => {
           if (result.ok) {
-            // Optimistic: worker hasn't flipped the row yet; show "enviando…"
-            setDelivered(false);
-            setDeliveredAt(null);
+            // Endpoint /redeliver é síncrono (chama UAZAPI + atualiza DB
+            // antes de responder). Quando ok=true, o áudio JÁ foi enviado
+            // ao grupo — flipa o badge imediatamente.
+            setDelivered(true);
+            setDeliveredAt(
+              result.deliveredAt ?? new Date().toISOString(),
+            );
             setError(false);
           } else {
             setError(true);

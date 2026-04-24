@@ -437,7 +437,9 @@ function EmptyState() {
           }}
         >
           aprova um resumo na tela de Aprovação — o áudio é gerado
-          automaticamente e aparece aqui em alguns segundos.
+          automaticamente e aparece aqui em alguns segundos pra você
+          escutar. Só vai pro grupo quando você clicar "enviar ao grupo"
+          no card.
         </p>
       </div>
       <div

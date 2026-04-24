@@ -410,17 +410,17 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
           className="btn btn-zap"
           onClick={handleApprove}
           disabled={approveDisabled}
-          aria-label="Aprovar resumo"
+          aria-label="Aprovar resumo e gerar áudio (não envia ao grupo)"
           style={{ opacity: approveDisabled ? 0.55 : 1 }}
           title={
             dirty
               ? 'Salve a edição antes de aprovar'
               : status !== 'pending_review'
                 ? 'Resumo não está pendente'
-                : undefined
+                : 'Aprovar gera o áudio em /podcasts. Nada vai pro grupo até você clicar "enviar ao grupo" lá.'
           }
         >
-          {approving ? '⟳ aprovando…' : '✓ aprovar'}
+          {approving ? '⟳ aprovando…' : '✓ aprovar (gera áudio)'}
         </button>
 
         <div

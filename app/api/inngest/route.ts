@@ -24,7 +24,11 @@
 import { serve } from "inngest/next";
 
 import { inngest } from "@/inngest/client";
-import { deliverToWhatsappFunction } from "@/inngest/functions/deliver-to-whatsapp";
+// NÃO registrar `deliverToWhatsappFunction` aqui: entrega ao grupo é
+// 100% manual, acionada apenas por clique humano em /podcasts que
+// chama POST /api/audios/[id]/redeliver → lib/delivery/service.ts
+// direto. Registrar o worker aqui re-habilitaria auto-delivery no
+// evento audio.created e violaria a regra "só envia com autorização".
 import { describeImage } from "@/inngest/functions/describe-image";
 import { generateSummaryFunction } from "@/inngest/functions/generate-summary";
 import { generateTtsFunction } from "@/inngest/functions/generate-tts";
@@ -46,7 +50,6 @@ export const { GET, POST, PUT } = serve({
     transcriptionRetry,
     generateSummaryFunction,
     generateTtsFunction,
-    deliverToWhatsappFunction,
     runSchedulesFunction,
   ],
 });

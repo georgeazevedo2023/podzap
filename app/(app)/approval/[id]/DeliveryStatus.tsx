@@ -53,8 +53,6 @@ type State =
     }
   | { kind: 'error'; message: string };
 
-const POLL_AFTER_RETRY_MS = 4_000;
-
 async function fetchStatus(
   summaryId: string,
   signal: AbortSignal,
@@ -175,6 +173,7 @@ export function DeliveryStatus({ summaryId }: DeliveryStatusProps) {
       />
       <RedeliverButton
         audioId={state.audioId}
+        delivered={state.delivered}
         onResult={(result) => {
           if (!result.ok) {
             setState((curr) =>
@@ -182,22 +181,19 @@ export function DeliveryStatus({ summaryId }: DeliveryStatusProps) {
             );
             return;
           }
-          // Optimistic: flip to "enviando…" then re-poll the endpoint so the
-          // badge turns green once the worker flips the row.
+          // Endpoint /redeliver é síncrono: quando ok=true, o áudio já
+          // foi enviado ao grupo e o row já está com delivered_to_whatsapp=true.
           setState((curr) =>
             curr.kind === 'ready'
               ? {
                   ...curr,
-                  delivered: false,
-                  deliveredAt: null,
+                  delivered: true,
+                  deliveredAt:
+                    result.deliveredAt ?? new Date().toISOString(),
                   error: false,
                 }
               : curr,
           );
-          window.setTimeout(() => {
-            const controller = new AbortController();
-            void load(controller.signal);
-          }, POLL_AFTER_RETRY_MS);
         }}
       />
     </div>

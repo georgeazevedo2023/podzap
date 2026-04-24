@@ -4,16 +4,20 @@
  * `DeliveryBadge` — Fase 10 delivery status sticker.
  *
  * Renders one of three chunky pill states:
- *   - green  `✓ entregue há <relative>`   when `delivered=true`
- *   - yellow `enviando…` (pulsing dot)    when `delivered=false` (Inngest
- *                                          retries in the background)
- *   - red    `falha na entrega`           when the caller flips `error=true`
- *                                          after a failed `reenviar` attempt
+ *   - green  `✓ entregue há <relative>`       quando `delivered=true`
+ *   - lime   `🔒 aguardando autorização`      quando `delivered=false`. NÃO é
+ *                                              "enviando…": entrega é 100%
+ *                                              manual — o áudio só sai do
+ *                                              bucket pro grupo quando o
+ *                                              admin clica o botão "enviar
+ *                                              ao grupo" no card. Esse é o
+ *                                              estado de "áudio pronto pra
+ *                                              preview, nada foi pro grupo".
+ *   - red    `falha na entrega`               quando o caller levanta
+ *                                              `error=true` após POST falho.
  *
- * The badge is read-only — the sibling `RedeliverButton` owns the POST that
- * triggers a re-delivery. Kept split so the card grid composes them as
- * independent chunks (the badge sits next to the audio player; the button
- * lives in the card footer).
+ * O badge é read-only — o sibling `RedeliverButton` (renomeado pra
+ * "enviar ao grupo") é que dispara a entrega de fato.
  */
 
 import { formatRelativeTime } from '@/lib/time/relative';
@@ -73,23 +77,17 @@ export function DeliveryBadge({
     <span
       className="sticker"
       style={{
-        background: 'var(--yellow-500)',
+        background: 'var(--lime-500)',
         color: 'var(--ink-900)',
         display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
-        animation: 'podzapPulse 1.4s ease-in-out infinite',
       }}
       role="status"
+      title="Nada foi enviado ao grupo ainda — use o botão ao lado pra autorizar"
     >
-      <span className="live-dot" aria-hidden />
-      enviando…
-      <style>{`
-        @keyframes podzapPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.6; }
-        }
-      `}</style>
+      <span aria-hidden>🔒</span>
+      aguardando autorização
     </span>
   );
 }
