@@ -34,7 +34,7 @@
 import { NextResponse } from 'next/server';
 import {
   parseWebhookBody,
-  validateSecret,
+  validateAuth,
   type WebhookEvent,
 } from '@/lib/webhooks/validator';
 import { handleWebhookEvent } from '@/lib/webhooks/handler';
@@ -55,22 +55,24 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  // 1) Secret gate. Accepts `x-uazapi-secret` header OR `?secret=` query.
-  const secret = validateSecret(request);
-  if (!secret.ok) {
-    const status = secret.status;
-    // Keep the reason generic for 401; surface detail only on 500 where it's
-    // our own misconfiguration, not an attacker probe.
-    const message =
-      status === 401 ? 'Unauthorized.' : 'Webhook server misconfigured.';
-    console.warn(`[webhook] secret rejected: status=${status} reason="${secret.reason}"`);
-    return errorResponse(status, 'UNAUTHORIZED', message);
-  }
-
-  // 2) Read + parse body. We read as text once so we can both JSON-parse it
-  //    AND compute a correlation id without a second read.
+  // 1) Read body first — HMAC validation needs the exact raw bytes. Reading
+  //    once avoids "body already consumed" errors and lets us compute the
+  //    correlation id from the same payload we authenticate.
   const raw = await request.text();
   const cid = correlationId(raw);
+
+  // 2) Auth gate. Accepts `x-podzap-signature` (HMAC-SHA256 hex, preferred)
+  //    OR legacy `x-uazapi-secret` header / `?secret=` query.
+  const auth = validateAuth(request, raw);
+  if (!auth.ok) {
+    const status = auth.status;
+    const message =
+      status === 401 ? 'Unauthorized.' : 'Webhook server misconfigured.';
+    console.warn(
+      `[webhook ${cid}] auth rejected: status=${status} reason="${auth.reason}"`,
+    );
+    return errorResponse(status, 'UNAUTHORIZED', message);
+  }
 
   let body: unknown;
   try {

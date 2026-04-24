@@ -28,7 +28,7 @@
  * status, which keeps error paths auditable.
  */
 
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   IncomingWebhookEventSchema,
   type IncomingWebhookEvent,
@@ -64,48 +64,116 @@ function secretsMatch(expected: string, provided: string): boolean {
 }
 
 /**
- * Look at the incoming request and confirm it carries the expected secret.
- *
- * Accepts both `x-uazapi-secret` header (preferred for first-party callers)
- * and `?secret=` query string (UAZAPI's only reliable channel — custom
- * headers aren't honoured by `POST /webhook` registration on wsmart.uazapi.com
- * as of 2026-04-22).
- *
- * TODO(fase-4): once we confirm UAZAPI's final secret-transport convention
- * (header-signing with HMAC, or embedded in payload), collapse this to a
- * single mechanism. Keeping both for now means the dev harness can continue
- * using the header while production uses the query string.
+ * Constant-time compare two hex strings. Returns false on length mismatch,
+ * empty, or non-hex characters.
  */
-export function validateSecret(request: Request): SecretValidationResult {
-  const expected = process.env.UAZAPI_WEBHOOK_SECRET;
-  if (!expected || expected.length === 0) {
+function hexSignaturesMatch(expected: string, provided: string): boolean {
+  if (expected.length === 0 || expected.length !== provided.length) return false;
+  try {
+    const a = Buffer.from(expected, "hex");
+    const b = Buffer.from(provided, "hex");
+    if (a.length === 0 || a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate authenticity of an incoming webhook. Two modes, checked in order:
+ *
+ *   1. HMAC-SHA256 (preferred) — `x-podzap-signature: <hex>` signed over
+ *      the raw request body with `UAZAPI_WEBHOOK_HMAC_SECRET`. This is the
+ *      mode used by the n8n forwarding flow (Fase 15+). Strict: when the
+ *      header is present it MUST validate — we never fall back to the
+ *      legacy secret because that would allow a downgrade attack.
+ *
+ *   2. Shared secret (legacy) — `x-uazapi-secret` header or `?secret=`
+ *      query string, compared against `UAZAPI_WEBHOOK_SECRET`. Retained
+ *      during the n8n migration so existing UAZAPI webhook registrations
+ *      keep working until the Fase 15 cutover.
+ *
+ * At least one of the two env vars MUST be set; otherwise we fail closed
+ * with 500 SERVER_MISCONFIG to prevent accidental unauthenticated ingress.
+ *
+ * `rawBody` is the exact bytes received (not re-serialized). The caller
+ * must read the body as text BEFORE re-parsing to JSON — any whitespace
+ * or key-order change breaks the HMAC.
+ */
+export function validateAuth(
+  request: Request,
+  rawBody: string,
+): SecretValidationResult {
+  const querySecret = process.env.UAZAPI_WEBHOOK_SECRET;
+  const hmacSecret = process.env.UAZAPI_WEBHOOK_HMAC_SECRET;
+
+  if (
+    (!querySecret || querySecret.length === 0) &&
+    (!hmacSecret || hmacSecret.length === 0)
+  ) {
     return {
       ok: false,
       status: 500,
-      reason: "SERVER_MISCONFIG: UAZAPI_WEBHOOK_SECRET not set",
+      reason:
+        "SERVER_MISCONFIG: neither UAZAPI_WEBHOOK_SECRET nor UAZAPI_WEBHOOK_HMAC_SECRET set",
+    };
+  }
+
+  // HMAC path. Presence of the header is a commitment: if it's there and
+  // doesn't validate, we reject — we don't silently fall back to the
+  // legacy secret. That keeps an attacker from downgrading the auth
+  // check by shipping both a bad HMAC and a valid query secret.
+  const signature = request.headers.get("x-podzap-signature");
+  if (signature && signature.length > 0) {
+    if (!hmacSecret || hmacSecret.length === 0) {
+      return {
+        ok: false,
+        status: 500,
+        reason:
+          "SERVER_MISCONFIG: x-podzap-signature received but UAZAPI_WEBHOOK_HMAC_SECRET not set",
+      };
+    }
+    const expected = createHmac("sha256", hmacSecret)
+      .update(rawBody, "utf8")
+      .digest("hex");
+    if (hexSignaturesMatch(expected, signature)) return { ok: true };
+    return { ok: false, status: 401, reason: "invalid HMAC signature" };
+  }
+
+  // Legacy secret path (header or query).
+  if (!querySecret || querySecret.length === 0) {
+    return {
+      ok: false,
+      status: 401,
+      reason: "missing x-podzap-signature (HMAC-only mode)",
     };
   }
 
   const header = request.headers.get("x-uazapi-secret") ?? "";
   let fromQuery = "";
   try {
-    const url = new URL(request.url);
-    fromQuery = url.searchParams.get("secret") ?? "";
+    fromQuery = new URL(request.url).searchParams.get("secret") ?? "";
   } catch {
-    // Malformed URL — fall through; the caller already has `request.url`
-    // so this "shouldn't happen" but we guard to keep the branch total.
     fromQuery = "";
   }
 
   const provided = header.length > 0 ? header : fromQuery;
   if (provided.length === 0) {
-    return { ok: false, status: 401, reason: "missing secret" };
+    return { ok: false, status: 401, reason: "missing credentials" };
   }
-
-  if (!secretsMatch(expected, provided)) {
+  if (!secretsMatch(querySecret, provided)) {
     return { ok: false, status: 401, reason: "invalid secret" };
   }
   return { ok: true };
+}
+
+/**
+ * @deprecated Use `validateAuth(request, rawBody)` — HMAC support requires
+ * access to the raw body. This wrapper calls the legacy-secret path only
+ * (empty rawBody means HMAC validation path can't match).
+ */
+export function validateSecret(request: Request): SecretValidationResult {
+  return validateAuth(request, "");
 }
 
 // ──────────────────────────────────────────────────────────────────────────
