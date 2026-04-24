@@ -48,3 +48,9 @@ next-env.d.ts
 
 # uploads (mockup local)
 podZAP/uploads/
+
+# screenshots deixadas no root durante testes de UI (legit screenshots vivem
+# em docs/audits/screenshots/ — wildcard é root-only para não pegar aquelas)
+/*.png
+/*.jpg
+/*.jpeg
