@@ -243,6 +243,20 @@ export default async function HistoryPage({
           <EmptyState filtered={!!selectedGroupId} />
         ) : (
           <>
+            {/*
+              Pagination at BOTH top and bottom of the list. Bottom is where
+              you land after scrolling the current page; top is where you
+              land after clicking "próxima" (the next page's content starts
+              below it). Without the top copy, users mid-scroll had no visual
+              affordance that more pages existed — reported as "paginação
+              ainda não disponível" even when it was rendering below fold.
+            */}
+            <HistoryPagination
+              page={page}
+              total={total}
+              pageSize={HISTORY_PAGE_SIZE}
+              groupId={selectedGroupId || null}
+            />
             <MessagesList initial={items} />
             <HistoryPagination
               page={page}
