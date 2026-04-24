@@ -72,6 +72,15 @@ export type HomeStats = {
   /** First entry of `latestEpisodes` enriched with per-group counts, or
    *  `null` when the tenant has no approved+audio episodes yet. */
   currentEpisode: HomeStatsCurrent | null;
+  /**
+   * Onboarding-stage signals — used by the hero empty state to pick the
+   * right CTA. Without these the empty state would always push the user
+   * to `/onboarding` even when they're already past that step. All three
+   * are cheap scalar queries so they ride the same `Promise.all`.
+   */
+  whatsappConnected: boolean;
+  monitoredGroupsCount: number;
+  capturedMessagesCount: number;
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -126,7 +135,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
  */
 async function countWhere(
   admin: AdminClient,
-  table: "summaries" | "audios" | "messages",
+  table: "summaries" | "audios" | "messages" | "groups",
   build: (
     q: ReturnType<AdminClient["from"]>,
   ) => ReturnType<AdminClient["from"]>,
@@ -360,6 +369,9 @@ export async function getHomeStats(tenantId: string): Promise<HomeStats> {
     approvalRateRows,
     pendingApprovalsCount,
     latestRows,
+    whatsappConnected,
+    monitoredGroupsCount,
+    capturedMessagesCount,
   ] = await Promise.all([
     // 1. summariesThisWeek
     countWhere(admin, "summaries", (q) =>
@@ -419,6 +431,31 @@ export async function getHomeStats(tenantId: string): Promise<HomeStats> {
 
     // 6. latestEpisodes — same rows feed `currentEpisode` below.
     loadLatestEpisodeRows(admin, tenantId, LATEST_EPISODES_LIMIT),
+
+    // 7. whatsappConnected — any row in whatsapp_instances for the tenant
+    //    whose status is 'connected'. 0..1 row per tenant (MVP rule).
+    (async () => {
+      const { data, error } = await admin
+        .from("whatsapp_instances")
+        .select("status")
+        .eq("tenant_id", tenantId)
+        .eq("status", "connected")
+        .limit(1);
+      if (error) {
+        throw new Error(`stats whatsappConnected failed: ${error.message}`);
+      }
+      return (data ?? []).length > 0;
+    })(),
+
+    // 8. monitoredGroupsCount — active coverage for the tenant.
+    countWhere(admin, "groups", (q) =>
+      q.eq("tenant_id", tenantId).eq("is_monitored", true),
+    ),
+
+    // 9. capturedMessagesCount — all-time; we just need "has any" to pick
+    //    the right onboarding CTA, so a count is enough. The column has
+    //    a `(tenant_id, captured_at)` index so head-count is cheap.
+    countWhere(admin, "messages", (q) => q.eq("tenant_id", tenantId)),
   ]);
 
   // ── Aggregations ───────────────────────────────────────────────────
@@ -487,5 +524,8 @@ export async function getHomeStats(tenantId: string): Promise<HomeStats> {
     pendingApprovalsCount,
     latestEpisodes,
     currentEpisode,
+    whatsappConnected,
+    monitoredGroupsCount,
+    capturedMessagesCount,
   };
 }

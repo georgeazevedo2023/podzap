@@ -61,6 +61,7 @@ type GroupRow = {
   id: string;
   tenant_id: string;
   name: string;
+  is_monitored?: boolean;
 };
 
 type MessageRow = {
@@ -71,11 +72,18 @@ type MessageRow = {
   captured_at: string;
 };
 
+type WhatsappInstanceRow = {
+  id: string;
+  tenant_id: string;
+  status: "connected" | "connecting" | "disconnected" | "qr" | "unknown";
+};
+
 const db = {
   summaries: [] as SummaryRow[],
   audios: [] as AudioRow[],
   groups: [] as GroupRow[],
   messages: [] as MessageRow[],
+  whatsapp_instances: [] as WhatsappInstanceRow[],
 };
 
 function resetDb() {
@@ -83,6 +91,7 @@ function resetDb() {
   db.audios = [];
   db.groups = [];
   db.messages = [];
+  db.whatsapp_instances = [];
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -389,6 +398,9 @@ describe("getHomeStats — empty tenant", () => {
       pendingApprovalsCount: 0,
       latestEpisodes: [],
       currentEpisode: null,
+      whatsappConnected: false,
+      monitoredGroupsCount: 0,
+      capturedMessagesCount: 0,
     });
     expect(signedUrlModule.getSignedUrl).not.toHaveBeenCalled();
   });

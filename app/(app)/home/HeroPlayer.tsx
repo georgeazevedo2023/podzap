@@ -7,6 +7,8 @@ import { Icons } from '@/components/icons/Icons';
 import { PlayerWave } from '@/components/ui/PlayerWave';
 import { PodCover } from '@/components/ui/PodCover';
 
+import { GenerateNowModal } from './GenerateNowModal';
+
 /**
  * Hero player card — direct 1:1 port of the purple hero block from
  * `podZAP/screen_home.jsx`.
@@ -39,7 +41,44 @@ export type HeroEpisode = {
 export type HeroPlayerProps = {
   episode: HeroEpisode | null;
   tenantName: string;
+  /**
+   * Onboarding-stage signals. When `episode === null` the hero uses these to
+   * pick the next right CTA instead of always pushing to `/onboarding`.
+   * Passing omitted/default values (all falsy / 0) reproduces the pre-fix
+   * behaviour (always → /onboarding).
+   */
+  whatsappConnected?: boolean;
+  monitoredGroupsCount?: number;
+  capturedMessagesCount?: number;
+  pendingApprovalsCount?: number;
 };
+
+type OnboardingStage =
+  | 'needs-whatsapp'
+  | 'needs-groups'
+  | 'waiting-messages'
+  | 'needs-approval'
+  | 'ready-to-generate';
+
+function pickStage({
+  whatsappConnected,
+  monitoredGroupsCount,
+  capturedMessagesCount,
+  pendingApprovalsCount,
+}: {
+  whatsappConnected: boolean;
+  monitoredGroupsCount: number;
+  capturedMessagesCount: number;
+  pendingApprovalsCount: number;
+}): OnboardingStage {
+  if (!whatsappConnected) return 'needs-whatsapp';
+  if (monitoredGroupsCount === 0) return 'needs-groups';
+  // Prefer sending the user to review a pending summary over generating a
+  // new one — otherwise they'd keep piling up.
+  if (pendingApprovalsCount > 0) return 'needs-approval';
+  if (capturedMessagesCount === 0) return 'waiting-messages';
+  return 'ready-to-generate';
+}
 
 function fmtTimecode(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -51,12 +90,69 @@ function fmtTimecode(seconds: number): string {
 // Fallback duration used when the DB row has no `duration_seconds` yet.
 const DEFAULT_DURATION = 18 * 60 + 42;
 
+/**
+ * Copy + CTA per onboarding stage. `href` is used for stages that route
+ * elsewhere; `ready-to-generate` has no href and triggers the
+ * `GenerateNowModal` inline. `needs-approval` keeps the "preciso revisar"
+ * feeling — same lime CTA but routed to `/approval`.
+ */
+const EMPTY_STATE_COPY: Record<
+  OnboardingStage,
+  { sticker: string; title: string; subtitle: string; cta: string; href: string | null }
+> = {
+  'needs-whatsapp': {
+    sticker: '🌱 primeiro passo',
+    title: 'ainda sem episódios',
+    subtitle:
+      'conecta o whatsapp, escolhe os grupos e a gente transforma a conversa em podcast',
+    cta: 'conectar whatsapp →',
+    href: '/onboarding',
+  },
+  'needs-groups': {
+    sticker: '📂 escolher grupos',
+    title: 'whatsapp conectado',
+    subtitle:
+      'agora marca pelo menos um grupo pra monitorar — é de lá que as mensagens vão virar resumo',
+    cta: 'escolher grupos →',
+    href: '/groups',
+  },
+  'waiting-messages': {
+    sticker: '⏳ aguardando msgs',
+    title: 'quase lá',
+    subtitle:
+      'tudo pronto — é só esperar o grupo conversar. quando chegar mensagem a gente já começa a capturar',
+    cta: 'ver histórico →',
+    href: '/history',
+  },
+  'needs-approval': {
+    sticker: '📝 aprovação pendente',
+    title: 'resumo esperando você',
+    subtitle:
+      'já tem resumo gerado pendente de revisão. aprova ele pra virar áudio e ir pro grupo',
+    cta: 'ir pra aprovação →',
+    href: '/approval',
+  },
+  'ready-to-generate': {
+    sticker: '✨ bora começar',
+    title: 'pronto pro primeiro podcast',
+    subtitle:
+      'whatsapp conectado, grupos monitorando, mensagens chegando. clica aí pra gerar o primeiro resumo agora',
+    cta: '✨ gerar resumo agora',
+    href: null,
+  },
+};
+
 export function HeroPlayer({
   episode,
   tenantName,
+  whatsappConnected = false,
+  monitoredGroupsCount = 0,
+  capturedMessagesCount = 0,
+  pendingApprovalsCount = 0,
 }: HeroPlayerProps): React.ReactElement {
   const [playing, setPlaying] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
+  const [generateOpen, setGenerateOpen] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const durationSeconds =
@@ -149,64 +245,104 @@ export function HeroPlayer({
 
   // ─── Empty state ────────────────────────────────────────────────────────
   if (episode === null) {
+    const stage = pickStage({
+      whatsappConnected,
+      monitoredGroupsCount,
+      capturedMessagesCount,
+      pendingApprovalsCount,
+    });
+    const copy = EMPTY_STATE_COPY[stage];
     return (
-      <div style={cardStyle}>
-        {blobs}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 20,
-            position: 'relative',
-            zIndex: 2,
-          }}
-        >
-          <PodCover
-            title={tenantName}
-            subtitle="aguardando"
-            variant={0}
-            size={140}
-            photo={null}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <span className="sticker">🌱 primeiro passo</span>
-            </div>
-            <div
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 800,
-                fontSize: 32,
-                lineHeight: 1,
-                letterSpacing: '-0.02em',
-              }}
-            >
-              ainda sem episódios
-            </div>
-            <div
-              style={{
-                fontSize: 13,
-                opacity: 0.85,
-                marginTop: 8,
-                fontWeight: 500,
-                maxWidth: 520,
-              }}
-            >
-              conecta o whatsapp, escolhe os grupos e a gente transforma a
-              conversa em podcast
-            </div>
-            <div style={{ marginTop: 18 }}>
-              <Link
-                href="/onboarding"
-                className="btn"
-                style={{ background: 'var(--color-lime-500)' }}
+      <>
+        <div style={cardStyle}>
+          {blobs}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 20,
+              position: 'relative',
+              zIndex: 2,
+            }}
+          >
+            <PodCover
+              title={tenantName}
+              subtitle="aguardando"
+              variant={0}
+              size={140}
+              photo={null}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <span className="sticker">{copy.sticker}</span>
+              </div>
+              <div
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontWeight: 800,
+                  fontSize: 32,
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                }}
               >
-                conectar whatsapp →
-              </Link>
+                {copy.title}
+              </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.85,
+                  marginTop: 8,
+                  fontWeight: 500,
+                  maxWidth: 520,
+                }}
+              >
+                {copy.subtitle}
+              </div>
+              <div style={{ marginTop: 18 }}>
+                {stage === 'ready-to-generate' ? (
+                  <button
+                    type="button"
+                    onClick={() => setGenerateOpen(true)}
+                    className="btn"
+                    style={{
+                      background: 'var(--color-lime-500)',
+                      cursor: 'pointer',
+                      border: '2.5px solid var(--color-stroke)',
+                    }}
+                  >
+                    {copy.cta}
+                  </button>
+                ) : copy.href ? (
+                  <Link
+                    href={copy.href}
+                    className="btn"
+                    style={{ background: 'var(--color-lime-500)' }}
+                  >
+                    {copy.cta}
+                  </Link>
+                ) : (
+                  <span
+                    className="sticker"
+                    style={{
+                      background: 'rgba(255,255,255,0.18)',
+                      color: '#fff',
+                      border: '2px solid #fff',
+                    }}
+                  >
+                    {copy.cta}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+        {stage === 'ready-to-generate' && (
+          <GenerateNowModal
+            open={generateOpen}
+            onClose={() => setGenerateOpen(false)}
+          />
+        )}
+      </>
     );
   }
 

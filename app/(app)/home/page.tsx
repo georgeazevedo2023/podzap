@@ -66,6 +66,10 @@ export default async function HomePage() {
         <HeroPlayer
           episode={stats.currentEpisode}
           tenantName={tenant.name}
+          whatsappConnected={stats.whatsappConnected}
+          monitoredGroupsCount={stats.monitoredGroupsCount}
+          capturedMessagesCount={stats.capturedMessagesCount}
+          pendingApprovalsCount={stats.pendingApprovalsCount}
         />
         <div className="home-stats" style={{ display: 'contents' }}>
           <StatsRow stats={stats} />
