@@ -5,6 +5,8 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import type { GroupView } from '@/lib/groups/service';
 
+import { GenerateNowModal } from '@/app/(app)/home/GenerateNowModal';
+
 import { GroupCard } from './GroupCard';
 
 /** ms of "stop typing" before we update the URL (which triggers a re-fetch). */
@@ -44,6 +46,7 @@ export function GroupsList({
   const [groups, setGroups] = useState<GroupView[]>(initial);
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [toggling, setToggling] = useState<Set<string>>(() => new Set());
+  const [generateGroupId, setGenerateGroupId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Re-seed local state when the server re-renders with new data (new page,
@@ -318,9 +321,18 @@ export function GroupsList({
                 onToggle={(on) => {
                   void handleToggle(group.id, on);
                 }}
+                onGenerate={(id) => setGenerateGroupId(id)}
               />
             ))}
           </div>
+
+          {generateGroupId && (
+            <GenerateNowModal
+              open={true}
+              onClose={() => setGenerateGroupId(null)}
+              initialGroupId={generateGroupId}
+            />
+          )}
 
           {totalPages > 1 && (
             <div

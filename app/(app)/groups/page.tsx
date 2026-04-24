@@ -60,6 +60,8 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
         pageSize: PAGE_SIZE,
         search,
         monitoredOnly,
+        // Anexa contagem 24h por card (O(1) extra roundtrip por página).
+        withRecentMessageCount: true,
       }),
       listGroups(tenant.id, { monitoredOnly: true, pageSize: 1 }),
       // Total real (sem search nem filtro) — antes o subtitle usava

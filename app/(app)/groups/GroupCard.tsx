@@ -9,6 +9,8 @@ export interface GroupCardProps {
   group: GroupView;
   onToggle: (on: boolean) => void;
   isToggling: boolean;
+  /** Callback quando o user clica "gerar resumo agora" no card monitorado. */
+  onGenerate?: (groupId: string) => void;
 }
 
 /**
@@ -22,13 +24,26 @@ export interface GroupCardProps {
  * clickable as a hit target, but we guard against double-fire when the
  * user clicks directly on the toggle button.
  */
-export function GroupCard({ group, onToggle, isToggling }: GroupCardProps) {
+export function GroupCard({
+  group,
+  onToggle,
+  isToggling,
+  onGenerate,
+}: GroupCardProps) {
   const on = group.isMonitored;
+  const recentCount = group.recentMessageCount ?? null;
+  const canGenerate = on && recentCount !== null && recentCount >= 3;
 
   const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (isToggling) return;
     // Ignore bubbled clicks from the inner <button> — it handles its own.
-    if ((event.target as HTMLElement).closest('[data-toggle-btn]')) return;
+    const target = event.target as HTMLElement;
+    if (
+      target.closest('[data-toggle-btn]') ||
+      target.closest('[data-generate-btn]')
+    ) {
+      return;
+    }
     onToggle(!on);
   };
 
@@ -109,6 +124,71 @@ export function GroupCard({ group, onToggle, isToggling }: GroupCardProps) {
           </div>
         </div>
       </div>
+
+      {on && recentCount !== null && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '2px dashed var(--stroke)',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color:
+                recentCount >= 10
+                  ? 'var(--lime-500)'
+                  : recentCount >= 3
+                    ? 'var(--text)'
+                    : 'var(--text-dim)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+            title="Mensagens capturadas nas últimas 24h"
+          >
+            <span aria-hidden>💬</span>
+            {recentCount === 0
+              ? 'sem msgs hoje'
+              : recentCount === 1
+                ? '1 msg (24h)'
+                : `${recentCount} msgs (24h)`}
+          </span>
+          {canGenerate && onGenerate && (
+            <button
+              type="button"
+              data-generate-btn
+              onClick={(e) => {
+                e.stopPropagation();
+                onGenerate(group.id);
+              }}
+              className="btn"
+              style={{
+                marginLeft: 'auto',
+                background: 'var(--lime-500)',
+                color: 'var(--ink-900)',
+                border: '2.5px solid var(--stroke)',
+                borderRadius: 'var(--radius-pill)',
+                padding: '6px 14px',
+                fontFamily: 'var(--font-body)',
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '2px 2px 0 var(--stroke)',
+                letterSpacing: '0.02em',
+              }}
+              aria-label={`Gerar resumo agora pro grupo ${group.name}`}
+            >
+              ✨ gerar resumo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

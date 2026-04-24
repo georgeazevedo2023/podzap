@@ -42,6 +42,12 @@ export type GroupView = {
   memberCount: number | null;
   lastSyncedAt: string | null;
   createdAt: string;
+  /**
+   * Contagem de mensagens capturadas nas últimas 24h. Só é populada em
+   * `listGroups({ withRecentMessageCount: true })` pra evitar N queries
+   * no render default. `null` significa "não carregado", não "zero".
+   */
+  recentMessageCount?: number | null;
 };
 
 /**
@@ -174,6 +180,13 @@ export async function listGroups(
     page?: number;      // 0-indexed
     pageSize?: number;  // default 20, max 100
     includeUnnamed?: boolean; // default false
+    /**
+     * Anexa `recentMessageCount` (últimas 24h) em cada GroupView
+     * retornado. Faz uma segunda query agregada em `messages` filtrada
+     * pelos ids da página corrente — então é O(1) extra round-trip, não
+     * N. Use em `/groups` pra mostrar contagem por card.
+     */
+    withRecentMessageCount?: boolean;
   },
 ): Promise<ListGroupsResult> {
   const supabase = createAdminClient();
@@ -221,8 +234,36 @@ export async function listGroups(
     );
   }
   const rows = (data ?? []) as GroupRow[];
+  const views = rows.map(toView);
+
+  // Anexa contagem de mensagens (24h) por grupo quando solicitado.
+  // Faz UMA query agrupada em `messages` pra todos os group_ids da
+  // página, em vez de N loops. Cuidado: groupBy puro não existe no
+  // PostgREST — usamos SELECT group_id + count via .select sem
+  // agregação e contamos client-side (cheap com ≤100 rows de grupos
+  // e algumas centenas de msgs por grupo nas últimas 24h).
+  if (opts?.withRecentMessageCount && views.length > 0) {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const ids = views.map((v) => v.id);
+    const { data: msgs, error: msgsErr } = await supabase
+      .from("messages")
+      .select("group_id")
+      .eq("tenant_id", tenantId)
+      .in("group_id", ids)
+      .gte("captured_at", since);
+    if (!msgsErr && msgs) {
+      const counts = new Map<string, number>();
+      for (const m of msgs as Array<{ group_id: string }>) {
+        counts.set(m.group_id, (counts.get(m.group_id) ?? 0) + 1);
+      }
+      for (const v of views) {
+        v.recentMessageCount = counts.get(v.id) ?? 0;
+      }
+    }
+  }
+
   return {
-    rows: rows.map(toView),
+    rows: views,
     total: count ?? rows.length,
     page,
     pageSize,
