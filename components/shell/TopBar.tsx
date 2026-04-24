@@ -1,5 +1,23 @@
 import type { ReactNode } from 'react';
 
+/**
+ * Page header used at the top of every `(app)` route. Renders an oversized
+ * display-font title, optional eyebrow/subtitle, right-aligned actions, and
+ * a faint colored blob in the top-right that hints at the route's accent.
+ *
+ * Pure server component — no interactivity. All color decisions come from
+ * `--purple-600` / `--pink-500` / `--lime-500` / `--yellow-500` / `--zap-500`
+ * plus the neutral tokens (`--surface`, `--stroke`, `--text`, `--text-dim`).
+ *
+ * Usage:
+ *   <TopBar
+ *     breadcrumb="Aprovação"
+ *     title="Resumos aguardando"
+ *     subtitle="3 pendentes · grupo Família"
+ *     accent="pink"
+ *     actions={<Button variant="zap">Aprovar todos</Button>}
+ *   />
+ */
 export type TopBarAccent = 'purple' | 'pink' | 'lime' | 'yellow' | 'zap';
 
 export interface TopBarProps {

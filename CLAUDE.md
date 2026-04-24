@@ -545,3 +545,36 @@ Referência completa: `docs/integrations/admin-management.md`. Audit: `docs/audi
 - **Débitos (Fase 14)**: email notificando senha no createUser; audit log; `/forgot-password`; modal chunky substituindo `window.confirm`; deletar `POST /api/whatsapp/connect` + `startConnectAction` deprecated.
 - **Rollback em createUser**: se `tenant_members.insert` falha, o `auth.users.createUser` é revertido via `supabase.auth.admin.deleteUser` — não fica user órfão.
 - **Token UAZAPI**: vem do `GET /instance/all` admin, encriptado AES-256-GCM antes do INSERT em `whatsapp_instances` (mesmo padrão do fluxo legacy).
+
+---
+
+## 21. API
+
+Referência completa das 34 rotas HTTP (23 arquivos `route.ts`): [`docs/api/README.md`](docs/api/README.md). Matriz compacta de auth/rate-limit/side-effects/idempotência: [`docs/api/auth-matrix.md`](docs/api/auth-matrix.md).
+
+- **Envelope de sucesso**: objeto nomeado pelo recurso (`{ summary: … }`, `{ audios: [ … ] }`, `{ ok: true }`). Nunca `{ data: … }` genérico.
+- **Envelope de erro** (sempre): `{ error: { code, message, details? } }`. Codes canônicos em `app/api/whatsapp/_shared.ts#ErrorCode` (cookie routes) e `app/api/admin/_shared.ts#AdminErrorCode` (admin).
+- **Auth**: `requireAuth()` (cookie Supabase) na maioria; `requireSuperadminJson()` em `/api/admin/*`; shared secret (HMAC preferido) em `/api/webhooks/uazapi`; signing key em `/api/inngest`.
+- **Rate limit in-memory** (`lib/ratelimit.ts`): chave `tenant:<id>:<routeName>`, fixed-window. Não sobrevive redeploy nem replica cross-container — Upstash fica pós-MVP.
+- **Rotas destrutivas cross-tenant**: todas em `/api/admin/*`. Tier 1 (hard delete cascade) está mapeado no `auth-matrix.md`.
+
+---
+
+## 22. UI primitives
+
+UI primitives compartilhados vivem em `components/ui/` (Button, Card, Modal, Select, RadioPill, Sticker, StatCard, PodCover, PlayerWave, Waveform, MicMascot). Shell (TopBar, Sidebar, AppSidebar, AdminSidebar, NavButton) em `components/shell/`. Ícones em `components/icons/Icons.tsx`.
+
+Catálogo com props + snippets + tokens: [`docs/ui-components/README.md`](docs/ui-components/README.md). Tokens CSS (`--accent`, `--stroke`, `--shadow-chunk`, fontes, radii): [`docs/ui-components/tokens.md`](docs/ui-components/tokens.md).
+
+**Ao precisar de um novo componente, verifique primeiro se já existe equivalente — não duplique.** O source of truth visual continua sendo `podZAP/*.jsx` (§18); os primitives já portam esses padrões.
+
+---
+
+## 23. Internals docs
+
+`docs/internals/` complementa `docs/integrations/`. A divisão é:
+
+- **Integrations** = subsistemas **externos** (UAZAPI, Gemini, Groq, Supabase Auth, Inngest setup, TTS, delivery).
+- **Internals** = módulos **próprios** em `lib/` e `inngest/` (`ratelimit`, `crypto`, `supabase/` clients, `media/`, `stats/`, `inngest/events`).
+
+Índice + mapa "se você está mexendo em X, leia Y": [`docs/internals/README.md`](docs/internals/README.md). Módulos pequenos (`lib/time/relative.ts`, `lib/ai-tracking`) ficam documentados in-line nos comentários e são referenciados a partir do README do diretório.

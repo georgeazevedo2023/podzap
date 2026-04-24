@@ -7,6 +7,21 @@ import { Sticker } from '../ui/Sticker';
 import { NavButton } from './NavButton';
 
 /**
+ * Tenant-app sidebar. Presentational only — routing lives in the client
+ * wrapper `AppSidebar`, which translates `NavId` ↔ pathname. This component
+ * renders:
+ *   - brand block (purple tilted logo)
+ *   - "Principal" nav group (home/grupos/aprovação/podcasts/histórico/agenda)
+ *   - "Setup" group (WhatsApp nav row with live status dot + ajustes)
+ *   - "Superadmin" group (only when `isSuperadmin`, links to `/admin`)
+ *   - plan/usage card with progress bar + upgrade CTA
+ *   - account chip (avatar + email + logout)
+ *
+ * All props resolved server-side in `app/(app)/layout.tsx` — nothing is
+ * polled on the client.
+ */
+
+/**
  * Canonical nav ids. Screens and the router can import this union to stay in
  * sync with the sidebar without stringly-typing the current route.
  */

@@ -2,6 +2,15 @@
 
 import type { MouseEvent, ReactNode } from 'react';
 
+/**
+ * Sidebar nav row — icon + label with an optional numeric badge (e.g. pending
+ * approvals). Active state flips to `--purple-600` background with a chunky
+ * shadow + stroke; inactive rows get a subtle hover fill of `--bg-2`.
+ *
+ * Used by `Sidebar` (app shell) and adapted inline by `AdminSidebar` for the
+ * superadmin shell. The badge is only rendered when `badge > 0` — zero is
+ * hidden deliberately to avoid pill noise.
+ */
 export interface NavButtonProps {
   /** Stable id used by the parent to decide `active`. */
   id: string;
