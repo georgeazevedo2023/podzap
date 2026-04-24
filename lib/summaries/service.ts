@@ -26,6 +26,7 @@ const SUMMARY_SELECT_WITH_GROUP = `
   period_start,
   period_end,
   text,
+  caption,
   tone,
   status,
   model,
