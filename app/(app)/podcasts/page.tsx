@@ -25,6 +25,7 @@ import { listAudios, type AudioView } from '@/lib/audios/service';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
 import { CopyableCaption } from '@/components/ui/CopyableCaption';
+import { PodcastPlayer } from '@/components/ui/PodcastPlayer';
 
 import { DeliveryControls } from './DeliveryControls';
 import { PodcastsHero } from './PodcastsHero';
@@ -276,8 +277,18 @@ function EpisodeCard({ episode }: { episode: Episode }) {
         </span>
       </header>
 
+      {summary.caption ? (
+        <CopyableCaption caption={summary.caption} />
+      ) : (
+        <MissingCaptionHint />
+      )}
+
       {audio && audioUrl ? (
-        <AudioPlayer url={audioUrl} audio={audio} />
+        <PodcastPlayer
+          src={audioUrl}
+          durationSeconds={audio.durationSeconds}
+          playerId={audio.id}
+        />
       ) : audio && !audioUrl ? (
         <UnavailableBadge />
       ) : (
@@ -291,8 +302,6 @@ function EpisodeCard({ episode }: { episode: Episode }) {
           deliveredAt={audio.deliveredAt}
         />
       ) : null}
-
-      {summary.caption && <CopyableCaption caption={summary.caption} />}
 
       <details
         style={{
@@ -332,28 +341,30 @@ function EpisodeCard({ episode }: { episode: Episode }) {
   );
 }
 
-function AudioPlayer({ url, audio }: { url: string; audio: AudioView }) {
+/**
+ * Rendered quando `summary.caption` é null — resumos antigos (pré-prompt v6)
+ * ou casos em que o LLM não devolveu o campo. Deixa o usuário saber que a
+ * seção deveria estar aqui em vez de sumir silenciosamente.
+ */
+function MissingCaptionHint() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <audio
-        controls
-        preload="none"
-        src={url}
-        style={{ width: '100%' }}
-      >
-        <track kind="captions" />
-      </audio>
-      {audio.durationSeconds ? (
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--text-dim)',
-            fontFamily: 'var(--font-mono)',
-          }}
-        >
-          {formatDuration(audio.durationSeconds)}
-        </span>
-      ) : null}
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '12px 14px',
+        border: '2px dashed var(--stroke)',
+        borderRadius: 14,
+        background: 'color-mix(in srgb, var(--text) 4%, transparent)',
+        fontSize: 12,
+        fontWeight: 700,
+        color: 'var(--text-dim)',
+      }}
+      title="Legenda é gerada a partir do prompt v6 — resumos criados antes ficam sem ela."
+    >
+      <span aria-hidden>💬</span>
+      <span>sem legenda — episódio anterior ao prompt v6</span>
     </div>
   );
 }
@@ -514,9 +525,3 @@ function formatPeriod(startIso: string, endIso: string): string {
   return sameDay ? fmt(start) : `${fmt(start)} → ${fmt(end)}`;
 }
 
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}

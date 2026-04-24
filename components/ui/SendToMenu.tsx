@@ -227,7 +227,20 @@ export function SendToMenu({
     [busy, handleSend, onListen, onResult],
   );
 
-  const buttonClass = variant === 'primary' ? 'btn btn-zap' : 'btn btn-ghost';
+  // Secondary = "enviar novamente" depois de já entregue. `btn-ghost` tem
+  // bg transparente + shadow zero → invisível no dark theme. Trocamos por
+  // um pill outline com bg semi-transparente e stroke da text color, que
+  // funciona nos dois temas.
+  const buttonClass = variant === 'primary' ? 'btn btn-zap' : 'btn';
+  const secondaryInlineStyle: React.CSSProperties | undefined =
+    variant === 'primary'
+      ? undefined
+      : {
+          background: 'color-mix(in srgb, var(--text) 8%, transparent)',
+          color: 'var(--text)',
+          border: '2.5px solid var(--text)',
+          boxShadow: '3px 3px 0 var(--stroke)',
+        };
 
   // Posição do menu portalado: 8px abaixo da borda inferior do botão,
   // alinhado à direita. Usa viewport coords (position: fixed) porque o
@@ -257,6 +270,7 @@ export function SendToMenu({
           gap: 8,
           fontSize: 13,
           fontWeight: 800,
+          ...secondaryInlineStyle,
         }}
       >
         {busy ? '⟳ enviando…' : `📤 ${label}`}
