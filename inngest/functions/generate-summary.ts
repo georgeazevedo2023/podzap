@@ -61,6 +61,7 @@ export type GenerateSummaryHandlerCtx = {
       periodStart: string;
       periodEnd: string;
       tone?: SummaryTone;
+      voiceMode?: "single" | "duo";
       autoApprove?: boolean;
     };
   };
@@ -109,6 +110,7 @@ export async function generateSummaryHandler(
       periodStart,
       periodEnd,
       tone: event.data.tone,
+      voiceMode: event.data.voiceMode,
     }),
   );
 

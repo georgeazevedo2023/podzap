@@ -70,16 +70,14 @@ describe("buildSummaryPrompt — system prompt by tone", () => {
   it("every system prompt contains the narrator base contract (no self-ref)", () => {
     for (const tone of TONES) {
       const { systemPrompt } = buildSummaryPrompt(conv(), tone);
-      // Narrator framing without product self-reference (v2 rewrite):
-      expect(systemPrompt).toContain("narrador neutro");
+      // Narrator framing without product self-reference (v3 rewrite):
+      expect(systemPrompt).toContain("narrador");
       expect(systemPrompt).toContain("APENAS informação presente nas mensagens");
       expect(systemPrompt).toContain("sem markdown");
       // Anti-greeting / anti-self-reference guards (why v2 exists):
-      // Anti-saudação: o prompt deve explicitar bloqueio de "bem-vindos".
-      // Evita regex com acentos (pega pegada de encoding Unicode) — usa
-      // toContain direto.
-      expect(systemPrompt).toContain("bem-vindos");
-      expect(systemPrompt).toContain("Entra direto no conteúdo");
+      // v3: afrouxou a regra anti-saudação (user pediu mais personalidade).
+      // Agora exige apenas que o prompt PROIBA auto-referência à plataforma.
+      expect(systemPrompt).toContain("NÃO");
       // podZAP as a brand name must NOT appear in the system prompt body
       // (keyword test — if someone re-introduces it, the LLM starts
       // greeting the audience as "bem-vindos ao podZAP" again).
@@ -89,7 +87,7 @@ describe("buildSummaryPrompt — system prompt by tone", () => {
 
   it("tone override adds the expected tone-specific guidance", () => {
     expect(buildSummaryPrompt(conv(), "formal").systemPrompt).toContain(
-      "vocabulário formal",
+      "vocabulário cuidadoso",
     );
     expect(buildSummaryPrompt(conv(), "fun").systemPrompt).toContain(
       "descontraído",
@@ -235,12 +233,32 @@ describe("buildSummaryPrompt — metadata", () => {
     expect(big.estimatedTokens).toBeGreaterThan(small.estimatedTokens);
   });
 
-  it("promptVersion matches `podzap-summary/v2-<tone>` for every tone", () => {
-    const pattern = /^podzap-summary\/v2-(formal|fun|corporate)$/;
+  it("promptVersion matches `podzap-summary/v3-<mode>-<tone>` for every tone (default mode=single)", () => {
+    const pattern = /^podzap-summary\/v3-(single|duo)-(formal|fun|corporate)$/;
     for (const tone of TONES) {
       const { promptVersion } = buildSummaryPrompt(conv(), tone);
       expect(promptVersion).toMatch(pattern);
-      expect(promptVersion).toBe(`podzap-summary/v2-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v3-single-${tone}`);
     }
+  });
+
+  it("promptVersion includes 'duo' when voiceMode=duo is passed", () => {
+    for (const tone of TONES) {
+      const { promptVersion } = buildSummaryPrompt(conv(), tone, {
+        voiceMode: "duo",
+      });
+      expect(promptVersion).toBe(`podzap-summary/v3-duo-${tone}`);
+    }
+  });
+
+  it("duo system prompt contém instruções de Ana/Beto + formato speaker:", () => {
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun", {
+      voiceMode: "duo",
+    });
+    expect(systemPrompt).toContain("Ana");
+    expect(systemPrompt).toContain("Beto");
+    // A regra crítica: prefixos obrigatórios.
+    expect(systemPrompt).toMatch(/`Ana:`|Ana:\s/);
+    expect(systemPrompt).toMatch(/`Beto:`|Beto:\s/);
   });
 });

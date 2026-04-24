@@ -167,6 +167,7 @@ type SummaryLookupRow = {
   text: string;
   status: string;
   prompt_version: string | null;
+  voice_mode: "single" | "duo";
 };
 
 /**
@@ -195,7 +196,7 @@ export async function createAudioForSummary(
   // ── 1. Load summary ───────────────────────────────────────────────────
   const { data: summary, error: summaryErr } = await admin
     .from("summaries")
-    .select("id, tenant_id, text, status, prompt_version")
+    .select("id, tenant_id, text, status, prompt_version, voice_mode")
     .eq("tenant_id", tenantId)
     .eq("id", summaryId)
     .maybeSingle();
@@ -235,8 +236,12 @@ export async function createAudioForSummary(
   }
 
   // ── 3. Call Gemini TTS ────────────────────────────────────────────────
+  // voice_mode lido do summary row — foi decidido no tempo da request
+  // (modal /home ou autoApprove do schedule). Legado / retries caem em
+  // 'single' via default do schema.
   const voice = opts?.voice;
   const speed = opts?.speed;
+  const mode = summaryRow.voice_mode ?? "single";
   const startedAt = Date.now();
 
   let ttsResult;
@@ -245,6 +250,7 @@ export async function createAudioForSummary(
       text: summaryRow.text,
       voice,
       speed,
+      mode,
     });
   } catch (err) {
     throw new AudiosError(

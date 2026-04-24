@@ -47,6 +47,7 @@ type SummaryRow = {
   text: string;
   status: "pending_review" | "approved" | "rejected";
   prompt_version: string | null;
+  voice_mode: "single" | "duo";
 };
 
 const db = {
@@ -295,6 +296,7 @@ function seedSummary(partial: Partial<SummaryRow> = {}): SummaryRow {
     text: "Hello world, this is the approved summary.",
     status: "approved",
     prompt_version: "v1",
+    voice_mode: "single",
     ...partial,
   };
   db.summaries.push(row);
@@ -408,6 +410,7 @@ describe("createAudioForSummary", () => {
       text: "Resumo do dia.",
       voice: "female",
       speed: 1,
+      mode: "single",
     });
 
     // Storage upload happened.

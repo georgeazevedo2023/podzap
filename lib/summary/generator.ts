@@ -33,7 +33,11 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildNormalizedConversation } from "@/lib/pipeline/normalize";
-import { buildSummaryPrompt, type SummaryTone } from "@/lib/summary/prompt";
+import {
+  buildSummaryPrompt,
+  type SummaryTone,
+  type VoiceMode,
+} from "@/lib/summary/prompt";
 import { generateSummaryFromPrompt } from "@/lib/ai/gemini-llm";
 import { trackAiCall } from "@/lib/ai-tracking/service";
 
@@ -45,6 +49,8 @@ export type GenerateSummaryInput = {
   periodStart: Date;
   periodEnd: Date;
   tone?: SummaryTone;
+  /** 'single' narrator (default) or 'duo' Ana+Beto dialog. */
+  voiceMode?: VoiceMode;
 };
 
 export type SummaryRecord = {
@@ -81,6 +87,7 @@ export class SummaryError extends Error {
 }
 
 const DEFAULT_TONE: SummaryTone = "fun";
+const DEFAULT_VOICE_MODE: VoiceMode = "single";
 
 /**
  * Orchestrate a single summary generation end-to-end. See module comment
@@ -91,6 +98,7 @@ export async function generateSummary(
   input: GenerateSummaryInput,
 ): Promise<SummaryRecord> {
   const tone: SummaryTone = input.tone ?? DEFAULT_TONE;
+  const voiceMode: VoiceMode = input.voiceMode ?? DEFAULT_VOICE_MODE;
 
   // ── Step 1: normalized conversation ────────────────────────────────
   // The pipeline throws on invalid ranges / DB errors; we let those
@@ -113,6 +121,7 @@ export async function generateSummary(
   const { systemPrompt, userPrompt, promptVersion } = buildSummaryPrompt(
     conv,
     tone,
+    { voiceMode },
   );
 
   // ── Step 3: Gemini call (with duration timing) ─────────────────────
@@ -158,6 +167,7 @@ export async function generateSummary(
       period_end: input.periodEnd.toISOString(),
       text: llmResult.text,
       tone,
+      voice_mode: voiceMode,
       status: "pending_review",
       model: llmResult.model,
       // Override the wrapper's echoed version with the one WE built —

@@ -12,12 +12,26 @@ import { GoogleGenAI } from '@google/genai';
 import { AiError, requireEnv } from './errors';
 
 export type TtsVoice = 'male' | 'female';
+export type TtsMode = 'single' | 'duo';
 
+/**
+ * When `mode: 'duo'`, the text must contain `Ana:` / `Beto:` line prefixes
+ * (case-sensitive). Gemini's multi-speaker TTS reads the prefix to route
+ * each utterance to the right voice. Speakers not matched in the prefix
+ * are inherited from the previous speaker (per Gemini's spec), so malformed
+ * dialog still produces audio — it just alternates oddly.
+ *
+ * We pin the names "Ana" (female/Kore) and "Beto" (male/Charon) in the
+ * prompt so the LLM always emits the same labels the TTS expects.
+ */
 export type TtsInput = {
   text: string;
+  /** Solo mode: which prebuilt voice. Ignored when `mode === 'duo'`. */
   voice?: TtsVoice;
   /** Narration speed hint injected into the prompt (Gemini TTS has no `speed` param). */
   speed?: number;
+  /** Locution format. Default 'single'. */
+  mode?: TtsMode;
 };
 
 export type TtsResult = {
@@ -33,6 +47,17 @@ const VOICE_MAP: Record<TtsVoice, string> = {
   male: 'Charon',    // firm, low-pitched
   female: 'Kore',    // warm, mid-pitched
 };
+
+/**
+ * Fixed speaker names for duo mode. The prompt in `lib/summary/prompt.ts`
+ * instructs the LLM to prefix each line with `Ana:` or `Beto:`. Mapped
+ * here to the matching prebuilt voices; keep these strings identical at
+ * both ends of the pipeline.
+ */
+const DUO_SPEAKERS = [
+  { speaker: 'Ana', voiceName: VOICE_MAP.female },  // Kore
+  { speaker: 'Beto', voiceName: VOICE_MAP.male },   // Charon
+] as const;
 
 const SAMPLE_RATE_HZ = 24_000;
 const CHANNELS = 1;
@@ -73,6 +98,12 @@ function pcmToWav(pcm: Buffer): Buffer {
 }
 
 function buildPromptText(input: TtsInput): string {
+  // Duo mode: o texto já vem com prefixos `Ana:` / `Beto:`. Gemini lê
+  // direto — prefaciar com instrução de narração atrapalha (o modelo
+  // tenta ler a instrução também). Passa o texto raw.
+  if (input.mode === 'duo') {
+    return input.text;
+  }
   if (input.speed && input.speed !== 1) {
     const pace = input.speed > 1 ? 'um pouco mais rápido que o normal' : 'em ritmo pausado';
     return `Narre em português do Brasil, com tom natural de locutor de podcast, ${pace}:\n\n${input.text}`;
@@ -89,8 +120,30 @@ export async function generateAudio(input: TtsInput): Promise<TtsResult> {
   }
 
   const model = process.env.GEMINI_TTS_MODEL ?? 'gemini-2.5-flash-preview-tts';
-  const voiceName = VOICE_MAP[input.voice ?? 'female'];
   const client = getClient();
+  const mode: TtsMode = input.mode ?? 'single';
+
+  // Single-speaker: prebuiltVoiceConfig (comportamento legado).
+  // Duo: multiSpeakerVoiceConfig com Ana (Kore) + Beto (Charon).
+  const speechConfig =
+    mode === 'duo'
+      ? {
+          multiSpeakerVoiceConfig: {
+            speakerVoiceConfigs: DUO_SPEAKERS.map((s) => ({
+              speaker: s.speaker,
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: s.voiceName },
+              },
+            })),
+          },
+        }
+      : {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: VOICE_MAP[input.voice ?? 'female'],
+            },
+          },
+        };
 
   try {
     const response = await client.models.generateContent({
@@ -98,11 +151,7 @@ export async function generateAudio(input: TtsInput): Promise<TtsResult> {
       contents: [{ role: 'user', parts: [{ text: buildPromptText(input) }] }],
       config: {
         responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName },
-          },
-        },
+        speechConfig,
       },
     });
 

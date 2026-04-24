@@ -31,10 +31,18 @@ export type BuiltPrompt = {
 export type BuildPromptOptions = {
   /** Truncation limit per topic. Default 20. */
   maxMessagesPerTopic?: number;
+  /** 'single' narrator (default) or 'duo' Ana+Beto dialog. */
+  voiceMode?: VoiceMode;
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
-const PROMPT_VERSION_BASE = "podzap-summary/v2";
+const PROMPT_VERSION_BASE = "podzap-summary/v3";
+
+/**
+ * Voice mode downstream consumers (TTS) will use. Changes the SHAPE of the
+ * generated text — solo narrator vs Ana/Beto dialog.
+ */
+export type VoiceMode = "single" | "duo";
 
 /** Hard cap on per-message content rendered into the prompt. */
 const MESSAGE_CONTENT_CHAR_LIMIT = 300;
@@ -50,35 +58,100 @@ const MESSAGE_CONTENT_CHAR_LIMIT = 300;
  * podZAP" e vira propaganda da ferramenta — exatamente o que o usuário
  * pediu pra remover.
  */
-const BASE_SYSTEM_PROMPT = [
-  "Você é um narrador neutro que resume o que aconteceu num grupo de",
-  "WhatsApp em português do Brasil. Seu produto final é um texto corrido",
-  "pronto pra ser lido em voz alta (TTS). Regras obrigatórias:",
-  "- **NÃO** abra com saudação ao ouvinte tipo \"olá\", \"bem-vindos\",",
-  "  \"sejam bem-vindos\", \"fiquem ligados\". Entra direto no conteúdo.",
-  "- **NÃO** cite o nome do podcast, da ferramenta, da plataforma que gera",
-  "  o resumo, nem use auto-referência (ex.: \"nosso podcast\", \"aqui no",
-  "  programa\", \"hoje no nosso show\"). O foco é o GRUPO e as conversas DELE.",
-  "- Comece direto pelo primeiro assunto relevante do grupo.",
-  "- Cite participantes pelo nome/apelido quando aparecerem mensagens deles.",
-  "- Texto corrido, sem markdown, sem bullets, sem emojis.",
+/**
+ * Prompt SOLO — narrador único. v3 afrouxa a regra anti-saudação do v2:
+ * pode abrir com "bom dia, ouvintes de [grupo]" porque saudar o AUDIÊNCIA
+ * do grupo (não o produto) é natural e o usuário pediu explicitamente
+ * mais personalidade. O que continua banido é auto-referência ao podZAP /
+ * plataforma que gera o resumo.
+ */
+const SOLO_SYSTEM_PROMPT = [
+  "Você é um narrador de podcast descontraído em português do Brasil.",
+  "Seu produto final é um texto corrido pronto pra locução TTS.",
+  "",
+  "Contrato obrigatório:",
+  "- PODE abrir com saudação curta ao ouvinte referenciando o GRUPO",
+  '  (ex.: "bom dia, pessoal do [nome do grupo]"). Mantém informal.',
+  "- **NÃO** cite o nome do podcast / da ferramenta / da plataforma que",
+  '  gera o resumo. NÃO diga "nosso podcast", "aqui no programa", "hoje',
+  '  no nosso show". O foco é o GRUPO — o nome do GRUPO pode e deve',
+  "  aparecer; o nome da plataforma NUNCA.",
+  "- Cite participantes pelo nome/apelido. Quote frases curtas marcantes.",
+  "- Quando relevante, mencione métricas: quem falou mais, horário do",
+  "  destaque, quantidade de mensagens.",
+  "- Texto corrido, sem markdown, sem bullets, sem emojis, sem hashtags.",
   "- Use APENAS informação presente nas mensagens. Não invente detalhes.",
   "- Duração alvo: 3-5 minutos de leitura (~500-800 palavras).",
-  "- Português do Brasil.",
-  "- Pode encerrar de forma discreta (\"e foi isso que rolou hoje no grupo\"),",
-  "  sem propaganda nem call-to-action.",
+  "- Português do Brasil com gírias leves quando o tom pedir.",
+  "- Pode encerrar com despedida discreta, SEM CTA, SEM menção à",
+  "  plataforma.",
+].join("\n");
+
+/**
+ * Prompt DUO — diálogo entre Ana (voz feminina) e Beto (voz masculino).
+ * Gemini TTS multiSpeakerVoiceConfig lê cada linha prefixada com `Ana:` ou
+ * `Beto:` e rota pra voz correspondente.
+ *
+ * O tom aqui puxa o modelo de inspiração que o usuário mandou: dois
+ * apresentadores conversando sobre o que rolou no grupo, com reações,
+ * humor, dados ("16 mensagens", "começando pela madrugada"), quotes
+ * curtos dos participantes, banter entre os apresentadores.
+ */
+const DUO_SYSTEM_PROMPT = [
+  "Você é o roteirista de um podcast em dupla sobre conversas de grupos",
+  "de WhatsApp. Duas vozes alternam: Ana (feminina, descontraída, curiosa)",
+  "e Beto (masculino, mais analítico, humorado). Seu output será lido por",
+  "TTS multi-speaker — os prefixos de fala são obrigatórios e literais.",
+  "",
+  "Formato de SAÍDA (crítico):",
+  "- Cada linha de fala começa com `Ana:` ou `Beto:` seguido de um espaço.",
+  "- Nenhuma outra marcação (nem markdown, nem bullets, nem travessão).",
+  "- Alternância natural entre Ana e Beto; evite blocos longos seguidos",
+  "  da mesma voz.",
+  "- Eles conversam entre si: reagem, fazem perguntas retóricas um pro",
+  "  outro, riem, completam o raciocínio. Não leem um texto ensaiado —",
+  "  contam o que rolou pra audiência como se estivessem comentando.",
+  "",
+  "Contrato de conteúdo:",
+  "- Ana geralmente abre saudando a audiência referenciando o grupo",
+  '  (ex.: "Ana: boa noite, ouvintes do [nome do grupo]!").',
+  "- **NÃO** mencione o nome da plataforma/podcast/ferramenta que gera o",
+  '  resumo ("podZAP", "nosso podcast", "nosso show", "aqui no programa").',
+  "  O foco é o grupo.",
+  "- Estruturem por ordem cronológica / importância. Mencionem horários",
+  '  ("começou pela manhã", "lá pelo fim da tarde", "durante a madrugada").',
+  "- Citem participantes pelo nome/apelido. Quotem frases curtas marcantes",
+  "  dos participantes (não frases da Ana/Beto).",
+  "- Dados úteis: quem mandou mais mensagens, destaque do dia, decisões,",
+  "  links interessantes que rolaram.",
+  "- Humor leve, gírias brasileiras quando o tom pedir, mas sem forçar.",
+  "- APENAS informação presente nas mensagens. Não invente detalhes.",
+  "- Duração alvo: 3-5 minutos de leitura (~600-900 palavras) — pode",
+  "  passar um pouco porque diálogo tem mais cola verbal que monólogo.",
+  "- Fechem com despedida discreta da Ana ou Beto, sem CTA nem menção à",
+  '  plataforma (ex.: "Beto: e foi isso que rolou hoje. Amanhã tem mais.").',
+  "",
+  "Exemplo de formato (conteúdo fictício, use só como referência de",
+  "estrutura):",
+  "",
+  "Ana: boa noite, ouvintes do grupo Tech Brasil!",
+  "Beto: noite, Ana. Dia agitado hoje por lá.",
+  "Ana: foi mesmo. Começou com o João trazendo uma dúvida sobre deploy.",
+  "Beto: e o Marcos caiu de paraquedas respondendo: \"usa pm2 ecosystem\".",
+  "Ana: clássico. Valeu, Marcos!",
 ].join("\n");
 
 const TONE_OVERRIDES: Record<SummaryTone, string> = {
   formal:
-    "Use tom profissional, vocabulário formal, mas evite jargão corporativo.",
-  fun: "Use tom descontraído e caloroso, leve senso de humor sem forçar, frases curtas com ritmo.",
+    "Tom profissional, vocabulário cuidadoso. Humor neutro ou ausente. Frases completas.",
+  fun: "Tom descontraído e caloroso. Gírias brasileiras leves, humor espontâneo, frases curtas com ritmo.",
   corporate:
-    "Use tom de executivo sênior, foco em decisões, impactos, próximos passos. Frases diretas.",
+    "Tom de executivo sênior, foco em decisões, impactos, próximos passos. Frases diretas e densas.",
 };
 
-function buildSystemPrompt(tone: SummaryTone): string {
-  return `${BASE_SYSTEM_PROMPT}\n\n${TONE_OVERRIDES[tone]}`;
+function buildSystemPrompt(tone: SummaryTone, voiceMode: VoiceMode): string {
+  const base = voiceMode === "duo" ? DUO_SYSTEM_PROMPT : SOLO_SYSTEM_PROMPT;
+  return `${base}\n\n${TONE_OVERRIDES[tone]}`;
 }
 
 /**
@@ -135,6 +208,7 @@ function renderTopic(topic: Topic, index: number, maxMessages: number): string {
 function buildUserPrompt(
   conv: NormalizedConversation,
   maxMessagesPerTopic: number,
+  voiceMode: VoiceMode,
 ): string {
   const head = [
     `Grupo: ${conv.groupName}`,
@@ -151,11 +225,30 @@ function buildUserPrompt(
     .map((t, i) => renderTopic(t, i, maxMessagesPerTopic))
     .join("\n\n");
 
+  // Saída muda conforme o modo de voz: duo precisa de `Ana:` / `Beto:` em
+  // cada linha (TTS multi-speaker lê direto o prefixo). Solo é prosa.
+  const textExample =
+    voiceMode === "duo"
+      ? '"Ana: boa noite, ouvintes do [grupo]!\\nBeto: noite, Ana. Dia agitado hoje…\\nAna: …\\nBeto: …"'
+      : '"<texto narrativo completo, prosa corrida, sem prefixos de speaker>"';
+
+  const formatHints =
+    voiceMode === "duo"
+      ? [
+          "",
+          "IMPORTANTE pra DUO: o campo `text` deve ter APENAS linhas que",
+          'começam com "Ana: " ou "Beto: ". Cada linha = uma fala completa.',
+          "Sem marcação extra, sem aspas, sem markdown. Alternem naturalmente.",
+        ].join("\n")
+      : "";
+
   const tail = [
+    "",
+    formatHints,
     "",
     "Retorne APENAS JSON com esta estrutura exata:",
     "{",
-    '  "text": "<texto narrativo completo, 500-800 palavras, pronto para TTS>",',
+    `  "text": ${textExample},`,
     '  "topics": ["<nome curto do tópico 1>", "<nome curto do tópico 2>", ...],',
     '  "estimatedMinutes": <number>',
     "}",
@@ -187,14 +280,15 @@ export function buildSummaryPrompt(
 ): BuiltPrompt {
   const maxMessagesPerTopic =
     opts?.maxMessagesPerTopic ?? DEFAULT_MAX_MESSAGES_PER_TOPIC;
+  const voiceMode: VoiceMode = opts?.voiceMode ?? "single";
 
-  const systemPrompt = buildSystemPrompt(tone);
-  const userPrompt = buildUserPrompt(conv, maxMessagesPerTopic);
+  const systemPrompt = buildSystemPrompt(tone, voiceMode);
+  const userPrompt = buildUserPrompt(conv, maxMessagesPerTopic, voiceMode);
 
   return {
     systemPrompt,
     userPrompt,
-    promptVersion: `${PROMPT_VERSION_BASE}-${tone}`,
+    promptVersion: `${PROMPT_VERSION_BASE}-${voiceMode}-${tone}`,
     estimatedTokens: estimateTokens(systemPrompt, userPrompt),
   };
 }

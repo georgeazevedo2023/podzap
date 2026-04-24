@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/Select';
 
 type Tone = 'formal' | 'fun' | 'corporate';
 type Period = '24h' | '7d';
+type VoiceMode = 'single' | 'duo';
 
 interface GroupOption {
   id: string;
@@ -83,6 +84,11 @@ const TONE_OPTIONS: { value: Tone; label: string; emoji: string }[] = [
   { value: 'corporate', label: 'corporativo', emoji: '💼' },
 ];
 
+const VOICE_MODE_OPTIONS: { value: VoiceMode; label: string; emoji: string }[] = [
+  { value: 'duo', label: 'dupla (1M+1F)', emoji: '🎙️🎙️' },
+  { value: 'single', label: 'solo', emoji: '🎙️' },
+];
+
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: '24h', label: 'últimas 24h' },
   { value: '7d', label: 'últimos 7 dias' },
@@ -98,6 +104,7 @@ export function GenerateNowModal({
   const [groupId, setGroupId] = useState('');
   const [tone, setTone] = useState<Tone>('fun');
   const [period, setPeriod] = useState<Period>('24h');
+  const [voiceMode, setVoiceMode] = useState<VoiceMode>('duo');
   const [fetching, setFetching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,7 +187,7 @@ export function GenerateNowModal({
       const res = await fetch('/api/summaries/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId, periodStart, periodEnd, tone }),
+        body: JSON.stringify({ groupId, periodStart, periodEnd, tone, voiceMode }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as {
@@ -317,6 +324,14 @@ export function GenerateNowModal({
           value={period}
           onChange={setPeriod}
           options={PERIOD_OPTIONS}
+        />
+
+        <RadioPill<VoiceMode>
+          label="formato do áudio"
+          name="gen-voice-mode"
+          value={voiceMode}
+          onChange={setVoiceMode}
+          options={VOICE_MODE_OPTIONS}
         />
 
         {error ? <div style={errorBoxStyle}>{error}</div> : null}

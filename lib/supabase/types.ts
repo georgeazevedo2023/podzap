@@ -353,6 +353,7 @@ export type Database = {
           text: string
           tone: Database["public"]["Enums"]["summary_tone"]
           updated_at: string
+          voice_mode: "single" | "duo"
         }
         Insert: {
           approved_at?: string | null
@@ -370,6 +371,7 @@ export type Database = {
           text: string
           tone?: Database["public"]["Enums"]["summary_tone"]
           updated_at?: string
+          voice_mode?: "single" | "duo"
         }
         Update: {
           approved_at?: string | null
@@ -387,6 +389,7 @@ export type Database = {
           text?: string
           tone?: Database["public"]["Enums"]["summary_tone"]
           updated_at?: string
+          voice_mode?: "single" | "duo"
         }
         Relationships: [
           {

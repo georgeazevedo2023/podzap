@@ -39,6 +39,7 @@ const GenerateBodySchema = z
     periodStart: z.string().datetime({ offset: true }),
     periodEnd: z.string().datetime({ offset: true }),
     tone: z.enum(["formal", "fun", "corporate"]).default("fun"),
+    voiceMode: z.enum(["single", "duo"]).default("single"),
   })
   .refine(
     (body) => new Date(body.periodEnd) > new Date(body.periodStart),
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { groupId, periodStart, periodEnd, tone } = parsed.data;
+  const { groupId, periodStart, periodEnd, tone, voiceMode } = parsed.data;
 
   try {
     await inngest.send(
@@ -79,6 +80,7 @@ export async function POST(req: Request) {
         periodStart,
         periodEnd,
         tone,
+        voiceMode,
       }),
     );
     return NextResponse.json(
