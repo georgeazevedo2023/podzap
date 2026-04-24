@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { Database } from '@/lib/supabase/types';
 
@@ -187,7 +187,14 @@ function MessageRow({ item, onOpenImage }: MessageRowProps) {
               color: 'var(--text-dim)',
               fontWeight: 600,
             }}
-            title={new Date(item.capturedAt).toLocaleString('pt-BR')}
+            // `toLocaleString` with no tz option resolves against the runtime's
+            // local timezone — Hetzner server is UTC, the browser is
+            // America/Sao_Paulo, so the two values diverge and hydration
+            // fails. `suppressHydrationWarning` is scoped to attributes of
+            // this span, which only has the title we explicitly want to be
+            // client-authored.
+            suppressHydrationWarning
+            title={relativeTime ? new Date(item.capturedAt).toLocaleString('pt-BR') : ''}
           >
             {relativeTime}
           </span>
@@ -604,12 +611,23 @@ function ImageLightbox({
 /* -------------------------------------------------------------------------- */
 
 /**
- * Poor-man's relative timestamp. Stable across renders because we derive it
- * from the ISO string at mount — no ticker, no re-renders. Good enough for
- * a "recent activity" feed that the user refreshes manually.
+ * Poor-man's relative timestamp. Mount-gated to dodge React hydration error
+ * #418: `formatRelative` depends on `Date.now()`, which differs between the
+ * server render (t=SSR) and the client hydration (t=SSR + N ms/s/min). A
+ * message that was "há 59 min" on the server could be "há 1 h" on hydration,
+ * and the diff'd text nodes blow up the hydration pass — taking the page's
+ * event handlers (scroll, pagination) down with it.
+ *
+ * Strategy: initial render (server + client-first-paint) returns empty
+ * string, so the two match. After mount the effect writes the real label.
+ * Visual cost: a single frame flash of missing timestamp — acceptable.
  */
 function useRelativeTime(iso: string): string {
-  return useMemo(() => formatRelative(iso), [iso]);
+  const [label, setLabel] = useState<string>('');
+  useEffect(() => {
+    setLabel(formatRelative(iso));
+  }, [iso]);
+  return label;
 }
 
 function formatRelative(iso: string): string {

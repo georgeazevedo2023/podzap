@@ -108,4 +108,58 @@ test.describe('/history', () => {
     await expect(page.getByText(/divertido/i).first()).toBeVisible();
     await expect(page.getByText(/últimas 24h/i)).toBeVisible();
   });
+
+  test('zero erros de console / React hydration', async ({
+    authedPage: page,
+  }) => {
+    // Hydration errors (React #418 etc.) break event handlers silently —
+    // scroll, buttons, modals stop working with no visible feedback. This
+    // test fails loudly if ANY console.error or unhandled page error fires
+    // while /history renders, so a future regression (Date.now() /
+    // toLocaleString drift between SSR and CSR) shows up in CI instead of
+    // in prod.
+    const errors: string[] = [];
+    page.on('pageerror', (err) => {
+      errors.push(`pageerror: ${err.message}`);
+    });
+    page.on('console', (msg) => {
+      if (msg.type() === 'error') {
+        errors.push(`console.error: ${msg.text()}`);
+      }
+    });
+
+    await page.goto('/history');
+    await page.waitForLoadState('networkidle');
+    // Hydration errors surface one tick after mount — wait a beat.
+    await page.waitForTimeout(800);
+
+    expect(
+      errors,
+      `Expected zero errors on /history — found:\n${errors.join('\n')}`,
+    ).toHaveLength(0);
+  });
+
+  test('scroll até o rodapé chega na paginação bottom', async ({
+    authedPage: page,
+  }) => {
+    // Catches a regression where a hydration failure (or the sidebar-fixed
+    // layout) disables scroll inside <main>. Previously the user reported
+    // "não consigo ir até lá embaixo" mesmo com 61 msgs em 4 páginas.
+    await page.goto('/history');
+
+    const pagination = page.getByRole('navigation', {
+      name: /paginação do histórico/i,
+    });
+    const count = await pagination.count();
+    test.skip(count === 0, 'single-page tenant; pagination intentionally hidden');
+
+    // /history layout: <main style="overflow-y:auto">. Scroll the main
+    // element (not window — body has overflow:hidden).
+    await page
+      .locator('main')
+      .evaluate((el: HTMLElement) => el.scrollTo(0, el.scrollHeight));
+
+    // If scroll worked, the bottom nav is now in view.
+    await expect(pagination).toBeInViewport();
+  });
 });
