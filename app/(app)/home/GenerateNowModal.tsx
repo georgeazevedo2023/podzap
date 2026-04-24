@@ -19,6 +19,13 @@ interface GroupOption {
 interface GenerateNowModalProps {
   open: boolean;
   onClose: () => void;
+  /**
+   * Optional group id to pre-select when the modal opens. Used by the history
+   * page filter so "gerar resumo agora" inherits the group currently being
+   * viewed. Ignored if the id isn't in the monitored list (falls back to the
+   * first group).
+   */
+  initialGroupId?: string;
 }
 
 const TONE_OPTIONS: { value: Tone; label: string; emoji: string }[] = [
@@ -32,7 +39,11 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: '7d', label: 'últimos 7 dias' },
 ];
 
-export function GenerateNowModal({ open, onClose }: GenerateNowModalProps) {
+export function GenerateNowModal({
+  open,
+  onClose,
+  initialGroupId,
+}: GenerateNowModalProps) {
   const router = useRouter();
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [groupId, setGroupId] = useState('');
@@ -63,7 +74,15 @@ export function GenerateNowModal({ open, onClose }: GenerateNowModalProps) {
           name: g.name?.trim() || '(sem nome)',
         }));
         setGroups(list);
-        setGroupId((prev) => (prev && list.some((g) => g.id === prev) ? prev : list[0]?.id ?? ''));
+        setGroupId((prev) => {
+          // Priority: caller's `initialGroupId` (e.g. the history filter)
+          // > previous selection > first group.
+          if (initialGroupId && list.some((g) => g.id === initialGroupId)) {
+            return initialGroupId;
+          }
+          if (prev && list.some((g) => g.id === prev)) return prev;
+          return list[0]?.id ?? '';
+        });
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -76,7 +95,7 @@ export function GenerateNowModal({ open, onClose }: GenerateNowModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, initialGroupId]);
 
   const handleSubmit = async () => {
     if (!groupId) {

@@ -17,6 +17,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
+import { HistoryFilterBar } from './HistoryFilterBar';
 import {
   MessagesList,
   type HistoryItem,
@@ -26,6 +27,31 @@ import { RefreshButton } from './RefreshButton';
 
 /** Upper bound of messages shown on first render. Matches `GET /api/history`. */
 const HISTORY_LIMIT = 50;
+
+interface GroupOption {
+  id: string;
+  name: string;
+}
+
+/**
+ * Fetch monitored groups for the current tenant. Used to populate the
+ * `<HistoryFilterBar>` dropdown. Groups without a human name fall back to
+ * `"(sem nome)"` so the select never shows an empty label.
+ */
+async function loadMonitoredGroups(tenantId: string): Promise<GroupOption[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('groups')
+    .select('id, name')
+    .eq('tenant_id', tenantId)
+    .eq('is_monitored', true)
+    .order('name', { ascending: true });
+  if (error || !data) return [];
+  return data.map((g) => ({
+    id: g.id,
+    name: (g.name ?? '').trim() || '(sem nome)',
+  }));
+}
 
 /**
  * Fetch the last N captured messages for this tenant, joined with the group
@@ -37,13 +63,16 @@ const HISTORY_LIMIT = 50;
  * never needs service-role access. `getSignedUrl` is best-effort — we
  * swallow failures and fall back to `null` (the UI renders a placeholder).
  */
-async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
+async function loadHistory(
+  tenantId: string,
+  groupId: string | null,
+): Promise<HistoryItem[]> {
   const admin = createAdminClient();
   // Nested `transcripts(…)` is a left-join — messages without a transcript
   // come back with an empty array (or `null` depending on postgrest), so we
   // normalise to a single object or `null` in the mapper below. Pulling the
   // transcript inline avoids an N+1 round-trip against the 50-row cap.
-  const { data, error } = await admin
+  let query = admin
     .from('messages')
     .select(
       `
@@ -62,7 +91,11 @@ async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
       transcripts ( text, language, model, created_at )
       `,
     )
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', tenantId);
+  if (groupId) {
+    query = query.eq('group_id', groupId);
+  }
+  const { data, error } = await query
     .order('captured_at', { ascending: false })
     .limit(HISTORY_LIMIT);
 
@@ -112,17 +145,43 @@ async function loadHistory(tenantId: string): Promise<HistoryItem[]> {
 
 /**
  * `/history` — scrollable feed of the latest captured messages for this
- * tenant. Intentionally read-only; all interactivity (refresh, preview) is
- * owned by the client sub-component.
+ * tenant. Supports filtering by a monitored group via `?group=<uuid>` and
+ * launching the "gerar resumo agora" modal (same modal used on `/home`)
+ * with the filtered group pre-selected.
+ *
+ * `searchParams` is a Promise in Next 15 — await once, extract `group`,
+ * and validate it belongs to this tenant before filtering (prevents a
+ * malicious id leaking another tenant's group count via the filter bar).
  */
-export default async function HistoryPage() {
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ group?: string | string[] }>;
+}) {
   const context = await getCurrentUserAndTenant();
   if (!context) {
     redirect('/login?error=Faça login para continuar');
   }
 
   const { tenant } = context;
-  const items = await loadHistory(tenant.id);
+  const [groups, resolvedParams] = await Promise.all([
+    loadMonitoredGroups(tenant.id),
+    searchParams,
+  ]);
+
+  const rawGroup = Array.isArray(resolvedParams.group)
+    ? resolvedParams.group[0]
+    : resolvedParams.group;
+  // Only honour the filter if the id maps to a monitored group for this
+  // tenant. An invalid / cross-tenant id silently falls back to "todos".
+  const selectedGroupId = rawGroup && groups.some((g) => g.id === rawGroup)
+    ? rawGroup
+    : '';
+
+  const items = await loadHistory(
+    tenant.id,
+    selectedGroupId ? selectedGroupId : null,
+  );
 
   return (
     <div style={{ minHeight: '100vh' }}>
@@ -143,13 +202,22 @@ export default async function HistoryPage() {
           maxWidth: 960,
         }}
       >
-        {items.length === 0 ? <EmptyState /> : <MessagesList initial={items} />}
+        <HistoryFilterBar
+          groups={groups}
+          selectedGroupId={selectedGroupId}
+          totalCount={items.length}
+        />
+        {items.length === 0 ? (
+          <EmptyState filtered={!!selectedGroupId} />
+        ) : (
+          <MessagesList initial={items} />
+        )}
       </div>
     </div>
   );
 }
 
-function EmptyState() {
+function EmptyState({ filtered = false }: { filtered?: boolean } = {}) {
   return (
     <div
       className="card"
@@ -163,7 +231,7 @@ function EmptyState() {
     >
       <div>
         <Sticker variant="pink" style={{ marginBottom: 12 }}>
-          📭 sem mensagens ainda
+          📭 sem mensagens {filtered ? 'nesse grupo' : 'ainda'}
         </Sticker>
         <h2
           style={{
@@ -175,7 +243,7 @@ function EmptyState() {
             letterSpacing: '-0.02em',
           }}
         >
-          nenhuma mensagem ainda
+          {filtered ? 'nenhuma mensagem nesse grupo' : 'nenhuma mensagem ainda'}
         </h2>
         <p
           style={{
@@ -186,9 +254,9 @@ function EmptyState() {
             maxWidth: 520,
           }}
         >
-          verifica se o WhatsApp está conectado e se os grupos que você quer
-          ouvir estão monitorados. assim que o primeiro áudio cair por aqui
-          ele aparece nessa lista.
+          {filtered
+            ? 'esse grupo ainda não teve mensagens capturadas desde que foi marcado como monitorado. tire o filtro pra ver o histórico geral.'
+            : 'verifica se o WhatsApp está conectado e se os grupos que você quer ouvir estão monitorados. assim que o primeiro áudio cair por aqui ele aparece nessa lista.'}
         </p>
       </div>
       <div
