@@ -37,6 +37,14 @@ export type NormalizedConversation = {
   discarded: number;
   /** Total raw rows pulled from the DB (kept + discarded). */
   total: number;
+  /**
+   * "Mestres do engajamento" — top participantes por contagem total de
+   * mensagens (incluindo as descartadas pelo filtro: pra essa métrica, o
+   * que importa é volume bruto, não relevância). Sorted desc por count;
+   * ties mantém ordem de aparição. Top 5 — o prompt escolhe os 3 primeiros
+   * mas dá margem pra empate.
+   */
+  topParticipants: Array<{ name: string; count: number }>;
 };
 
 type MessageType = Database["public"]["Enums"]["message_type"];
@@ -136,6 +144,7 @@ export async function buildNormalizedConversation(
       topics: [],
       discarded: 0,
       total: 0,
+      topParticipants: [],
     };
   }
 
@@ -145,6 +154,7 @@ export async function buildNormalizedConversation(
   const filterInput: FilterInput = rows.map(rowToFilterInput);
   const { kept, discarded } = filterMessages(filterInput);
   const topics = clusterByTopic(kept);
+  const topParticipants = computeTopParticipants(rows);
 
   return {
     tenantId,
@@ -155,5 +165,30 @@ export async function buildNormalizedConversation(
     topics,
     discarded,
     total: rows.length,
+    topParticipants,
   };
+}
+
+/**
+ * Conta mensagens por sender_name (raw, antes do filtro — volume bruto)
+ * e devolve top 5 desc. Senders sem nome são agrupados em "anônimo".
+ * Ordem de aparição preservada em caso de empate, então o prompt pode
+ * detectar empates olhando counts iguais.
+ */
+const TOP_PARTICIPANTS_LIMIT = 5;
+
+function computeTopParticipants(
+  rows: JoinedRow[],
+): Array<{ name: string; count: number }> {
+  // Map preserva insertion order — primeira mensagem de cada sender define
+  // a posição que vence empates depois.
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const name = (row.sender_name ?? "").trim() || "anônimo";
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_PARTICIPANTS_LIMIT)
+    .map(([name, count]) => ({ name, count }));
 }

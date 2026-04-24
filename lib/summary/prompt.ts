@@ -43,7 +43,7 @@ export type BuildPromptOptions = {
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
-const PROMPT_VERSION_BASE = "podzap-summary/v6";
+const PROMPT_VERSION_BASE = "podzap-summary/v7";
 
 /**
  * Voice mode downstream consumers (TTS) will use. Changes the SHAPE of the
@@ -291,6 +291,28 @@ function buildUserPrompt(
         ? "boa tarde"
         : "boa noite";
 
+  // Renderiza o ranking de mestres do engajamento. Empates aparecem com
+  // counts iguais — o LLM deve frasear como "X e Y empatados com N". Vazio
+  // só acontece em janelas sem mensagem (já tratado em outro caminho).
+  const topParticipantsBlock =
+    conv.topParticipants.length > 0
+      ? [
+          "",
+          "MESTRES DO ENGAJAMENTO (top participantes por volume bruto de mensagens",
+          "no período — inclui descartadas; mencionar OBRIGATORIAMENTE no início OU",
+          "no fim do podcast, escolher um dos dois):",
+          ...conv.topParticipants.map(
+            (p, i) => `  ${i + 1}. ${p.name} — ${p.count} mensagens`,
+          ),
+          "Como mencionar: cite o TOTAL DO PERÍODO e o TOP 3 (ou top 2 se",
+          "houver poucos participantes). Se 2+ tiverem o MESMO count, diga",
+          "que estão empatados (ex.: \"Fernando e Léo, empatados no topo com",
+          "15 mensagens cada\"). NÃO leia como lista bullet — incorpore na",
+          "conversa Ana↔Beto (ou na narrativa solo) de forma natural,",
+          "tom \"locutor de futebol anunciando os artilheiros do dia\".",
+        ].join("\n")
+      : "";
+
   const head = [
     `Grupo: ${conv.groupName}`,
     `Período: ${formatDateBR(conv.periodStart)} até ${formatDateBR(conv.periodEnd)}`,
@@ -299,6 +321,7 @@ function buildUserPrompt(
     `Total de mensagens: ${conv.total}`,
     `Mensagens descartadas (ruído): ${conv.discarded}`,
     `Tópicos identificados: ${conv.topics.length}`,
+    ...(topParticipantsBlock ? [topParticipantsBlock] : []),
     "",
     "Para cada tópico abaixo, gere uma seção narrativa fluida.",
     "",

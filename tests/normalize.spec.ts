@@ -206,6 +206,7 @@ describe("buildNormalizedConversation — empty result", () => {
       topics: [],
       discarded: 0,
       total: 0,
+      topParticipants: [],
     });
   });
 

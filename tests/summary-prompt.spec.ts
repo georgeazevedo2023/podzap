@@ -53,6 +53,10 @@ function conv(
     topics: [topic()],
     discarded: 3,
     total: 10,
+    topParticipants: [
+      { name: "Alice", count: 6 },
+      { name: "Bob", count: 4 },
+    ],
     ...overrides,
   };
 }
@@ -233,12 +237,12 @@ describe("buildSummaryPrompt — metadata", () => {
     expect(big.estimatedTokens).toBeGreaterThan(small.estimatedTokens);
   });
 
-  it("promptVersion matches `podzap-summary/v6-<mode>-<tone>` for every tone (default mode=single)", () => {
-    const pattern = /^podzap-summary\/v6-(single|duo)-(formal|fun|corporate)$/;
+  it("promptVersion matches `podzap-summary/v7-<mode>-<tone>` for every tone (default mode=single)", () => {
+    const pattern = /^podzap-summary\/v7-(single|duo)-(formal|fun|corporate)$/;
     for (const tone of TONES) {
       const { promptVersion } = buildSummaryPrompt(conv(), tone);
       expect(promptVersion).toMatch(pattern);
-      expect(promptVersion).toBe(`podzap-summary/v6-single-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v7-single-${tone}`);
     }
   });
 
@@ -247,7 +251,7 @@ describe("buildSummaryPrompt — metadata", () => {
       const { promptVersion } = buildSummaryPrompt(conv(), tone, {
         voiceMode: "duo",
       });
-      expect(promptVersion).toBe(`podzap-summary/v6-duo-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v7-duo-${tone}`);
     }
   });
 
