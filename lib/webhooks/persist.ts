@@ -183,8 +183,13 @@ function hasDownloadableMedia(content: MessageUpsertEvent["content"]): boolean {
  *     opt-in UX meaningless (every new group would appear monitored=false
  *     from an event the user never asked about).
  *
- *   - We never consume `fromMe=true`. Our own outgoing messages are not
- *     news; they would also double-count when we send summaries back.
+ *   - We only drop `fromMe=true` for **audio** messages. The Fase 10
+ *     delivery worker sends the podcast audio back to the group, which
+ *     fires a `fromMe=true` webhook of type audio — ingesting that would
+ *     transcribe our own podcast and include it in the next summary
+ *     (loop). Text/image/video the owner posts are legit user input and
+ *     ARE captured. Fix tracked for later: stamp `audios.uazapi_delivered_message_id`
+ *     so we can let all fromMe audios through except our exact delivery ids.
  *
  *   - Dedup uses the UNIQUE `(tenant_id, uazapi_message_id)` index from
  *     migration 0001 + `on conflict do nothing`. We implement it as a
@@ -199,9 +204,13 @@ function hasDownloadableMedia(content: MessageUpsertEvent["content"]): boolean {
 export async function persistIncomingMessage(
   event: MessageUpsertEvent,
 ): Promise<HandleResult> {
-  // 0. Ignore self-sent messages. Never persist, never dedup.
-  if (event.key.fromMe) {
-    return { status: "ignored", reason: "fromMe message" };
+  // 0. Ignore only self-sent AUDIO messages. That covers the podcast
+  //    delivery loop (we send audio back; UAZAPI re-fires webhook for it).
+  //    Text/image/video the tenant owner posts are legitimate group input
+  //    and must be captured, otherwise the owner never appears in their
+  //    own summaries.
+  if (event.key.fromMe && event.content.kind === "audio") {
+    return { status: "ignored", reason: "fromMe audio (own podcast delivery)" };
   }
 
   const supabase = createAdminClient();

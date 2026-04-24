@@ -319,7 +319,7 @@ function textMessageEvent(opts: {
   });
 }
 
-function audioMessageEvent(opts: { messageId?: string } = {}) {
+function audioMessageEvent(opts: { messageId?: string; fromMe?: boolean } = {}) {
   return parse({
     event: "messages.upsert",
     instance: UAZ_INSTANCE,
@@ -327,7 +327,7 @@ function audioMessageEvent(opts: { messageId?: string } = {}) {
       key: {
         id: opts.messageId ?? "msg_" + randomUUID(),
         remoteJid: GROUP_JID,
-        fromMe: false,
+        fromMe: opts.fromMe ?? false,
       },
       messageTimestamp: 1_732_022_400,
       messageType: "audioMessage",
@@ -344,7 +344,7 @@ function audioMessageEvent(opts: { messageId?: string } = {}) {
   });
 }
 
-function imageMessageEvent(opts: { messageId?: string } = {}) {
+function imageMessageEvent(opts: { messageId?: string; fromMe?: boolean } = {}) {
   return parse({
     event: "messages.upsert",
     instance: UAZ_INSTANCE,
@@ -352,7 +352,7 @@ function imageMessageEvent(opts: { messageId?: string } = {}) {
       key: {
         id: opts.messageId ?? "msg_" + randomUUID(),
         remoteJid: GROUP_JID,
-        fromMe: false,
+        fromMe: opts.fromMe ?? false,
       },
       messageTimestamp: 1_732_022_400,
       messageType: "imageMessage",
@@ -494,16 +494,43 @@ describe("persistIncomingMessage — filtering", () => {
     expect(res.reason).toMatch(/direct message/);
   });
 
-  it("ignores fromMe=true (our own outgoing messages)", async () => {
+  it("captures fromMe=true text (owner posted in monitored group)", async () => {
     const inst = seedInstance();
     seedGroup(inst, { is_monitored: true });
 
-    const event = textMessageEvent({ fromMe: true });
+    const event = textMessageEvent({ fromMe: true, text: "owner falando" });
+    if (event.event !== "message") throw new Error("expected message");
+    const res = await persistIncomingMessage(event);
+
+    expect(res.status).toBe("persisted");
+    expect(db.messages).toHaveLength(1);
+    expect(db.messages[0]?.content).toBe("owner falando");
+  });
+
+  it("captures fromMe=true image (owner posted image in monitored group)", async () => {
+    const inst = seedInstance();
+    seedGroup(inst, { is_monitored: true });
+
+    const event = imageMessageEvent({ fromMe: true });
+    if (event.event !== "message") throw new Error("expected message");
+    const res = await persistIncomingMessage(event);
+
+    expect(res.status).toBe("persisted");
+    expect(db.messages).toHaveLength(1);
+    expect(db.messages[0]?.type).toBe("image");
+  });
+
+  it("ignores fromMe=true audio (guards against podcast delivery loop)", async () => {
+    const inst = seedInstance();
+    seedGroup(inst, { is_monitored: true });
+
+    const event = audioMessageEvent({ fromMe: true });
     if (event.event !== "message") throw new Error("expected message");
     const res = await persistIncomingMessage(event);
 
     expect(res.status).toBe("ignored");
-    expect(res.reason).toMatch(/fromMe/);
+    expect(res.reason).toMatch(/fromMe audio/);
+    expect(db.messages).toHaveLength(0);
   });
 });
 
