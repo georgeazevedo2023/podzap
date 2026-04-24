@@ -189,7 +189,7 @@ Entregue em 2026-04-22. Ver [`docs/audits/fase-12-audit.md`](./docs/audits/fase-
 - [x] `/home` redesenhada 1:1 com `podZAP/screen_home.jsx` (hero player, stats row, grid últimos eps, 3 painéis sidebar)
 - [ ] 🧊 Criar `/settings` e migrar conteúdo do antigo `SettingsCard` (removido da home nesta fase)
 - [ ] 🧊 `HeroPlayer` refetch de signed URL antes de expirar (hoje `<audio>` quebra após 1h)
-- [ ] 🧊 GenerateQuickCard: avaliar modal inline vs link pra `/schedule` (hoje link)
+- [x] GenerateQuickCard: modal inline com grupo + tom + janela (24h/7d), POST `/api/summaries/generate`, redireciona pra `/approval` — componentes base criados: `components/ui/{Modal,Select,RadioPill}.tsx`
 - [x] Expandir policies RLS relevantes com `or public.is_superadmin()` (entregue na Fase 13 para `tenants`, `tenant_members`, `whatsapp_instances`)
 - [x] Admin panel `/admin` — entregue na Fase 13 (dashboard + APIs + layout)
 
