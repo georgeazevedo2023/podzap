@@ -9,9 +9,10 @@ export interface CopyableCaptionProps {
 
 export function CopyableCaption({
   caption,
-  label = 'Legenda — preview da mensagem que acompanha o áudio no zap',
+  label = '💬 Legenda do WhatsApp',
 }: CopyableCaptionProps) {
   const [copied, setCopied] = useState(false);
+  const [hover, setHover] = useState(false);
 
   async function handleCopy() {
     try {
@@ -35,23 +36,31 @@ export function CopyableCaption({
     }
   }
 
+  const buttonBg = copied ? 'var(--lime-500)' : 'var(--purple-500)';
+  const buttonFg = copied ? 'var(--ink-900)' : '#FFFBF2';
+  const shadowColor = 'var(--stroke)';
+  const shadowOffset = hover && !copied ? 5 : 3;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 10,
+          gap: 12,
+          flexWrap: 'wrap',
         }}
       >
         <div
           style={{
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: 800,
-            textTransform: 'uppercase',
-            letterSpacing: '0.12em',
-            color: 'var(--text-dim)',
+            letterSpacing: '0.06em',
+            color: 'var(--text)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
           }}
         >
           {label}
@@ -59,39 +68,81 @@ export function CopyableCaption({
         <button
           type="button"
           onClick={handleCopy}
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
           aria-live="polite"
           style={{
             cursor: 'pointer',
-            padding: '4px 10px',
-            border: '2px solid var(--stroke)',
+            padding: '8px 16px',
+            border: '2.5px solid var(--stroke)',
             borderRadius: 999,
-            background: copied ? 'var(--lime-500)' : 'var(--bg-2)',
-            color: copied ? 'var(--ink-900)' : 'var(--text)',
-            fontSize: 10,
+            background: buttonBg,
+            color: buttonFg,
+            fontFamily: 'var(--font-body)',
+            fontSize: 12,
             fontWeight: 800,
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
-            boxShadow: '2px 2px 0 var(--stroke)',
-            transition: 'background 120ms ease',
+            boxShadow: `${shadowOffset}px ${shadowOffset}px 0 ${shadowColor}`,
+            transform:
+              hover && !copied
+                ? 'translate(-1px, -1px)'
+                : 'translate(0, 0)',
+            transition:
+              'transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 120ms cubic-bezier(0.2, 0.8, 0.2, 1), background 200ms ease, color 200ms ease',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            userSelect: 'none',
+            whiteSpace: 'nowrap',
           }}
         >
-          {copied ? '✓ copiado' : '📋 copiar'}
+          <span
+            aria-hidden
+            style={{
+              display: 'inline-flex',
+              width: 18,
+              height: 18,
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              lineHeight: 1,
+            }}
+          >
+            {copied ? '✓' : '📋'}
+          </span>
+          {copied ? 'copiado!' : 'copiar'}
         </button>
       </div>
+
       <div
         style={{
-          padding: '14px 18px',
+          position: 'relative',
+          padding: '16px 18px 16px 22px',
           border: '2.5px solid var(--stroke)',
-          borderRadius: 'var(--radius-md, var(--r-md))',
-          background: 'var(--bg-2)',
-          boxShadow: '2px 2px 0 var(--stroke)',
+          borderRadius: 14,
+          background:
+            'linear-gradient(135deg, color-mix(in srgb, var(--purple-500) 8%, var(--bg-2)) 0%, var(--bg-2) 60%)',
+          boxShadow: '3px 3px 0 var(--stroke)',
           fontFamily: 'var(--font-body)',
           fontSize: 13,
-          lineHeight: 1.55,
+          lineHeight: 1.6,
           whiteSpace: 'pre-wrap',
           color: 'var(--text)',
+          overflow: 'hidden',
         }}
       >
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: 5,
+            background: 'var(--lime-500)',
+          }}
+        />
         {caption}
       </div>
     </div>
