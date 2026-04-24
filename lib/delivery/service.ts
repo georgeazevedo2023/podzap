@@ -83,6 +83,8 @@ type SummaryRow = {
   id: string;
   tenant_id: string;
   text: string;
+  /** Legenda curta emoji-rich; `null` em rows legadas pré-v6. */
+  caption: string | null;
   group_id: string;
 };
 
@@ -147,7 +149,7 @@ async function loadContext(
 
   const { data: summaryRow, error: summaryErr } = await admin
     .from("summaries")
-    .select("id, tenant_id, text, group_id")
+    .select("id, tenant_id, text, caption, group_id")
     .eq("tenant_id", tenantId)
     .eq("id", audio.summary_id)
     .maybeSingle();
@@ -337,7 +339,13 @@ async function runDelivery(
   // 5. Ship it.
   const client = getUazapiClient();
   const targetJid = opts.targetJidOverride ?? group.uazapi_group_jid;
-  const caption = opts.includeCaption ? summary.text : undefined;
+  // Prefere a legenda curta emoji-rich (summary.caption, gerada pelo
+  // prompt v6+). Cai em `summary.text` só se a caption estiver null
+  // (rows legadas). NUNCA mandar o roteiro inteiro (~800 palavras) como
+  // legenda — pollui a timeline do grupo.
+  const caption = opts.includeCaption
+    ? (summary.caption ?? summary.text)
+    : undefined;
   try {
     await client.sendAudio(instanceToken, targetJid, audioBuffer, caption);
   } catch (err) {

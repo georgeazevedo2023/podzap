@@ -337,6 +337,38 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
         </div>
       )}
 
+      {initial.caption && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.12em',
+              color: 'var(--text-dim)',
+            }}
+          >
+            Legenda — preview da mensagem que acompanha o áudio no zap
+          </div>
+          <div
+            style={{
+              padding: '14px 18px',
+              border: '2.5px solid var(--stroke)',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-2)',
+              boxShadow: '2px 2px 0 var(--stroke)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 13,
+              lineHeight: 1.55,
+              whiteSpace: 'pre-wrap',
+              color: 'var(--text)',
+            }}
+          >
+            {initial.caption}
+          </div>
+        </div>
+      )}
+
       <label
         htmlFor="summary-text"
         style={{

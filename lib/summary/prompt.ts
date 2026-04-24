@@ -43,7 +43,7 @@ export type BuildPromptOptions = {
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
-const PROMPT_VERSION_BASE = "podzap-summary/v5";
+const PROMPT_VERSION_BASE = "podzap-summary/v6";
 
 /**
  * Voice mode downstream consumers (TTS) will use. Changes the SHAPE of the
@@ -329,10 +329,33 @@ function buildUserPrompt(
     "",
     formatHints,
     "",
+    "REGRAS DO CAMPO `caption` (legenda do áudio no WhatsApp):",
+    "- TEASER curto de 4-7 linhas, emoji-rich, chamativo.",
+    "- NÃO é resumo do conteúdo — é HYPE pro usuário querer escutar.",
+    "- Mencione o grupo pelo nome no máximo uma vez (opcional).",
+    "- NÃO cite participantes, NÃO dê spoilers específicos.",
+    "- Estrutura: abertura chamativa + subtítulo curto + 2-3 bullets",
+    "  com `>` + fecho curto.",
+    "- Use caracteres que renderizam bem no WhatsApp: emojis comuns",
+    "  (🎙 🔥 💬 📊 ✨ 🎧), markdown *bold*/_italic_ não vale.",
+    "",
+    "Exemplo EXATO do formato esperado (conteúdo pode variar):",
+    "",
+    "🎙 A HORA MAIS AGUARDADA DO DIA CHEGOU! 🎙",
+    "",
+    "✨Nosso PODCAST Diário✨",
+    "",
+    "> 🔥 Tudo que rolou de mais importante no grupo hoje",
+    "> 💬 As melhores discussões e insights",
+    "> 📊 Resumo completo para quem perdeu alguma coisa",
+    "",
+    "A gente te atualiza em poucos minutos!",
+    "",
     "Retorne APENAS JSON com esta estrutura exata:",
     "{",
     `  "text": ${textExample},`,
     '  "topics": ["<nome curto do tópico 1>", "<nome curto do tópico 2>", ...],',
+    '  "caption": "<legenda emoji-rich no formato do exemplo acima, com quebras de linha reais \\n>",',
     '  "estimatedMinutes": <number>',
     "}",
   ].join("\n");

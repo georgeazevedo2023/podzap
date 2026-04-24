@@ -340,6 +340,7 @@ export type Database = {
         Row: {
           approved_at: string | null
           approved_by: string | null
+          caption: string | null
           created_at: string
           group_id: string
           id: string
@@ -358,6 +359,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null
           approved_by?: string | null
+          caption?: string | null
           created_at?: string
           group_id: string
           id?: string
@@ -376,6 +378,7 @@ export type Database = {
         Update: {
           approved_at?: string | null
           approved_by?: string | null
+          caption?: string | null
           created_at?: string
           group_id?: string
           id?: string

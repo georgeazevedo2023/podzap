@@ -60,6 +60,7 @@ export type SummaryRecord = {
   periodStart: Date;
   periodEnd: Date;
   text: string;
+  caption: string | null;
   tone: SummaryTone;
   status: "pending_review" | "approved" | "rejected";
   model: string;
@@ -166,6 +167,7 @@ export async function generateSummary(
       period_start: input.periodStart.toISOString(),
       period_end: input.periodEnd.toISOString(),
       text: llmResult.text,
+      caption: llmResult.caption,
       tone,
       voice_mode: voiceMode,
       status: "pending_review",
@@ -222,6 +224,7 @@ export async function generateSummary(
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     text: llmResult.text,
+    caption: llmResult.caption,
     tone,
     status: "pending_review",
     model: llmResult.model,

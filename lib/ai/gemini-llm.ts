@@ -28,6 +28,12 @@ export type SummaryInput = {
 export type SummaryResult = {
   text: string;
   topics: string[];
+  /**
+   * Teaser curto (3-6 linhas) emoji-rich usado como legenda do áudio no
+   * WhatsApp. Independente do `text` (que é o roteiro narrativo ~800
+   * palavras do TTS). `null` só em fluxos legados/fallback.
+   */
+  caption: string | null;
   model: string;
   promptVersion: string;
 };
@@ -179,8 +185,9 @@ async function callGeminiJson(input: {
           properties: {
             text: { type: Type.STRING },
             topics: { type: Type.ARRAY, items: { type: Type.STRING } },
+            caption: { type: Type.STRING },
           },
-          required: ['text', 'topics'],
+          required: ['text', 'topics', 'caption'],
         },
         ...(input.systemPrompt
           ? { systemInstruction: input.systemPrompt }
@@ -189,9 +196,13 @@ async function callGeminiJson(input: {
     });
 
     const raw = response.text ?? '';
-    let parsed: { text?: unknown; topics?: unknown };
+    let parsed: { text?: unknown; topics?: unknown; caption?: unknown };
     try {
-      parsed = JSON.parse(raw) as { text?: unknown; topics?: unknown };
+      parsed = JSON.parse(raw) as {
+        text?: unknown;
+        topics?: unknown;
+        caption?: unknown;
+      };
     } catch (parseErr) {
       throw new AiError('summary_failed', 'Model returned non-JSON response', parseErr);
     }
@@ -202,10 +213,18 @@ async function callGeminiJson(input: {
     if (!Array.isArray(parsed.topics) || !parsed.topics.every((t) => typeof t === 'string')) {
       throw new AiError('summary_failed', 'Missing or invalid "topics" in model response');
     }
+    // caption é best-effort: se vier vazio ou malformado, gravamos null
+    // e o delivery/UI caem em fallback (slice do text). Prompts antigos
+    // (v5 e anteriores) não pedem caption — gemini vai omitir.
+    const caption =
+      typeof parsed.caption === 'string' && parsed.caption.trim().length > 0
+        ? parsed.caption.trim()
+        : null;
 
     return {
       text: parsed.text.trim(),
       topics: parsed.topics,
+      caption,
       model,
       promptVersion: input.promptVersion,
     };

@@ -74,6 +74,13 @@ export type SummaryView = {
   periodStart: string;
   periodEnd: string;
   text: string;
+  /**
+   * Legenda curta emoji-rich (4-7 linhas) gerada junto com `text` desde
+   * o prompt v6. Usada como caption do áudio no WhatsApp e como
+   * preview-teaser na UI. `null` em rows antigas (pré-v6) — UI cai em
+   * fallback pro `text[:200]`.
+   */
+  caption: string | null;
   tone: SummaryTone;
   status: SummaryStatus;
   model: string | null;
@@ -119,6 +126,7 @@ function rowToView(row: SummaryRow): SummaryView {
     periodStart: row.period_start,
     periodEnd: row.period_end,
     text: row.text,
+    caption: row.caption ?? null,
     tone: row.tone,
     status: row.status,
     model: row.model ?? null,
