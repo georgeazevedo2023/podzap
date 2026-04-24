@@ -44,13 +44,16 @@ ENV NODE_ENV=production \
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 --ingroup nodejs nextjs
 
+# ffmpeg pro mix voz + música de fundo no worker TTS (lib/audios/mix.ts).
+# Alpine ffmpeg é o build estático do ffmpeg.org empacotado; ~30MB na imagem final.
+RUN apk add --no-cache ffmpeg
+
 # Next standalone: copia só o runtime mínimo (~80% menor que copiar .next inteiro)
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
-# Tools pós-MVP (ex: ffmpeg pra MP3):
-# RUN apk add --no-cache ffmpeg wget
+# Trilha de fundo do podcast — consumida por lib/audios/mix.ts via process.cwd().
+COPY --from=builder --chown=nextjs:nodejs /app/assets ./assets
 
 USER nextjs
 EXPOSE 3000

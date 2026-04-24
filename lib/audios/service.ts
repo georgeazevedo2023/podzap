@@ -19,11 +19,23 @@
  *     which costs money and is rarely what we want.
  */
 
+import path from "node:path";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAudio } from "@/lib/ai/gemini-tts";
 import { trackAiCall } from "@/lib/ai-tracking/service";
+import { mixWithBackgroundMusic, MixError } from "@/lib/audios/mix";
 
 const AUDIOS_BUCKET = "audios";
+
+// Trilha de fundo do podcast. Mora em `assets/` no root do repo e vai no
+// imagem Docker (COPY . . no builder stage). 3s de intro + loop durante a
+// voz + fade out 1s — ver `lib/audios/mix.ts`.
+const BACKGROUND_MUSIC_PATH = path.join(
+  process.cwd(),
+  "assets",
+  "podcast-music.mp3",
+);
 
 export type AudioView = {
   id: string;
@@ -262,13 +274,34 @@ export async function createAudioForSummary(
   }
   const durationMs = Date.now() - startedAt;
 
+  // ── 3b. Mixa voz + música de fundo (best-effort) ──────────────────────
+  // Se ffmpeg não estiver disponível ou falhar, caímos pra voz pura. A
+  // música é enhancement, não requisito — não vale travar a entrega
+  // porque o binário sumiu do container.
+  let finalAudio = ttsResult.audio;
+  let finalDurationSeconds = ttsResult.durationSeconds;
+  try {
+    const mixed = await mixWithBackgroundMusic(ttsResult.audio, {
+      musicPath: BACKGROUND_MUSIC_PATH,
+    });
+    finalAudio = mixed.mixed;
+    finalDurationSeconds = mixed.durationSeconds;
+  } catch (err) {
+    const code = err instanceof MixError ? err.code : "UNKNOWN";
+    const msg = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[audios] background music mix failed (${code}), falling back to voice-only: ${msg}`,
+    );
+  }
+
   // ── 4. Upload to Storage ──────────────────────────────────────────────
   const now = new Date();
   const yyyy = String(now.getUTCFullYear());
   const storagePath = `${tenantId}/${yyyy}/${summaryId}.wav`;
   const { error: uploadErr } = await admin.storage
     .from(AUDIOS_BUCKET)
-    .upload(storagePath, ttsResult.audio, {
+    .upload(storagePath, finalAudio, {
       contentType: ttsResult.mimeType,
       upsert: false,
     });
@@ -281,8 +314,8 @@ export async function createAudioForSummary(
   }
 
   // ── 5. Insert audios row ──────────────────────────────────────────────
-  const durationSeconds = ttsResult.durationSeconds
-    ? Math.round(ttsResult.durationSeconds)
+  const durationSeconds = finalDurationSeconds
+    ? Math.round(finalDurationSeconds)
     : null;
 
   const { data: inserted, error: insertErr } = await admin
@@ -295,7 +328,7 @@ export async function createAudioForSummary(
       voice: voice ?? null,
       speed: speed ?? null,
       model: ttsResult.model,
-      size_bytes: ttsResult.audio.byteLength,
+      size_bytes: finalAudio.byteLength,
       delivered_to_whatsapp: false,
     })
     .select(AUDIO_SELECT_COLUMNS)

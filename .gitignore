@@ -62,3 +62,9 @@ podZAP/uploads/
 /*.jpg
 /*.jpeg
 e2e/parity/
+e2e/audit-output/
+pw-result.json
+
+# smoke test artifacts (lib/audios/mix.ts via scripts/test-mix.ts)
+/voice-smoke.wav
+/mixed-smoke.wav

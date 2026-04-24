@@ -24,6 +24,8 @@ import { listSummaries, type SummaryView } from '@/lib/summaries/service';
 import { listAudios, type AudioView } from '@/lib/audios/service';
 import { getSignedUrl } from '@/lib/media/signedUrl';
 
+import { CopyableCaption } from '@/components/ui/CopyableCaption';
+
 import { DeliveryControls } from './DeliveryControls';
 import { PodcastsHero } from './PodcastsHero';
 
@@ -289,6 +291,8 @@ function EpisodeCard({ episode }: { episode: Episode }) {
           deliveredAt={audio.deliveredAt}
         />
       ) : null}
+
+      {summary.caption && <CopyableCaption caption={summary.caption} />}
 
       <details
         style={{
