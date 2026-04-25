@@ -3,12 +3,15 @@
  * Promote a user to superadmin (cross-tenant admin).
  *
  * Usage:
- *   node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<str>"]
+ *   node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<str>"] [--yes]
+ *
+ *   --yes  pula o prompt de confirmação (use em automation; humanos NÃO).
  *
  * Flow:
  *   1. Look up the user via Supabase Admin API (requires SERVICE_ROLE_KEY).
- *   2. Optionally update their password (email_confirm forced true).
- *   3. Insert/upsert them into `public.superadmins` via Management API
+ *   2. Confirma interativamente (a menos que --yes).
+ *   3. Optionally update their password (email_confirm forced true).
+ *   4. Insert/upsert them into `public.superadmins` via Management API
  *      (service_role bypasses RLS, but we use Management API so the script
  *      is self-contained and matches db-query.mjs's transport).
  *
@@ -16,20 +19,47 @@
  *               SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF
  */
 
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+
 function parseArgs(argv) {
   const args = argv.slice(2);
-  const out = { email: null, password: null, note: null };
+  const out = { email: null, password: null, note: null, yes: false };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--password' && args[i + 1]) {
       out.password = args[++i];
     } else if (a === '--note' && args[i + 1]) {
       out.note = args[++i];
+    } else if (a === '--yes' || a === '-y') {
+      out.yes = true;
     } else if (!a.startsWith('--') && !out.email) {
       out.email = a;
     }
   }
   return out;
+}
+
+async function confirmPromotion({ email, userId, projectRef, willResetPassword }) {
+  const rl = createInterface({ input, output });
+  try {
+    console.log('');
+    console.log('  ⚠  Você está prestes a promover este usuário a SUPERADMIN cross-tenant:');
+    console.log(`     email   : ${email}`);
+    console.log(`     user_id : ${userId}`);
+    console.log(`     project : ${projectRef}`);
+    if (willResetPassword) {
+      console.log('     password: SERÁ RESETADA (--password fornecido)');
+    }
+    console.log('');
+    console.log('  Superadmin tem acesso cross-tenant via /admin e bypass em RLS policies.');
+    console.log('  Esta ação fica registrada em public.superadmins até remoção manual.');
+    console.log('');
+    const answer = (await rl.question('  Confirma? (digite "yes" pra prosseguir): ')).trim();
+    return answer === 'yes';
+  } finally {
+    rl.close();
+  }
 }
 
 function sqlEscape(str) {
@@ -54,10 +84,10 @@ async function main() {
     return 1;
   }
 
-  const { email, password, note } = parseArgs(process.argv);
+  const { email, password, note, yes } = parseArgs(process.argv);
   if (!email) {
     console.error(
-      'Usage: node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<str>"]',
+      'Usage: node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<str>"] [--yes]',
     );
     return 1;
   }
@@ -95,6 +125,22 @@ async function main() {
   }
 
   console.log(`Found user ${user.email} (${user.id})`);
+
+  // --- 1.5) Confirm promotion --------------------------------------------
+  if (!yes) {
+    const ok = await confirmPromotion({
+      email: user.email,
+      userId: user.id,
+      projectRef,
+      willResetPassword: Boolean(password),
+    });
+    if (!ok) {
+      console.error('Aborted — confirmação não recebida.');
+      return 1;
+    }
+  } else {
+    console.log('--yes: pulando confirmação interativa.');
+  }
 
   // --- 2) Optionally update password -------------------------------------
   if (password) {

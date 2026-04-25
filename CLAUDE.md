@@ -235,25 +235,28 @@ Referência completa: `docs/integrations/inngest.md` (setup dev/prod, events, tr
 Fluxo de alto nível — tudo assíncrono, desacoplado do webhook:
 
 ```
-UAZAPI webhook
-      │
-      ▼
-/api/webhooks/uazapi  →  lib/webhooks/persist.ts
-      │                        │
-      │                        └─ insert messages row + emit `message.captured`
-      ▼
-Inngest  (app/api/inngest/route.ts + inngest/functions/*)
-      ├─ transcribe-audio      (trigger: message.captured com type=audio) → Groq Whisper  → transcripts
-      ├─ describe-image        (trigger: message.captured com type=image) → Gemini Vision → transcripts
-      ├─ retry-pending-downloads    (cron */5m)   safety net p/ media_download_status='pending'
-      └─ transcription-retry        (cron */15m)  safety net p/ áudio/imagem sem transcripts
+UAZAPI webhook                             n8n cron (24/7)
+      │                                          │
+      ▼                                          ▼
+/api/webhooks/uazapi  →  persist.ts       /api/worker/tick  (Bearer WORKER_TICK_TOKEN)
+      │                        │                 │
+      │                        └─ insert + emit  ├─ runSchedulesHandler
+      ▼                                          ├─ retryPendingDownloadsHandler
+Inngest  (app/api/inngest/route.ts)              └─ transcriptionRetryHandler
+      ├─ transcribe-audio  (trigger: message.captured · type=audio)  → Groq Whisper → transcripts
+      ├─ describe-image    (trigger: message.captured · type=image)  → Gemini Vision → transcripts
+      ├─ media-download-retry (trigger: media.download.retry)        → re-download
+      ├─ generate-summary  (trigger: summary.requested)
+      ├─ generate-tts      (trigger: summary.approved)
+      └─ ping              (trigger: test.ping — health-check)
 ```
 
-- **Events canônicos** (`inngest/events.ts`): `message.captured`, `message.transcription.requested`, `media.download.retry`. Case-sensitive — erro comum é usar underscore.
-- **Em dev**: `INNGEST_DEV=1` em `.env.local` + `npx inngest-cli@latest dev -u http://localhost:3001/api/inngest` em paralelo ao `npm run dev`. Dashboard em `http://127.0.0.1:8288`.
-- **Em prod**: `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` como env vars na stack Portainer; crons rodam pela Inngest Cloud (ou Inngest self-hosted em container separado — decisão pendente).
+- **Híbrido n8n + Inngest** (memória): Inngest é o event-bus interno disparado por eventos (`message.captured`, `summary.requested`, `summary.approved`). Crons foram migrados pra n8n batendo em `POST /api/worker/tick` a cada 30s — esse endpoint reusa o mesmo handler puro (`runSchedulesHandler`, `retryPendingDownloadsHandler`, `transcriptionRetryHandler` em `lib/`/`inngest/handlers/`). **Nada de criar worker novo event-driven dentro do n8n** — só relay UAZAPI + cron tick.
+- **Events canônicos** (`inngest/events.ts`): `message.captured`, `summary.requested`, `summary.approved`, `audio.created`, `media.download.retry`, `test.ping`. Case-sensitive. `message.transcription.requested` e `media.download.retry` estão definidos mas sem emissor ativo (legado de design pre-MVP — ver §16 sobre `audio.created`).
+- **Em dev**: `INNGEST_DEV=1` + `npx inngest-cli@latest dev -u http://localhost:3001/api/inngest`. Crons n8n não disparam em dev — invocar `/api/worker/tick` manualmente com `Authorization: Bearer $WORKER_TICK_TOKEN` ou rodar o handler pela CLI.
+- **Em prod**: `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY` na stack Portainer. Inngest Cloud só recebe os eventos disparados; o cron-tick vem do n8n via shared secret.
 - **Retry**: default Inngest (3x backoff exponencial); falhas determinísticas (Gemini safety block) marcam e não re-agendam.
-- **UI**: `/history` mostra transcrição inline sob cada mensagem áudio/imagem; quando ainda não existe, aparece badge pulsante "transcrevendo…" / "analisando imagem…".
+- **UI**: `/history` mostra transcrição inline sob cada mensagem áudio/imagem; badge pulsante "transcrevendo…" / "analisando imagem…" enquanto pendente.
 
 ---
 
@@ -405,36 +408,38 @@ summaries.status = 'approved'
 
 Referência completa: `docs/integrations/delivery.md`.
 
+> **Aprovar ≠ enviar.** Delivery exige clique humano explícito. Worker `deliver-to-whatsapp` foi **desregistrado** intencionalmente — `audio.created` é emitido por `generate-tts` mas ninguém ouve (event órfão por design). Ver memória `delivery_requires_manual_approval`.
+
 ```
 audios row criada (Fase 9)
-          │  emit audio.created
+          │  emit audio.created   ← NINGUÉM OUVE (worker desregistrado)
           ▼
-┌──────────────────────────────┐  inngest/functions/deliver-to-whatsapp.ts
-│  deliver-to-whatsapp worker  │  retries: 3
-└──────────────┬───────────────┘
-               │ step.run('deliver')
-               ▼
-┌──────────────────────────────┐  lib/delivery/service.ts
-│  deliverAudio(tenantId, id)  │  load ctx → check instance → download → sendAudio → mark
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐  lib/uazapi/client.ts
-│  UAZAPI /send/media (PTT)    │  buffer WAV + caption opcional
-└──────────────┬───────────────┘
-               │
-               ▼
-  audios.delivered_to_whatsapp = true
-  audios.delivered_at          = now()
-
-  Retry manual: POST /api/audios/[id]/redeliver  (6/h/tenant)
+   /podcasts (lista) ── usuário clica "📤 enviar ao grupo" via SendToMenu
+                                  │
+                                  ▼
+                     POST /api/audios/[id]/redeliver   (6/h/tenant)
+                                  │
+                                  ▼
+                ┌──────────────────────────────┐  lib/delivery/service.ts
+                │  deliverAudio(tenantId, id)  │  load ctx → check instance → download → sendAudio → mark
+                └──────────────┬───────────────┘
+                               │
+                               ▼
+                ┌──────────────────────────────┐  lib/uazapi/client.ts
+                │  UAZAPI /send/media (PTT)    │  buffer WAV + caption opcional
+                └──────────────┬───────────────┘
+                               │
+                               ▼
+                  audios.delivered_to_whatsapp = true
+                  audios.delivered_at          = now()
 ```
 
-- **Destino atual**: grupo de origem do resumo (`summaries.group_id → groups.uazapi_group_jid`). DM do owner / lista custom ficam pós-MVP.
-- **Caption**: hoje hardcoded `true` no worker (usa `summaries.text`); `false` no redeliver. Flag por tenant (`tenants.include_caption_on_delivery` no plano) ainda não implementada.
+- **2 cliques**: (1) `/approval/[id]` → "aprovar" gera o áudio; (2) `/podcasts` → "📤 enviar ao grupo" publica.
+- **Worker desregistrado**: `inngest/functions/deliver-to-whatsapp.ts` ainda existe mas **não está no array `functions: [...]`** de `app/api/inngest/route.ts`. Reativar exige adição manual lá + revisão UX.
+- **`SendToMenu`** (`components/ui/SendToMenu.tsx`): destinos = "🔊 só escutar", "👥 grupo de origem", "📱 meu WhatsApp", "👤 outro contato". Reusa o mesmo dropdown via Portal em `/home`, `/approval/[id]`, `/podcasts`.
+- **Caption por tenant**: coluna `tenants.include_caption_on_delivery` (migration 0006) **existe e é lida** pelo código de `lib/delivery/service.ts` — flag tem default `true`. Não é débito; só não está exposta na UI ainda.
 - **Erros**: `DeliveryError` com `code ∈ { NOT_FOUND, NO_INSTANCE, INSTANCE_NOT_CONNECTED, UAZAPI_ERROR, DB_ERROR }` — mapeado para 404 / 409 / 409 / 502 / 500 na rota `redeliver`.
-- **Idempotência**: `deliverAudio` short-circuita se `delivered_to_whatsapp=true`; `redeliver` força a chamada.
-- **Retry**: Inngest 3x (backoff exponencial) para transientes + botão "Reenviar" manual com rate limit 6/h/tenant.
+- **Idempotência**: `deliverAudio` short-circuita se `delivered_to_whatsapp=true`; redeliver explícito força a chamada.
 - **Concerns abertos**: rate limit UAZAPI (~10/min), desconexão mid-flight, grupo removido (não diferenciado de outros UAZAPI_ERROR), buffer size ~16 MB (fallback URL pública não implementado), possível duplicata se `sendAudio` suceder e `markDelivered` falhar.
 
 ---
@@ -444,13 +449,13 @@ audios row criada (Fase 9)
 Referência completa: `docs/integrations/scheduling.md`.
 
 ```
-Inngest cron  */5 * * * *
+n8n cron (24/7)  →  POST /api/worker/tick   (Bearer WORKER_TICK_TOKEN, ~30s)
       │
       ▼
-┌──────────────────────────────┐  inngest/functions/run-schedules.ts
-│  runSchedulesHandler         │  retries: 1 (handler idempotente)
+┌──────────────────────────────┐  runSchedulesHandler (lib/handlers ou inngest/handlers)
+│  handler puro, idempotente   │  reusado: Inngest event-driven OU n8n cron-driven
 └──────────────┬───────────────┘
-               │ step.run('find-due')
+               │ find-due
                ▼
 ┌──────────────────────────────┐  lib/schedules/service.ts
 │  dueSchedulesNow(now, 5)     │  America/Sao_Paulo · fixed_time · window (now-5, now]
@@ -480,7 +485,7 @@ Inngest cron  */5 * * * *
 - **Dedup**: `summaries` com overlap (`period_start <= end AND period_end >= start`) para o mesmo `(tenant_id, group_id)` aborta o emit — cobre cron skew, retry manual, invocação dupla no dashboard.
 - **API** (`app/api/schedules/`): `GET /api/schedules`, `POST /api/schedules`, `PATCH /api/schedules/[id]`, `DELETE /api/schedules/[id]`. Erros `SchedulesError` → 404 / 409 / 422 / 500.
 - **Limitações MVP**:
-  - Crons Inngest **não disparam em dev** — invocar `run-schedules` manualmente no dashboard (`http://127.0.0.1:8288`). Em prod (Inngest Cloud) o cron roda.
+  - Em dev, **n8n não está rodando** — invocar `POST /api/worker/tick` manualmente com `Authorization: Bearer $WORKER_TICK_TOKEN`. Em prod, n8n bate a cada 30s automaticamente. (Crons Inngest foram removidos do registro — handlers continuam vivos, só mudou o gatilho.)
   - `trigger_type` só `fixed_time` está ativo (`inactivity`/`dynamic_window` são placeholders do enum — rows com esses valores nunca disparam).
   - `approval_mode='optional'` auto-approve após 24h não implementado — quando vier, será via evento backend, nunca bypass do pipeline.
   - `frequency='custom'` reservado mas ignorado pelo worker.
@@ -515,8 +520,8 @@ Referência completa: `docs/integrations/superadmin.md`.
 
 - **Capability cross-tenant** — um bit global (`public.superadmins`), distinto do `tenant_members.role='owner'`. Um superadmin é staff da podZAP, não owner de tenant específico.
 - **Migration** `db/migrations/0007_superadmin.sql` cria a tabela + policy `superadmins_read_self` (user lê sua própria row) + helper `public.is_superadmin()` (stable, security definer, `search_path=''`) exposto a `authenticated` e `anon`.
-- **Promoção**: `node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<txt>"]`. O user precisa já existir em `auth.users` (fez login ao menos uma vez). Script é idempotente (`on conflict do update`).
-- **Uso em RLS**: `is_superadmin()` **ainda não está referenciada em nenhuma policy**. Quando expandir (candidates: `tenants`, `whatsapp_instances`, `ai_calls`, `schedules`), usar o padrão `using (tenant_filter or public.is_superadmin())`. Cuidado LGPD antes de expandir pra `messages`/`transcripts`/`summaries` — registrar acessos em audit log primeiro.
+- **Promoção**: `node --env-file=.env.local scripts/set-superadmin.mjs <email> [--password <pw>] [--note "<txt>"] [--yes]`. O user precisa já existir em `auth.users` (fez login ao menos uma vez). Script é idempotente (`on conflict do update`) e exige confirmação interativa "yes" — `--yes` pula o prompt em automation.
+- **Uso em RLS**: `is_superadmin()` **já está referenciada em policies SELECT de `tenants`, `tenant_members` e `whatsapp_instances`** (expandido na migration `0008_admin_managed.sql`). Ainda **falta expandir** em `groups`, `messages`, `transcripts`, `summaries`, `audios`, `schedules`, `ai_calls` — superadmin não consegue ler dados aplicacionais cross-tenant via PostgREST hoje (só via SQL editor / service_role). Padrão pra quando expandir: `using (tenant_filter or public.is_superadmin())`. Cuidado LGPD antes de cobrir `messages`/`transcripts`/`summaries` — registrar acessos em audit log primeiro.
 - **Writes**: `service_role` only. Cliente browser nunca promove/demove. Admin panel UI **live desde Fase 13** — ver §20.
 
 ---
