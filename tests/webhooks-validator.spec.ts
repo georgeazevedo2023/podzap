@@ -375,7 +375,11 @@ describe("parseWebhookBody — UAZAPI wsmart shape", () => {
     }
   });
 
-  it("degrades audio messages to kind='other' (media is next roadmap)", () => {
+  it("classifies AudioMessage as kind='audio' even without media url", () => {
+    // Campos de URL/mimetype não estavam no fixture wsmart capturado — o
+    // parser cria a row como `audio` mesmo assim, e `media_download_status`
+    // vai pra 'skipped' no persist.ts. Quando vier um payload real com URL
+    // real, o body cru fica em `raw_payload` pra refinar.
     const body = {
       EventType: "messages",
       instanceName: "podzap-xyz",
@@ -393,9 +397,124 @@ describe("parseWebhookBody — UAZAPI wsmart shape", () => {
     const res = parseWebhookBody(body);
     expect(res.ok).toBe(true);
     if (res.ok && res.event.event === "message") {
+      expect(res.event.content.kind).toBe("audio");
+      if (res.event.content.kind === "audio") {
+        expect(res.event.content.mediaUrl).toBeUndefined();
+        expect(res.event.content.ptt).toBe(false);
+      }
+    }
+  });
+
+  it("extracts ExtendedTextMessage as kind='text' (suffix tolerant)", () => {
+    // Wire envia `messageType: "ExtendedTextMessage"` (com sufixo Message)
+    // — o parser strip-a "Message" e compara case-insensitive.
+    const body = {
+      EventType: "messages",
+      instanceName: "podzap-xyz",
+      message: {
+        messageid: "EXT01",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        senderName: "Bob",
+        messageTimestamp: 1776993684000,
+        messageType: "ExtendedTextMessage",
+        text: "responde aí @123",
+      },
+      token: "tkn",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.content.kind).toBe("text");
+      if (res.event.content.kind === "text") {
+        expect(res.event.content.text).toBe("responde aí @123");
+      }
+    }
+  });
+
+  it("classifies ImageMessage as kind='image' with caption fallback", () => {
+    const body = {
+      EventType: "messages",
+      instanceName: "podzap-xyz",
+      message: {
+        messageid: "IMG01",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        senderName: "Carol",
+        messageTimestamp: 1776993684000,
+        messageType: "ImageMessage",
+        type: "image",
+        caption: "olha isso",
+      },
+      token: "tkn",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.content.kind).toBe("image");
+      if (res.event.content.kind === "image") {
+        expect(res.event.content.caption).toBe("olha isso");
+      }
+    }
+  });
+
+  it("extracts media URL when wire provides nested audioMessage shape", () => {
+    // Hypothetical Evolution-style nested shape inside wsmart envelope —
+    // defensivo, garante que se algum payload vier nessa shape o parser
+    // pega a URL pra disparar download.
+    const body = {
+      EventType: "messages",
+      instanceName: "podzap-xyz",
+      message: {
+        messageid: "AUD-NESTED",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        messageTimestamp: 1776993684000,
+        messageType: "AudioMessage",
+        audioMessage: {
+          url: "https://mmg.whatsapp.net/foo.enc",
+          mimetype: "audio/ogg; codecs=opus",
+          seconds: 14,
+          ptt: true,
+          fileLength: 38211,
+        },
+      },
+      token: "tkn",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.content.kind).toBe("audio");
+      if (res.event.content.kind === "audio") {
+        expect(res.event.content.mediaUrl).toBe(
+          "https://mmg.whatsapp.net/foo.enc",
+        );
+        expect(res.event.content.seconds).toBe(14);
+        expect(res.event.content.ptt).toBe(true);
+        expect(res.event.content.mimetype).toBe("audio/ogg; codecs=opus");
+      }
+    }
+  });
+
+  it("keeps ReactionMessage / StickerMessage as kind='other' (preserves rawType)", () => {
+    const body = {
+      EventType: "messages",
+      instanceName: "podzap-xyz",
+      message: {
+        messageid: "RX01",
+        chatid: "120363000000000000@g.us",
+        fromMe: false,
+        messageTimestamp: 1776993684000,
+        messageType: "ReactionMessage",
+      },
+      token: "tkn",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
       expect(res.event.content.kind).toBe("other");
       if (res.event.content.kind === "other") {
-        expect(res.event.content.rawType).toBe("AudioMessage");
+        expect(res.event.content.rawType).toBe("ReactionMessage");
       }
     }
   });

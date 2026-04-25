@@ -102,7 +102,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   //    to enter its retry loop — we've already validated the request is
   //    legitimate and well-formed, so retrying won't help.
   try {
-    const result = await handleWebhookEvent(event);
+    // Pass `body` (parsed JSON) so `persist.ts` can store the raw POST in
+    // `raw_payload` — keeps forensic ability to re-derive fields when the
+    // normaliser is later refined for a new media shape.
+    const result = await handleWebhookEvent(event, body);
     console.log(
       `[webhook ${cid}] handled status=${result.status}${
         result.messageId ? ` messageId=${result.messageId}` : ''

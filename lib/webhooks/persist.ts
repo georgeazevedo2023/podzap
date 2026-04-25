@@ -267,6 +267,14 @@ function hasDownloadableMedia(content: MessageUpsertEvent["content"]): boolean {
  */
 export async function persistIncomingMessage(
   event: MessageUpsertEvent,
+  /**
+   * Raw POST body (already JSON-parsed) from the webhook request, when
+   * available. Stored in `raw_payload` instead of the normalised event so
+   * future parser refinements can re-process historical rows. Falls back
+   * to the normalised event for callers (e.g. tests) that don't have the
+   * original body handy.
+   */
+  rawBody?: unknown,
 ): Promise<HandleResult> {
   // 0. Ignore only self-sent AUDIO messages. That covers the podcast
   //    delivery loop (we send audio back; UAZAPI re-fires webhook for it).
@@ -350,11 +358,14 @@ export async function persistIncomingMessage(
     ? new Date(event.timestamp).toISOString()
     : new Date().toISOString();
 
-  // `event` is a zod object; JSON.parse(JSON.stringify(event)) gives us a
-  // plain Json-safe value for the `raw_payload` column. We do this once
-  // rather than trusting zod's output — it may contain `undefined` leaves
-  // that Postgres's jsonb won't accept.
-  const rawPayload = JSON.parse(JSON.stringify(event)) as Json;
+  // Prefer the actual HTTP body so a future parser bugfix can re-derive
+  // fields the current normaliser missed. Fall back to the normalised
+  // event for callers without access to the raw POST (e.g. unit tests).
+  // JSON.parse(JSON.stringify(...)) strips `undefined` leaves that
+  // Postgres's jsonb rejects.
+  const rawPayload = JSON.parse(
+    JSON.stringify(rawBody ?? event),
+  ) as Json;
 
   const insertRow: MessageInsert = {
     tenant_id: tenantId,

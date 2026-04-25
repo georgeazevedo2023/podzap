@@ -766,7 +766,11 @@ describe("persistIncomingMessage — UAZAPI wsmart shape", () => {
     expect(res.reason).toMatch(/unknown instance/);
   });
 
-  it("UAZAPI audio degrades to type=other, media_download_status=skipped", async () => {
+  it("UAZAPI audio without mediaUrl: type=audio, status=skipped", async () => {
+    // Quando o wire não traz a URL (ainda comum no wsmart shape), persist
+    // ainda classifica como audio pra desbloquear futuras transcrições
+    // quando a URL aparecer em payloads reais — mas não dispara o worker
+    // de download (status='skipped').
     const inst = seedInstance({
       uazapi_instance_id: "r096894b4a51062",
       uazapi_instance_name: UAZAPI_INSTANCE_NAME,
@@ -774,7 +778,6 @@ describe("persistIncomingMessage — UAZAPI wsmart shape", () => {
     seedGroup(inst, { is_monitored: true });
 
     const audioBody = uazapiTextBody();
-    // Mutate to audio shape — no mediaUrl, no text.
     audioBody.message.type = "audio";
     audioBody.message.messageType = "AudioMessage";
     audioBody.message.text = "";
@@ -786,8 +789,7 @@ describe("persistIncomingMessage — UAZAPI wsmart shape", () => {
 
     const res = await persistIncomingMessage(parsed.data);
     expect(res.status).toBe("persisted");
-    expect(db.messages[0].type).toBe("other");
-    // No mediaUrl extracted → not queued for download.
+    expect(db.messages[0].type).toBe("audio");
     expect(db.messages[0].media_download_status).toBe("skipped");
   });
 });

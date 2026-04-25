@@ -346,34 +346,137 @@ const normaliseMessageContent = (data: unknown): MessageContent => {
  * Normalise the `message` block of the UAZAPI wsmart shape into our
  * internal `MessageContent`.
  *
- * NOTE: apenas TEXT é tratado aqui. Áudio e imagem (e outros tipos de mídia)
- * serão adicionados num próximo roadmap — por ora caem em `{ kind: "other" }`
- * para que o `persist.ts` armazene como `type=other` sem disparar a pipeline
- * de transcrição (Groq / Gemini Vision).
+ * Sinais usados (por prioridade):
+ *   - `m.type` ∈ {"text","audio","image","video"} é o sinal mais forte
+ *     (aparece nos fixtures reais do wsmart).
+ *   - `m.messageType` cruza os mesmos labels mas com sufixo opcional
+ *     "Message" e capitalização inconsistente (`Conversation`,
+ *     `ExtendedTextMessage`, `AudioMessage`, etc.). Comparamos sempre
+ *     stripando sufixo + lowercase.
+ *
+ * Para mídia, as keys exatas onde wsmart guarda URL/mimetype/duração
+ * ainda não foram capturadas em payload real (só o `messageType` veio).
+ * Por isso a extração é defensiva: tentamos várias keys conhecidas
+ * (flat `m.url` / nested `m.audioMessage.url` / etc.). Quando nada
+ * bate, criamos a row como `kind=audio|image` mesmo assim — o worker
+ * de transcrição reage ao `messages.type` e respeita
+ * `media_download_status='skipped'` quando `media_url` é null.
+ *
+ * Forensic: o body cru da request HTTP é preservado pelo `persist.ts`
+ * em `raw_payload` (ver `app/api/webhooks/uazapi/route.ts`), então
+ * quando uma mensagem chegar com shape inesperada dá pra inspecionar
+ * o JSON original e refinar o parser.
  */
 const normaliseUazapiMessageContent = (msg: unknown): MessageContent => {
   if (!msg || typeof msg !== "object") {
     return { kind: "other", rawType: "unknown" };
   }
   const m = msg as Record<string, unknown>;
-  const type = typeof m.type === "string" ? m.type : "";
-  const messageType = typeof m.messageType === "string" ? m.messageType : "";
+  const type = typeof m.type === "string" ? m.type.toLowerCase() : "";
+  const rawMessageType = typeof m.messageType === "string" ? m.messageType : "";
+  // Strip optional "Message" suffix and lowercase for tolerant matching.
+  // Wire delivers e.g. "ExtendedTextMessage", "AudioMessage", or sometimes
+  // the legacy "Conversation"/"ExtendedText" without suffix.
+  const mt = rawMessageType.replace(/Message$/i, "").toLowerCase();
 
-  const isText =
-    type === "text" ||
-    messageType === "Conversation" ||
-    messageType === "ExtendedText";
-
-  if (isText) {
-    const text = (m.text ?? m.content ?? "") as unknown;
+  // ── TEXT ────────────────────────────────────────────────────────
+  if (type === "text" || mt === "conversation" || mt === "extendedtext") {
+    // wsmart fixtures use `m.text`; legacy/extended payloads sometimes
+    // expose `m.content` (caption-like) or `m.extendedTextMessage.text`.
+    const nested = (m.extendedTextMessage ?? {}) as Record<string, unknown>;
+    const text = m.text ?? m.content ?? nested.text ?? "";
     return { kind: "text", text: String(text ?? "") };
   }
 
+  // ── AUDIO ───────────────────────────────────────────────────────
+  if (type === "audio" || mt === "audio" || mt === "ptt") {
+    const nested = (m.audioMessage ?? {}) as Record<string, unknown>;
+    const mediaUrl = pickString(m.mediaUrl, m.url, nested.url, nested.mediaUrl);
+    const mimetype = pickString(m.mimetype, nested.mimetype);
+    const seconds = pickNonNegativeInt(m.seconds, nested.seconds);
+    const fileLength = pickNonNegativeInt(m.fileLength, nested.fileLength);
+    const ptt =
+      typeof m.ptt === "boolean"
+        ? m.ptt
+        : typeof nested.ptt === "boolean"
+          ? nested.ptt
+          : mt === "ptt";
+    return {
+      kind: "audio",
+      mediaUrl,
+      mimetype,
+      seconds,
+      fileLength,
+      ptt,
+    };
+  }
+
+  // ── IMAGE ───────────────────────────────────────────────────────
+  if (type === "image" || mt === "image") {
+    const nested = (m.imageMessage ?? {}) as Record<string, unknown>;
+    const mediaUrl = pickString(m.mediaUrl, m.url, nested.url, nested.mediaUrl);
+    const mimetype = pickString(m.mimetype, nested.mimetype);
+    const caption = pickString(m.caption, m.text, m.content, nested.caption);
+    const fileLength = pickNonNegativeInt(m.fileLength, nested.fileLength);
+    const width = pickPositiveInt(m.width, nested.width);
+    const height = pickPositiveInt(m.height, nested.height);
+    return {
+      kind: "image",
+      mediaUrl,
+      mimetype,
+      caption,
+      fileLength,
+      width,
+      height,
+    };
+  }
+
+  // ── VIDEO ───────────────────────────────────────────────────────
+  if (type === "video" || mt === "video") {
+    const nested = (m.videoMessage ?? {}) as Record<string, unknown>;
+    const mediaUrl = pickString(m.mediaUrl, m.url, nested.url, nested.mediaUrl);
+    const mimetype = pickString(m.mimetype, nested.mimetype);
+    const caption = pickString(m.caption, m.text, m.content, nested.caption);
+    const seconds = pickNonNegativeInt(m.seconds, nested.seconds);
+    const fileLength = pickNonNegativeInt(m.fileLength, nested.fileLength);
+    return {
+      kind: "video",
+      mediaUrl,
+      mimetype,
+      caption,
+      seconds,
+      fileLength,
+    };
+  }
+
+  // Reaction/Sticker/Contact/Document/Poll/etc. → other (rawType preserved).
   return {
     kind: "other",
-    rawType: String(messageType || type || "unknown"),
+    rawType: rawMessageType || type || "unknown",
   };
 };
+
+/** First non-empty string in the candidates, otherwise undefined. */
+function pickString(...candidates: unknown[]): string | undefined {
+  for (const c of candidates) {
+    if (typeof c === "string" && c.length > 0) return c;
+  }
+  return undefined;
+}
+
+function pickNonNegativeInt(...candidates: unknown[]): number | undefined {
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isInteger(c) && c >= 0) return c;
+  }
+  return undefined;
+}
+
+function pickPositiveInt(...candidates: unknown[]): number | undefined {
+  for (const c of candidates) {
+    if (typeof c === "number" && Number.isInteger(c) && c > 0) return c;
+  }
+  return undefined;
+}
 
 /**
  * Detect whether `raw` is a UAZAPI wsmart-style envelope (as opposed to the

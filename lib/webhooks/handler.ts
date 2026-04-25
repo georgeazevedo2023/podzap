@@ -22,10 +22,12 @@ export type { HandleResult };
 
 export async function handleWebhookEvent(
   event: WebhookEvent,
+  /** Raw POST body (parsed JSON) — preserved into `messages.raw_payload`. */
+  rawBody?: unknown,
 ): Promise<HandleResult> {
   switch (event.event) {
     case "message":
-      return persistIncomingMessage(event);
+      return persistIncomingMessage(event, rawBody);
     case "connection":
       return updateInstanceConnection(event);
     case "unknown":

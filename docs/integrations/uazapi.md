@@ -354,8 +354,11 @@ Field normalisation (wsmart → internal):
 | `key.participant`         | `message.sender`                         | LID-format sender |
 | `pushName`                | `message.senderName`                     |  |
 | `timestamp`               | `message.messageTimestamp`               | already in ms on the wire; values `< 10^10` are multiplied by 1000 for paridade with the Evolution shape |
-| `content.kind="text"`     | `message.type === "text"` OR `messageType ∈ {Conversation, ExtendedText}` | text body from `message.text` / `message.content` |
-| `content.kind="other"`    | everything else                          | audio / image / video / sticker / doc — currently dropped to `other` (next roadmap) |
+| `content.kind="text"`     | `message.type === "text"` OR `messageType ∈ {Conversation, ExtendedText, ExtendedTextMessage}` (sufixo `Message` opcional, case-insensitive) | text body from `message.text` / `message.content` / `message.extendedTextMessage.text` |
+| `content.kind="audio"`    | `message.type === "audio"` OR `messageType` casa `^audio` / `^ptt` (sufixo `Message` opcional) | URL/mimetype/seconds extraídos defensivamente: tenta `m.url`, `m.mediaUrl`, `m.audioMessage.url`. Quando nenhum bate, row vai pro DB com `media_url=null` + `media_download_status=skipped`; worker `transcribe-audio` bail-out clean ("media not downloaded yet"). |
+| `content.kind="image"`    | `message.type === "image"` OR `messageType` casa `^image` (sufixo opcional) | mesma lógica — URL/caption/dimensões com fallbacks. |
+| `content.kind="video"`    | `message.type === "video"` OR `messageType` casa `^video` (sufixo opcional) | idem; mas pipeline de vídeo ainda é pós-MVP |
+| `content.kind="other"`    | qualquer outro `messageType` (Reaction, Sticker, Contact, Document, Poll…) | preserva `rawType` original pra audit log |
 
 ##### Instance lookup (lookup precedence)
 
@@ -402,18 +405,31 @@ so the externally-provided ref can't smuggle PostgREST grammar.
 
 #### Audio / Image / Video — status
 
-> **Next roadmap.** As of 2026-04-23 only **text** is normalised from the
-> UAZAPI wsmart shape. Audio / image / video / sticker / document all
-> degrade to `content.kind="other"` and are persisted as `type=other`
-> without firing the transcription or vision pipeline. This is intentional
-> — the fields to extract (`mediaUrl`, `mimetype`, `seconds`, `caption`)
-> were not present in the payload sample we had, and we didn't want to
-> guess the shape.
+> **Implementado em 2026-04-25 (defensivo).** O parser
+> `normaliseUazapiMessageContent` em `lib/uazapi/types.ts` agora classifica
+> AudioMessage / ImageMessage / VideoMessage / ExtendedTextMessage no
+> `kind` correto. Para extração de URL/mimetype/duration tentamos múltiplas
+> keys conhecidas (`m.url`, `m.mediaUrl`, `m.audioMessage.url`, ...) porque
+> a shape exata do wsmart pra mídia ainda não foi capturada em payload real
+> — só o `messageType` veio nos primeiros samples.
 >
-> When adding media support: capture a real audio/image payload from the
-> n8n execution log, then extend `normaliseUazapiMessageContent` in
-> `lib/uazapi/types.ts`. The Evolution-shape branches for audio/image/
-> video (below) still work for test fixtures.
+> **Forensic:** desde 2026-04-25 `messages.raw_payload` armazena o **body
+> cru** da request HTTP (não mais o evento normalizado pelo Zod). Quando
+> uma mensagem nova chegar com shape inesperada, dá pra inspecionar o JSON
+> original via `select raw_payload from messages where id = '…'` e refinar
+> o parser sem precisar reproduzir o webhook.
+>
+> **Limitação:** rows criadas ANTES de 2026-04-25 têm `raw_payload` = evento
+> normalizado, então URLs/mimetype dos media originais foram perdidos —
+> backfill retroativo pra audio/image existentes não é possível.
+>
+> **Behavior quando o parser classifica audio/image mas não acha URL:**
+> a row vai pro DB com `type=audio|image` + `media_url=null` +
+> `media_download_status=skipped`. O worker `transcribe-audio` /
+> `describe-image` faz bail-out clean ("media not downloaded yet") sem
+> consumir Groq/Gemini. Quando o `retry-pending-downloads` cron rodar
+> próxima vez ele ignora `skipped` (não é `pending`), então não há retry
+> storm.
 
 #### Audio — Evolution / Baileys shape (legacy / fixtures only)
 
