@@ -43,7 +43,7 @@ export type BuildPromptOptions = {
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
-const PROMPT_VERSION_BASE = "podzap-summary/v7";
+const PROMPT_VERSION_BASE = "podzap-summary/v8";
 
 /**
  * Voice mode downstream consumers (TTS) will use. Changes the SHAPE of the
@@ -294,22 +294,38 @@ function buildUserPrompt(
   // Renderiza o ranking de mestres do engajamento. Empates aparecem com
   // counts iguais — o LLM deve frasear como "X e Y empatados com N". Vazio
   // só acontece em janelas sem mensagem (já tratado em outro caminho).
+  //
+  // POSICIONAMENTO obrigatório no INÍCIO: v7 deixava o LLM escolher início
+  // OU fim e ele consistentemente escolhia o fim ("antes de ir, vamos
+  // anunciar os campeões"). v8+ força LOGO APÓS a saudação, antes do
+  // primeiro tópico — vibe de "manchete do telejornal".
   const topParticipantsBlock =
     conv.topParticipants.length > 0
       ? [
           "",
-          "MESTRES DO ENGAJAMENTO (top participantes por volume bruto de mensagens",
-          "no período — inclui descartadas; mencionar OBRIGATORIAMENTE no início OU",
-          "no fim do podcast, escolher um dos dois):",
+          "MESTRES DO ENGAJAMENTO (top participantes por volume bruto de",
+          "mensagens no período — inclui descartadas):",
           ...conv.topParticipants.map(
             (p, i) => `  ${i + 1}. ${p.name} — ${p.count} mensagens`,
           ),
-          "Como mencionar: cite o TOTAL DO PERÍODO e o TOP 3 (ou top 2 se",
-          "houver poucos participantes). Se 2+ tiverem o MESMO count, diga",
-          "que estão empatados (ex.: \"Fernando e Léo, empatados no topo com",
-          "15 mensagens cada\"). NÃO leia como lista bullet — incorpore na",
-          "conversa Ana↔Beto (ou na narrativa solo) de forma natural,",
-          "tom \"locutor de futebol anunciando os artilheiros do dia\".",
+          "",
+          "POSICIONAMENTO OBRIGATÓRIO: mencionar LOGO NO INÍCIO do podcast,",
+          "imediatamente após a saudação (segundo ou terceiro turno de fala",
+          "no modo duo; segundo parágrafo no modo solo) — antes de entrar",
+          "nos tópicos. NUNCA deixar pro fim.",
+          "",
+          "COMO MENCIONAR:",
+          "- Cite o TOTAL DO PERÍODO + o TOP 3 (ou top 2 se houver poucos",
+          "  participantes).",
+          "- Se 2+ tiverem o MESMO count, diga que estão empatados (ex.:",
+          '  "Fernando e Léo, empatados no topo com 15 mensagens cada").',
+          "- NÃO leia como lista bullet — incorpore na conversa Ana↔Beto",
+          '  (ou na narrativa solo) com tom "locutor de futebol anunciando',
+          '  os artilheiros do dia": animado, com energia.',
+          "- Encaixe natural no fluxo: depois da saudação, faça uma",
+          '  transição tipo "antes de a gente entrar no que rolou, deixa',
+          '  eu te contar quem foi o destaque de hoje" e ENTÃO solta os',
+          "  números. Depois sim entra no primeiro tópico.",
         ].join("\n")
       : "";
 
