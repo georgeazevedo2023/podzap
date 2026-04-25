@@ -294,9 +294,9 @@ body {
   .btn-purple { background: #5B2BE8; color: #fff; }
   .btn-yellow { background: #FFC828; }
   .btn-zap    { background: #22C55E; color: #fff; }
-  .btn-ghost  { background: transparent; box-shadow: none; }
+  .btn-ghost  { background: transparent; box-shadow: none; color: var(--text); }
   .btn-ghost:hover {
-    background: rgba(0,0,0,0.05);
+    background: color-mix(in srgb, var(--text) 10%, transparent);
     box-shadow: none;
     transform: none;
   }

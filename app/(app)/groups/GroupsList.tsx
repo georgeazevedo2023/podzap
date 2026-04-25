@@ -247,7 +247,7 @@ export function GroupsList({
             background: initialMonitoredOnly
               ? 'var(--lime-500)'
               : 'var(--surface)',
-            color: 'var(--ink-900)',
+            color: initialMonitoredOnly ? 'var(--ink-900)' : 'var(--text)',
             fontFamily: 'var(--font-body)',
             fontSize: 13,
             fontWeight: 700,
