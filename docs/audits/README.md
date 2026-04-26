@@ -6,6 +6,7 @@ Histórico do projeto contado em 3 formatos:
 
 Mais recente primeiro:
 
+- [`session-2026-04-26.md`](session-2026-04-26.md) — CLAUDE.md vira orquestrador real (-83% tokens, 640→105 lin) + 4 skills procedurais (`podzap-{test-webhook,deploy,migration,db}`) + 3 docs novos (architecture/structure/data-model) + memory `docs_orchestration` + vault Obsidian limpo
 - [`session-2026-04-25.md`](session-2026-04-25.md) — auditoria geral 5-agentes + parser wsmart cobre audio/image/video + decryption `.enc` via UAZAPI + áudio do owner end-to-end + descoberta do bug HMAC missing em prod
 - [`session-2026-04-24-evening-music-ui-n8n.md`](session-2026-04-24-evening-music-ui-n8n.md) — música de fundo no podcast + migração crons pro n8n + prompts v7/v8 + UI fixes (chunky button, copy)
 - [`session-2026-04-24-cleanup-summary.md`](session-2026-04-24-cleanup-summary.md) — duo podcast Ana+Beto + remoção `approval_mode=auto` + delivery exige clique humano
