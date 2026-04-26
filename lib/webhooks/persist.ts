@@ -276,16 +276,39 @@ export async function persistIncomingMessage(
    */
   rawBody?: unknown,
 ): Promise<HandleResult> {
-  // 0. Ignore only self-sent AUDIO messages. That covers the podcast
-  //    delivery loop (we send audio back; UAZAPI re-fires webhook for it).
-  //    Text/image/video the tenant owner posts are legitimate group input
-  //    and must be captured, otherwise the owner never appears in their
-  //    own summaries.
-  if (event.key.fromMe && event.content.kind === "audio") {
-    return { status: "ignored", reason: "fromMe audio (own podcast delivery)" };
-  }
-
   const supabase = createAdminClient();
+
+  // 0. fromMe + audio: pode ser (a) áudio do podcast que NÓS entregamos
+  //    pro grupo (UAZAPI re-fires o webhook) — tem que ignorar pra não
+  //    transcrever nosso próprio podcast, ou (b) áudio que o owner gravou
+  //    no celular dele — tem que capturar pra entrar no próximo resumo.
+  //    Distinguimos via `audios.uazapi_delivered_message_id`: se o
+  //    messageId casa com algum row em `audios`, é (a); senão é (b).
+  //    Migration 0015 adicionou a coluna. Rows pré-0015 não têm o id, por
+  //    isso enquanto a coluna existir vazia (deploy parcial) ou se o
+  //    UAZAPI não retornar id, mantemos um fallback "skip" via flag.
+  if (event.key.fromMe && event.content.kind === "audio") {
+    const uazapiMessageId = event.key.id;
+    const { data: matchedDelivery, error: matchErr } = await supabase
+      .from("audios")
+      .select("id")
+      .eq("uazapi_delivered_message_id", uazapiMessageId)
+      .maybeSingle();
+
+    // Erro de DB: ser conservador — skip pra evitar loop. O áudio do
+    // owner perdido é menos ruim que retranscrever o próprio podcast em
+    // loop.
+    if (matchErr) {
+      console.warn(
+        `[persist] fromMe audio match check failed: ${matchErr.message}; skipping conservatively`,
+      );
+      return { status: "ignored", reason: "fromMe audio (match check failed)" };
+    }
+    if (matchedDelivery) {
+      return { status: "ignored", reason: "fromMe audio (own podcast delivery)" };
+    }
+    // Não casou — é áudio que o owner gravou. Cai no fluxo normal.
+  }
 
   // 1. Resolve tenant via the UAZAPI instance id we got in the envelope.
   const instanceUazapiId = event.instance;

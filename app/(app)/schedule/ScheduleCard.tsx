@@ -343,10 +343,20 @@ function TonePill({ tone }: { tone: SummaryTone }) {
 }
 
 function ApprovalPill({ mode }: { mode: ScheduleApprovalMode }) {
+  // 'auto' continua no enum DB pra não quebrar rows legadas, mas a
+  // migration 0011 adicionou CHECK que impede novos writes — na prática
+  // o pill nunca é renderizado nesse estado. Caímos em 'required' (mais
+  // conservador) se algum row antigo ainda existir.
   const cfg: Record<
     ScheduleApprovalMode,
     { label: string; emoji: string; bg: string; fg: string }
   > = {
+    auto: {
+      label: 'auto (legado)',
+      emoji: '⚠',
+      bg: 'var(--bg-2)',
+      fg: 'var(--text)',
+    },
     optional: {
       label: 'revisão opcional',
       emoji: '👀',

@@ -97,6 +97,7 @@ export type Database = {
           storage_path: string
           summary_id: string
           tenant_id: string
+          uazapi_delivered_message_id: string | null
           voice: string | null
         }
         Insert: {
@@ -111,6 +112,7 @@ export type Database = {
           storage_path: string
           summary_id: string
           tenant_id: string
+          uazapi_delivered_message_id?: string | null
           voice?: string | null
         }
         Update: {
@@ -125,6 +127,7 @@ export type Database = {
           storage_path?: string
           summary_id?: string
           tenant_id?: string
+          uazapi_delivered_message_id?: string | null
           voice?: string | null
         }
         Relationships: [
@@ -354,7 +357,7 @@ export type Database = {
           text: string
           tone: Database["public"]["Enums"]["summary_tone"]
           updated_at: string
-          voice_mode: "single" | "duo"
+          voice_mode: string
         }
         Insert: {
           approved_at?: string | null
@@ -373,7 +376,7 @@ export type Database = {
           text: string
           tone?: Database["public"]["Enums"]["summary_tone"]
           updated_at?: string
-          voice_mode?: "single" | "duo"
+          voice_mode?: string
         }
         Update: {
           approved_at?: string | null
@@ -392,7 +395,7 @@ export type Database = {
           text?: string
           tone?: Database["public"]["Enums"]["summary_tone"]
           updated_at?: string
-          voice_mode?: "single" | "duo"
+          voice_mode?: string
         }
         Relationships: [
           {
@@ -599,7 +602,7 @@ export type Database = {
     }
     Enums: {
       message_type: "text" | "audio" | "image" | "video" | "other"
-      schedule_approval_mode: "optional" | "required"
+      schedule_approval_mode: "auto" | "optional" | "required"
       schedule_frequency: "daily" | "weekly" | "custom"
       schedule_trigger_type: "fixed_time" | "inactivity" | "dynamic_window"
       summary_status: "pending_review" | "approved" | "rejected"
@@ -738,7 +741,7 @@ export const Constants = {
   public: {
     Enums: {
       message_type: ["text", "audio", "image", "video", "other"],
-      schedule_approval_mode: ["optional", "required"],
+      schedule_approval_mode: ["auto", "optional", "required"],
       schedule_frequency: ["daily", "weekly", "custom"],
       schedule_trigger_type: ["fixed_time", "inactivity", "dynamic_window"],
       summary_status: ["pending_review", "approved", "rejected"],

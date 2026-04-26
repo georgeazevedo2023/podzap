@@ -23,6 +23,7 @@ import {
   ListGroupsResponseSchema,
   QrCodeResponse,
   SendMessageResponseSchema,
+  type SendMessageResponse,
   UazapiError,
   WebhookConfig,
   WebhookConfigSchema,
@@ -357,7 +358,7 @@ export class UazapiClient {
     to: string,
     audio: Buffer | string,
     caption?: string,
-  ): Promise<void> {
+  ): Promise<SendMessageResponse> {
     const file = toUazapiFile(audio);
     const body: Record<string, unknown> = {
       number: to,
@@ -372,7 +373,7 @@ export class UazapiClient {
       headers: this.instanceHeaders(instanceToken),
       body,
     });
-    SendMessageResponseSchema.parse(raw ?? {});
+    return SendMessageResponseSchema.parse(raw ?? {});
   }
 
   // ── Webhook config ────────────────────────────────────────────────

@@ -60,16 +60,24 @@ type MessageRow = {
   created_at: string;
 };
 
+type AudioRow = {
+  id: string;
+  tenant_id: string;
+  uazapi_delivered_message_id: string | null;
+};
+
 const db = {
   whatsapp_instances: [] as InstanceRow[],
   groups: [] as GroupRow[],
   messages: [] as MessageRow[],
+  audios: [] as AudioRow[],
 };
 
 function resetDb() {
   db.whatsapp_instances = [];
   db.groups = [];
   db.messages = [];
+  db.audios = [];
 }
 
 type AnyRow = Record<string, unknown>;
@@ -522,17 +530,47 @@ describe("persistIncomingMessage — filtering", () => {
     expect(db.messages[0]?.type).toBe("image");
   });
 
-  it("ignores fromMe=true audio (guards against podcast delivery loop)", async () => {
+  it("ignores fromMe=true audio when messageId casa com row em audios (= nossa delivery)", async () => {
     const inst = seedInstance();
     seedGroup(inst, { is_monitored: true });
 
-    const event = audioMessageEvent({ fromMe: true });
+    const ourDeliveredId = "msg_our_podcast_xyz";
+    db.audios.push({
+      id: randomUUID(),
+      tenant_id: TENANT,
+      uazapi_delivered_message_id: ourDeliveredId,
+    });
+
+    const event = audioMessageEvent({ fromMe: true, messageId: ourDeliveredId });
     if (event.event !== "message") throw new Error("expected message");
     const res = await persistIncomingMessage(event);
 
     expect(res.status).toBe("ignored");
-    expect(res.reason).toMatch(/fromMe audio/);
+    expect(res.reason).toMatch(/fromMe audio.*own podcast/);
     expect(db.messages).toHaveLength(0);
+  });
+
+  it("captures fromMe=true audio quando NÃO casa com nenhuma delivery (= owner gravou)", async () => {
+    const inst = seedInstance();
+    seedGroup(inst, { is_monitored: true });
+
+    // Tem deliveries no DB, só não casa com esse messageId.
+    db.audios.push({
+      id: randomUUID(),
+      tenant_id: TENANT,
+      uazapi_delivered_message_id: "msg_some_other_podcast",
+    });
+
+    const event = audioMessageEvent({
+      fromMe: true,
+      messageId: "msg_owner_recorded_in_phone",
+    });
+    if (event.event !== "message") throw new Error("expected message");
+    const res = await persistIncomingMessage(event);
+
+    expect(res.status).toBe("persisted");
+    expect(db.messages).toHaveLength(1);
+    expect(db.messages[0]?.type).toBe("audio");
   });
 });
 

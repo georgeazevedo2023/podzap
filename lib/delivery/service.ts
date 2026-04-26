@@ -261,15 +261,29 @@ async function downloadAudio(storagePath: string): Promise<Buffer> {
 async function markDelivered(
   tenantId: string,
   audioId: string,
+  /**
+   * WhatsApp message id retornado pela UAZAPI no /send/media. Quando
+   * presente, gravamos pra `webhook/persist.ts` poder distinguir áudio
+   * do podcast (skip) do áudio que o owner gravou (process).
+   */
+  uazapiDeliveredMessageId?: string | null,
 ): Promise<{ deliveredAt: string }> {
   const deliveredAt = new Date().toISOString();
   const admin = createAdminClient();
+  const update: {
+    delivered_to_whatsapp: boolean;
+    delivered_at: string;
+    uazapi_delivered_message_id?: string;
+  } = {
+    delivered_to_whatsapp: true,
+    delivered_at: deliveredAt,
+  };
+  if (uazapiDeliveredMessageId) {
+    update.uazapi_delivered_message_id = uazapiDeliveredMessageId;
+  }
   const { error } = await admin
     .from("audios")
-    .update({
-      delivered_to_whatsapp: true,
-      delivered_at: deliveredAt,
-    })
+    .update(update)
     .eq("tenant_id", tenantId)
     .eq("id", audioId);
 
@@ -346,8 +360,14 @@ async function runDelivery(
   const caption = opts.includeCaption
     ? (summary.caption ?? summary.text)
     : undefined;
+  let sendResponse: { id?: string } = {};
   try {
-    await client.sendAudio(instanceToken, targetJid, audioBuffer, caption);
+    sendResponse = await client.sendAudio(
+      instanceToken,
+      targetJid,
+      audioBuffer,
+      caption,
+    );
   } catch (err) {
     if (err instanceof UazapiError) {
       throw new DeliveryError(
@@ -371,7 +391,17 @@ async function runDelivery(
   const deliveredToGroup = targetJid === group.uazapi_group_jid;
   let deliveredAt: string | null = audio.delivered_at;
   if (deliveredToGroup) {
-    ({ deliveredAt } = await markDelivered(tenantId, audioId));
+    // Persiste o id retornado pelo UAZAPI quando disponível —
+    // webhook/persist.ts usa pra distinguir áudio do podcast (skip) do
+    // áudio que o owner gravou no celular (process). Quando o destino
+    // não é o grupo de origem (ex.: "mandar pra mim"), não gravamos id
+    // porque essas mensagens são tests/compartilhamento e não devem
+    // suprimir capturas do owner em outros grupos.
+    ({ deliveredAt } = await markDelivered(
+      tenantId,
+      audioId,
+      sendResponse.id ?? null,
+    ));
   }
 
   return {

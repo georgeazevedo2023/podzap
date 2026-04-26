@@ -313,7 +313,11 @@ vi.mock("@/lib/uazapi/client", async () => {
     constructor(_baseUrl: string, _token: string) {
       const impl = nextSendAudioImpls.shift();
       this.sendAudio = vi.fn(
-        impl ? (impl as (...args: unknown[]) => Promise<unknown>) : async () => undefined,
+        impl
+          ? (impl as (...args: unknown[]) => Promise<unknown>)
+          // Default: succeed with a fake whatsapp message id. Mirrors the
+          // SendMessageResponseSchema shape — { id?, status? }.
+          : async () => ({ id: "msg_fake_uazapi_id" }),
       );
       uazapiInstances.push({ sendAudio: this.sendAudio });
     }
