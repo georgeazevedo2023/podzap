@@ -405,13 +405,15 @@ so the externally-provided ref can't smuggle PostgREST grammar.
 
 #### Audio / Image / Video — status
 
-> **Implementado em 2026-04-25 (defensivo).** O parser
-> `normaliseUazapiMessageContent` em `lib/uazapi/types.ts` agora classifica
+> **Implementado em 2026-04-25.** O parser
+> `normaliseUazapiMessageContent` em `lib/uazapi/types.ts` classifica
 > AudioMessage / ImageMessage / VideoMessage / ExtendedTextMessage no
-> `kind` correto. Para extração de URL/mimetype/duration tentamos múltiplas
-> keys conhecidas (`m.url`, `m.mediaUrl`, `m.audioMessage.url`, ...) porque
-> a shape exata do wsmart pra mídia ainda não foi capturada em payload real
-> — só o `messageType` veio nos primeiros samples.
+> `kind` correto. Sinais (por prioridade): `m.mediaType` ('ptt'/'image'/
+> 'video') → `m.messageType` (strip "Message" + lowercase) → `m.type`.
+> Extração de URL/mimetype lê de `m.content.{URL,mimetype,seconds,PTT,
+> fileLength,caption,width,height}` (shape real wsmart, **keys em
+> MAIÚSCULAS**). Fallbacks defensivos: `m.url`, `m.mediaUrl`,
+> `m.audioMessage.url`, `m.imageMessage.caption`, etc.
 >
 > **Forensic:** desde 2026-04-25 `messages.raw_payload` armazena o **body
 > cru** da request HTTP (não mais o evento normalizado pelo Zod). Quando
@@ -456,7 +458,8 @@ so the externally-provided ref can't smuggle PostgREST grammar.
 ```
 
 To obtain a persistent URL, call `POST /message/download` with
-`{ id, return_link: true, generate_mp3: true }`.
+`{ id, return_link: true, generate_mp3: true }`. **Implementado em
+2026-04-25** — ver §Media decryption abaixo.
 
 #### Image
 
@@ -521,6 +524,49 @@ messages, etc. — is normalised to `kind: "other"` by our webhook handler.
 ```
 
 We map this to the instance's `status` column to keep the UI honest.
+
+#### Media decryption (`/message/download`)
+
+> Implementado em 2026-04-25 (commit `739dc48`).
+
+WhatsApp transmite mídia (audio/image/video) como blobs **AES-encrypted**
+hosted em `mmg.whatsapp.net/v/...enc`. Pra ler, precisa do `mediaKey` +
+HKDF + AES-CBC + sidecar handling. UAZAPI faz isso server-side e expõe
+um endpoint que devolve URL plain hosted no CDN deles.
+
+**Endpoint:**
+```
+POST /message/download
+Header: token: <instance-token>
+Body:   { id: "<whatsapp-messageid>", return_link: true, generate_mp3?: false }
+Resp:   { fileURL: "https://wsmart.uazapi.com/files/<sha256>.ogg",
+          mimetype: "audio/ogg",
+          fileSize?: 15687 }
+```
+
+- `return_link: true` (recomendado) — recebe URL ao invés de bytes base64;
+  permite stream + cap de tamanho no downloader.
+- `generate_mp3: false` (default) — Whisper Large v3 lê ogg/opus
+  nativamente, transcode adiciona latência sem benefício.
+- A URL retornada é estável (hash do conteúdo); pode cachear.
+
+**Plumbing no código:**
+1. `lib/uazapi/client.ts::downloadMedia(token, msgId, opts?)` — wrapper
+2. `lib/media/download.ts::DownloadOpts.uazapiResolve` — `{ instanceToken,
+   whatsappMessageId }`. Quando URL é WhatsApp `.enc` E opts presente,
+   downloader chama UAZAPI primeiro
+3. `lib/webhooks/persist.ts::loadUazapiResolveOpts` — busca + decripta
+   `whatsapp_instances.uazapi_token_encrypted` via `lib/crypto`. Plumba
+   pra `downloadAndStore`
+4. Workers `retry-pending.ts` e `media-download-retry.ts` replicam o
+   mesmo lookup (precisam pra rows stale)
+
+**Erros:**
+- URL `.enc` sem `uazapiResolve` opt → fail rápido com reason descritivo
+  (antes ia tentar fetch direto que falhava com 4xx genérico)
+- `downloadMedia` retorna `fileURL` vazio → `UazapiError BAD_RESPONSE`
+- Token decrypt falha → log warn, `uazapiResolve = undefined`, downloader
+  vai falhar com erro descritivo
 
 ---
 
