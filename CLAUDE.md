@@ -577,11 +577,17 @@ Catálogo com props + snippets + tokens: [`docs/ui-components/README.md`](docs/u
 
 ---
 
-## 23. Internals docs
+## 23. Docs map
 
-`docs/internals/` complementa `docs/integrations/`. A divisão é:
+Top-level: [`docs/README.md`](docs/README.md) tem mapa completo das subpastas. Resumo:
 
-- **Integrations** = subsistemas **externos** (UAZAPI, Gemini, Groq, Supabase Auth, Inngest setup, TTS, delivery).
-- **Internals** = módulos **próprios** em `lib/` e `inngest/` (`ratelimit`, `crypto`, `supabase/` clients, `media/`, `stats/`, `inngest/events`).
+- **Integrations** ([`docs/integrations/`](docs/integrations/README.md)) — subsistemas **externos** (UAZAPI, Gemini, Groq, Supabase Auth, Inngest setup, TTS, delivery, scheduling, approval, admin-management).
+- **Internals** ([`docs/internals/`](docs/internals/README.md)) — módulos **próprios** em `lib/` e `inngest/` (`ratelimit`, `crypto`, `supabase/` clients, `media/`, `stats/`, `inngest/events`). Mapa "se você está mexendo em X, leia Y" no README dele.
+- **Audits + sessões** ([`docs/audits/`](docs/audits/README.md)) — `fase-N-audit.md` + `session-YYYY-MM-DD.md` cronológicos. Reconstrói "como isso ficou assim".
+- **API** ([`docs/api/`](docs/api/README.md)) — catálogo das rotas + matriz auth/rate-limit.
+- **UI components** ([`docs/ui-components/`](docs/ui-components/README.md)) — primitives + tokens.
+- **Plans** ([`docs/plans/`](docs/plans/README.md)) — PLAN.md por fase (entrada do GSD; raramente lido pós-execução).
+- **Deploy** ([`docs/deploy/`](docs/deploy/README.md)) — Hetzner + Portainer + redeploy webhook.
+- **Scaffolds** (`docs/scaffolds/`) — snapshot histórico do scaffolding inicial; **não** atualizado conforme app evolui.
 
-Índice + mapa "se você está mexendo em X, leia Y": [`docs/internals/README.md`](docs/internals/README.md). Módulos pequenos (`lib/time/relative.ts`, `lib/ai-tracking`) ficam documentados in-line nos comentários e são referenciados a partir do README do diretório.
+Módulos pequenos (`lib/time/relative.ts`, `lib/ai-tracking`) ficam documentados in-line nos comentários e são referenciados a partir do README do diretório.
