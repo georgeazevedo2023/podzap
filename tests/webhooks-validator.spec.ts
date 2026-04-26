@@ -496,6 +496,52 @@ describe("parseWebhookBody — UAZAPI wsmart shape", () => {
     }
   });
 
+  it("extracts URL/mimetype/seconds from real wsmart audio payload (m.content.URL)", () => {
+    // Payload real capturado em 2026-04-25 — wsmart guarda os campos de
+    // mídia dentro de `m.content` com URL/PTT em MAIÚSCULAS.
+    const body = {
+      BaseUrl: "https://wsmart.uazapi.com",
+      EventType: "messages",
+      instanceName: "podzap-13d4eb57-1776932610527",
+      message: {
+        messageType: "AudioMessage",
+        mediaType: "ptt",
+        type: "media",
+        messageid: "3A900368F7FF4A601BEA",
+        chatid: "120363358399876640@g.us",
+        fromMe: false,
+        sender: "90044006187258@lid",
+        senderName: "Wsmart",
+        messageTimestamp: 1777162489000,
+        text: "",
+        content: {
+          URL: "https://mmg.whatsapp.net/v/t62.7117-24/foo.enc?ccb=11-4&oh=01_Q5",
+          mimetype: "audio/ogg; codecs=opus",
+          fileLength: 6034,
+          seconds: 2,
+          PTT: true,
+          mediaKey: "1Ikl5UBKomkrbwDcxM3KM/kTbzTHpVfVTm7LfVwwEm0=",
+          directPath: "/v/t62.7117-24/foo.enc",
+        },
+      },
+      token: "tkn",
+    };
+    const res = parseWebhookBody(body);
+    expect(res.ok).toBe(true);
+    if (res.ok && res.event.event === "message") {
+      expect(res.event.content.kind).toBe("audio");
+      if (res.event.content.kind === "audio") {
+        expect(res.event.content.mediaUrl).toBe(
+          "https://mmg.whatsapp.net/v/t62.7117-24/foo.enc?ccb=11-4&oh=01_Q5",
+        );
+        expect(res.event.content.mimetype).toBe("audio/ogg; codecs=opus");
+        expect(res.event.content.seconds).toBe(2);
+        expect(res.event.content.fileLength).toBe(6034);
+        expect(res.event.content.ptt).toBe(true);
+      }
+    }
+  });
+
   it("keeps ReactionMessage / StickerMessage as kind='other' (preserves rawType)", () => {
     const body = {
       EventType: "messages",

@@ -347,25 +347,37 @@ const normaliseMessageContent = (data: unknown): MessageContent => {
  * internal `MessageContent`.
  *
  * Sinais usados (por prioridade):
- *   - `m.type` ∈ {"text","audio","image","video"} é o sinal mais forte
- *     (aparece nos fixtures reais do wsmart).
- *   - `m.messageType` cruza os mesmos labels mas com sufixo opcional
- *     "Message" e capitalização inconsistente (`Conversation`,
- *     `ExtendedTextMessage`, `AudioMessage`, etc.). Comparamos sempre
- *     stripando sufixo + lowercase.
+ *   - `m.mediaType` ∈ {"ptt","image","video","audio","document"} — sinal
+ *     mais granular do wsmart real (capturado em 2026-04-25).
+ *   - `m.messageType` ex.: "Conversation", "ExtendedTextMessage",
+ *     "AudioMessage", "ImageMessage", "VideoMessage", "ReactionMessage".
+ *     Comparamos stripando sufixo "Message" + lowercase.
+ *   - `m.type` ∈ {"text","media","..."} — menos útil; "media" cobre
+ *     todos os tipos de mídia genericamente.
  *
- * Para mídia, as keys exatas onde wsmart guarda URL/mimetype/duração
- * ainda não foram capturadas em payload real (só o `messageType` veio).
- * Por isso a extração é defensiva: tentamos várias keys conhecidas
- * (flat `m.url` / nested `m.audioMessage.url` / etc.). Quando nada
- * bate, criamos a row como `kind=audio|image` mesmo assim — o worker
- * de transcrição reage ao `messages.type` e respeita
- * `media_download_status='skipped'` quando `media_url` é null.
+ * Estrutura de mídia REAL (wsmart, capturado live 2026-04-25):
+ *   m = {
+ *     messageType: "AudioMessage",
+ *     mediaType: "ptt",
+ *     type: "media",
+ *     content: {
+ *       URL:       "https://mmg.whatsapp.net/...enc",   // ← MAIÚSCULAS
+ *       mimetype:  "audio/ogg; codecs=opus",
+ *       seconds:   2,
+ *       PTT:       true,
+ *       fileLength: 6034,
+ *       mediaKey, directPath, ...
+ *     },
+ *     text: "",                                          // só populado em text/caption
+ *   }
  *
- * Forensic: o body cru da request HTTP é preservado pelo `persist.ts`
- * em `raw_payload` (ver `app/api/webhooks/uazapi/route.ts`), então
- * quando uma mensagem chegar com shape inesperada dá pra inspecionar
- * o JSON original e refinar o parser.
+ * Fallbacks defensivos (Evolution-shape p/ fixtures legacy + outras
+ * variações): `m.content.url|mediaUrl`, `m.url`, `m.mediaUrl`,
+ * `m.audioMessage.url`. Quando nada bate, row entra com
+ * `media_download_status=skipped` e o worker bail-out clean.
+ *
+ * Forensic: body HTTP cru fica em `messages.raw_payload`, dá pra refinar
+ * o parser depois sem replay.
  */
 const normaliseUazapiMessageContent = (msg: unknown): MessageContent => {
   if (!msg || typeof msg !== "object") {
@@ -373,34 +385,51 @@ const normaliseUazapiMessageContent = (msg: unknown): MessageContent => {
   }
   const m = msg as Record<string, unknown>;
   const type = typeof m.type === "string" ? m.type.toLowerCase() : "";
+  const mediaType = typeof m.mediaType === "string" ? m.mediaType.toLowerCase() : "";
   const rawMessageType = typeof m.messageType === "string" ? m.messageType : "";
   // Strip optional "Message" suffix and lowercase for tolerant matching.
-  // Wire delivers e.g. "ExtendedTextMessage", "AudioMessage", or sometimes
-  // the legacy "Conversation"/"ExtendedText" without suffix.
   const mt = rawMessageType.replace(/Message$/i, "").toLowerCase();
+
+  // wsmart-shape: media-bearing payloads put URL/mimetype/seconds inside
+  // `m.content` (object). For text payloads `m.content` is the text string
+  // — handled by the text branch below.
+  const mc = m.content && typeof m.content === "object"
+    ? (m.content as Record<string, unknown>)
+    : {};
 
   // ── TEXT ────────────────────────────────────────────────────────
   if (type === "text" || mt === "conversation" || mt === "extendedtext") {
     // wsmart fixtures use `m.text`; legacy/extended payloads sometimes
-    // expose `m.content` (caption-like) or `m.extendedTextMessage.text`.
+    // expose `m.content` (string) or `m.extendedTextMessage.text`.
     const nested = (m.extendedTextMessage ?? {}) as Record<string, unknown>;
-    const text = m.text ?? m.content ?? nested.text ?? "";
-    return { kind: "text", text: String(text ?? "") };
+    const text =
+      pickString(m.text, typeof m.content === "string" ? m.content : undefined, nested.text) ??
+      "";
+    return { kind: "text", text };
   }
 
   // ── AUDIO ───────────────────────────────────────────────────────
-  if (type === "audio" || mt === "audio" || mt === "ptt") {
+  if (
+    mediaType === "ptt" ||
+    mediaType === "audio" ||
+    mt === "audio" ||
+    mt === "ptt" ||
+    type === "audio"
+  ) {
     const nested = (m.audioMessage ?? {}) as Record<string, unknown>;
-    const mediaUrl = pickString(m.mediaUrl, m.url, nested.url, nested.mediaUrl);
-    const mimetype = pickString(m.mimetype, nested.mimetype);
-    const seconds = pickNonNegativeInt(m.seconds, nested.seconds);
-    const fileLength = pickNonNegativeInt(m.fileLength, nested.fileLength);
+    const mediaUrl = pickString(
+      mc.URL, mc.url, mc.mediaUrl,
+      m.mediaUrl, m.url,
+      nested.url, nested.mediaUrl,
+    );
+    const mimetype = pickString(mc.mimetype, m.mimetype, nested.mimetype);
+    const seconds = pickNonNegativeInt(mc.seconds, m.seconds, nested.seconds);
+    const fileLength = pickNonNegativeInt(mc.fileLength, m.fileLength, nested.fileLength);
+    const pttBool = (val: unknown): boolean | undefined =>
+      typeof val === "boolean" ? val : undefined;
     const ptt =
-      typeof m.ptt === "boolean"
-        ? m.ptt
-        : typeof nested.ptt === "boolean"
-          ? nested.ptt
-          : mt === "ptt";
+      pttBool(mc.PTT) ?? pttBool(mc.ptt) ?? pttBool(m.ptt) ?? pttBool(nested.ptt) ??
+      (mediaType === "ptt" || mt === "ptt");
     return {
       kind: "audio",
       mediaUrl,
@@ -412,14 +441,24 @@ const normaliseUazapiMessageContent = (msg: unknown): MessageContent => {
   }
 
   // ── IMAGE ───────────────────────────────────────────────────────
-  if (type === "image" || mt === "image") {
+  if (mediaType === "image" || mt === "image" || type === "image") {
     const nested = (m.imageMessage ?? {}) as Record<string, unknown>;
-    const mediaUrl = pickString(m.mediaUrl, m.url, nested.url, nested.mediaUrl);
-    const mimetype = pickString(m.mimetype, nested.mimetype);
-    const caption = pickString(m.caption, m.text, m.content, nested.caption);
-    const fileLength = pickNonNegativeInt(m.fileLength, nested.fileLength);
-    const width = pickPositiveInt(m.width, nested.width);
-    const height = pickPositiveInt(m.height, nested.height);
+    const mediaUrl = pickString(
+      mc.URL, mc.url, mc.mediaUrl,
+      m.mediaUrl, m.url,
+      nested.url, nested.mediaUrl,
+    );
+    const mimetype = pickString(mc.mimetype, m.mimetype, nested.mimetype);
+    // Captions ficam em `m.text` (top-level) na wsmart-shape; em legacy
+    // ficavam em `m.caption` ou `m.imageMessage.caption`.
+    const caption = pickString(
+      m.text, m.caption,
+      mc.caption, typeof mc === "object" && typeof (mc as Record<string, unknown>).text === "string" ? (mc as Record<string, unknown>).text : undefined,
+      nested.caption,
+    );
+    const fileLength = pickNonNegativeInt(mc.fileLength, m.fileLength, nested.fileLength);
+    const width = pickPositiveInt(mc.width, m.width, nested.width);
+    const height = pickPositiveInt(mc.height, m.height, nested.height);
     return {
       kind: "image",
       mediaUrl,
@@ -432,13 +471,17 @@ const normaliseUazapiMessageContent = (msg: unknown): MessageContent => {
   }
 
   // ── VIDEO ───────────────────────────────────────────────────────
-  if (type === "video" || mt === "video") {
+  if (mediaType === "video" || mt === "video" || type === "video") {
     const nested = (m.videoMessage ?? {}) as Record<string, unknown>;
-    const mediaUrl = pickString(m.mediaUrl, m.url, nested.url, nested.mediaUrl);
-    const mimetype = pickString(m.mimetype, nested.mimetype);
-    const caption = pickString(m.caption, m.text, m.content, nested.caption);
-    const seconds = pickNonNegativeInt(m.seconds, nested.seconds);
-    const fileLength = pickNonNegativeInt(m.fileLength, nested.fileLength);
+    const mediaUrl = pickString(
+      mc.URL, mc.url, mc.mediaUrl,
+      m.mediaUrl, m.url,
+      nested.url, nested.mediaUrl,
+    );
+    const mimetype = pickString(mc.mimetype, m.mimetype, nested.mimetype);
+    const caption = pickString(m.text, m.caption, mc.caption, nested.caption);
+    const seconds = pickNonNegativeInt(mc.seconds, m.seconds, nested.seconds);
+    const fileLength = pickNonNegativeInt(mc.fileLength, m.fileLength, nested.fileLength);
     return {
       kind: "video",
       mediaUrl,
