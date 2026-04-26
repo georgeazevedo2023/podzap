@@ -7,14 +7,14 @@
 
 ## 1. O que é o podZAP
 
-SaaS **multi-tenant** que transforma conversas de grupos do WhatsApp em **resumos em áudio estilo podcast**.
+SaaS **multi-tenant** que transforma conversas de grupos do WhatsApp em **resumos em áudio estilo podcast** (formato duo Ana+Beto, default).
 
 Fluxo essencial:
-`mensagens zap → transcrição (áudio+imagem) → resumo IA → aprovação humana → TTS → entrega`
+`mensagens zap → transcrição (áudio+imagem) → resumo IA → aprovação humana → TTS → entrega manual via /podcasts`
 
-**Diferencial:** aprovação humana obrigatória/opcional antes do áudio ser gerado e enviado.
+**Diferencial:** aprovação humana **obrigatória** antes do áudio ser gerado E antes de ser enviado ao grupo (2 cliques distintos — ver §16).
 
-PRD completo: `docs/PRD.md`
+Source of truth do produto: este arquivo + [`docs/MVP-COMPLETION.md`](docs/MVP-COMPLETION.md). PRD original não está versionado no repo.
 
 ---
 
@@ -38,84 +38,96 @@ PRD completo: `docs/PRD.md`
 ## 3. Arquitetura
 
 ```
-┌─────────────────┐      webhook      ┌──────────────┐
-│    UAZAPI       │──────────────────▶│  /api/       │
-│  (WhatsApp)     │                   │  webhooks/   │
-└─────────────────┘                   │   uazapi     │
-        ▲                             └──────┬───────┘
-        │ envio áudio+texto                  │ enqueue
-        │                                    ▼
-┌───────┴────────┐                   ┌──────────────┐
-│  Next.js App   │◀──────────────────│   Inngest    │
-│  (Hetzner)     │                   │   Workers    │
-└───────┬────────┘                   └──────┬───────┘
-        │                                   │
-        │          RLS multi-tenant         │
-        ▼                                   ▼
-┌────────────────────────────────────────────────────┐
-│                    Supabase                        │
-│  Auth · Postgres · Storage (áudios)                │
-└────────────────────────────────────────────────────┘
-                     │
-          ┌──────────┼──────────┐
-          ▼          ▼          ▼
-      ┌──────┐   ┌──────┐   ┌──────────┐
-      │ Groq │   │Gemini│   │  Gemini  │
-      │ STT  │   │Vision│   │   TTS    │
-      └──────┘   └──────┘   └──────────┘
+┌─────────────┐  webhook   ┌────────────┐  HMAC fwd   ┌─────────────────┐
+│   UAZAPI    │──────────▶ │    n8n     │ ──────────▶ │  /api/webhooks/ │
+│  (WhatsApp) │            │  (relay +  │             │      uazapi     │
+└─────────────┘            │   cron)    │             └────────┬────────┘
+       ▲                   └─────┬──────┘                      │ persist + emit
+       │ /send/media             │ POST /api/worker/tick       ▼
+       │ /message/download       │ (Bearer token, ~30s)  ┌────────────┐
+       │                         ▼                       │  Inngest   │
+       │                  ┌──────────────┐               │   Cloud    │
+       │                  │ runSchedules │               │  (events)  │
+       │                  │ retryPending │               └─────┬──────┘
+       │                  │ transcrRetry │                     │
+       │                  └──────┬───────┘                     │
+       │                         │ trigger workers             │
+       │                         ▼                             ▼
+       │                  ┌─────────────────────────────────────────┐
+       │                  │  Inngest workers (event-driven)         │
+       │                  │  transcribe-audio · describe-image      │
+       │                  │  generate-summary · generate-tts        │
+       │                  │  media-download-retry · ping            │
+       │                  └────────────────┬────────────────────────┘
+       │                                   │
+       │                                   ▼
+       │  ┌──────────────────────────────────────────────────────────┐
+       └──│  Next.js App (Hetzner + Portainer)                       │
+          │  - app/(app) tenant UI · app/(admin) superadmin UI       │
+          │  - lib/uazapi · lib/ai · lib/pipeline · lib/summary      │
+          │  - lib/delivery · lib/audios · lib/webhooks              │
+          └─────────┬──────────────────────────────────────┬─────────┘
+                    │ RLS tenant_id                        │
+                    ▼                                      ▼
+          ┌──────────────────┐              ┌──────────────────────────┐
+          │     Supabase     │              │  AI providers            │
+          │  Postgres + RLS  │              │  Groq Whisper · Gemini   │
+          │  Auth · Storage  │              │  2.5 Pro · 2.5 Flash TTS │
+          │  (media+audios)  │              │  · 2.5 Flash Vision      │
+          └──────────────────┘              └──────────────────────────┘
 ```
 
 ---
 
-## 4. Estrutura de pastas (proposta)
+## 4. Estrutura de pastas (real)
 
 ```
 podzap/
-├── CLAUDE.md                    ← este arquivo
-├── ROADMAP.md                   ← fases do projeto
-├── README.md
-├── .env.example                 ← template de variáveis
-├── .env.local                   ← variáveis reais (NÃO commitar)
-├── docs/
-│   ├── PRD.md                   ← PRD original
-│   ├── architecture.md
-│   └── integrations/
-│       ├── uazapi.md
-│       ├── supabase.md
-│       └── gemini.md
-├── podZAP/                      ← MOCKUPS ORIGINAIS (design source of truth)
-│   ├── tokens.css               ← tokens já prontos, migrar pra Tailwind config
-│   ├── shell.jsx
-│   ├── screen_*.jsx
-│   └── components.jsx
-├── app/                         ← Next.js App Router
-│   ├── (auth)/
-│   ├── (dashboard)/
-│   │   ├── home/
-│   │   ├── groups/
-│   │   ├── approval/
-│   │   ├── history/
-│   │   └── schedule/
-│   ├── api/
-│   │   ├── webhooks/uazapi/
-│   │   ├── inngest/
-│   │   └── trpc/ (opcional)
-│   └── layout.tsx
+├── CLAUDE.md                    ← este arquivo (orquestrador da sessão)
+├── ROADMAP.md                   ← fases + status de cada uma
+├── proxy.ts                     ← Next.js middleware (auth + admin gate)
+├── docker-compose.stack.yml     ← stack Portainer (prod)
+├── Dockerfile                   ← multi-stage build
+├── .env.local · .env.example · .env.production.example
+├── docs/                        ← ver docs/README.md (índice top-level)
+│   ├── MVP-COMPLETION.md
+│   ├── api/ · audits/ · deploy/ · integrations/
+│   ├── internals/ · plans/ · scaffolds/ · ui-components/
+├── podZAP/                      ← MOCKUPS (source of truth visual — §18)
+│   └── screen_*.jsx · tokens.css · shell.jsx · components.jsx
+├── app/
+│   ├── (app)/                   ← rotas autenticadas (tenant) — dark theme
+│   │   └── home/ groups/ approval/ history/ podcasts/ schedule/ onboarding/
+│   ├── (admin)/admin/           ← rotas superadmin — dark theme
+│   │   └── tenants/ users/ uazapi/
+│   ├── login/ logout/ auth/     ← rotas públicas
+│   ├── api/                     ← 35 rotas (ver docs/api/README.md)
+│   │   ├── webhooks/uazapi/ · worker/tick/
+│   │   ├── inngest/ · admin/ · summaries/ · audios/ · schedules/
+│   │   └── groups/ · whatsapp/ · me/
+│   └── layout.tsx · globals.css · page.tsx (landing)
 ├── lib/
-│   ├── supabase/                ← clients (server, browser, admin)
-│   ├── uazapi/                  ← cliente UAZAPI
-│   ├── ai/
-│   │   ├── groq.ts              ← transcrição
-│   │   ├── gemini-vision.ts     ← imagens
-│   │   ├── gemini-llm.ts        ← resumo
-│   │   └── gemini-tts.ts        ← áudio
-│   └── pipeline/                ← lógica de processamento
-├── components/                  ← React components (migrados dos mockups)
-├── db/
-│   ├── migrations/              ← SQL do Supabase
-│   └── seed.sql
-├── inngest/                     ← workers
-│   └── functions/
+│   ├── supabase/                ← server / browser / admin clients
+│   ├── uazapi/                  ← client + types (zod) + crypto helpers
+│   ├── ai/                      ← groq · gemini-{llm,vision,tts} · openai (fallback)
+│   ├── webhooks/                ← validator (HMAC) · handler · persist
+│   ├── pipeline/                ← filter · cluster · normalize (rule-based)
+│   ├── summary/ · audios/ · delivery/ · schedules/ · transcripts/
+│   ├── stats/ · admin/ · groups/ · whatsapp/
+│   ├── media/                   ← download (com .enc decryption) · signed URLs
+│   └── crypto.ts · ratelimit.ts · tenant.ts · time/
+├── inngest/
+│   ├── client.ts · events.ts    ← eventos canônicos (case-sensitive)
+│   ├── functions/               ← 9 workers registrados (ver §11)
+│   └── handlers/                ← handlers puros reusados pelo n8n /worker/tick
+├── components/
+│   ├── ui/                      ← Button, Modal, Select, SendToMenu, PodCover, …
+│   ├── shell/                   ← TopBar, Sidebar, AppSidebar, AdminSidebar
+│   └── icons/Icons.tsx
+├── db/migrations/               ← 15 migrations SQL aplicadas via scripts/db-query.mjs
+├── scripts/                     ← db-query, gen-types, set-superadmin (com confirm)
+├── tests/                       ← 356 testes Vitest
+├── e2e/                         ← Playwright (executados contra prod)
 └── public/
 ```
 
@@ -123,83 +135,116 @@ podzap/
 
 ## 5. Modelo de dados (resumo)
 
-Ver PRD §14 para detalhes. Tabelas principais:
+Tabelas em `public` (todas com RLS — tipos gerados em `lib/supabase/types.ts`):
 
-- `tenants` — isolamento multi-tenant
-- `users` — vinculados a 1+ tenant
-- `whatsapp_instances` — conexão UAZAPI por tenant
-- `groups` — grupos monitorados
-- `messages` — mensagens capturadas (texto/áudio/imagem)
-- `transcripts` — transcrição de áudio/imagem → texto
-- `summaries` — resumo gerado (status: pending_review / approved / rejected)
-- `audios` — URL do podcast final
-- `schedules` — configuração de agendamento por grupo
+| Tabela | Função |
+|---|---|
+| `tenants` | Isolamento multi-tenant (`is_active`, `plan`, `include_caption_on_delivery`, `delivery_target`) |
+| `tenant_members` | Liga `auth.users` ↔ `tenants` com `role` + `phone_e164` |
+| `superadmins` | Bit global cross-tenant — staff podZAP (helper `public.is_superadmin()`) |
+| `whatsapp_instances` | Conexão UAZAPI **1:1 por tenant** (`uazapi_token_encrypted`, `uazapi_instance_name`, `status`) |
+| `groups` | Grupos sincronizados (`is_monitored` controla pipeline) |
+| `messages` | Mensagens capturadas (`type ∈ {text,audio,image,video,other}`, `media_*`, `raw_payload` cru) |
+| `transcripts` | Texto de áudio (Groq) ou descrição de imagem (Gemini Vision) |
+| `summaries` | Resumo gerado (`status ∈ {pending_review, approved, rejected}`, `voice_mode ∈ {single,duo}`, `caption`, `prompt_version`) |
+| `audios` | WAV final (`storage_path`, `delivered_to_whatsapp`, `uazapi_delivered_message_id` — distingue podcast vs áudio do owner) |
+| `schedules` | Agendamento por grupo (`approval_mode ∈ {optional,required}` — `auto` baniu via CHECK 0011) |
+| `ai_calls` | Custo tracking por chamada (provider, model, tokens, cost_cents, summary_id) |
 
-**Toda query DEVE respeitar `tenant_id` via RLS.**
+**Toda query DEVE respeitar `tenant_id` via RLS.** Service role (workers Inngest, scripts) bypassa — sempre filtrar `tenant_id` explicitamente em handler.
 
 ---
 
 ## 6. Convenções
 
-- **Idioma:** português nos textos de UI, comentários em PT-BR ou EN (escolher um e manter)
-- **Commits:** conventional commits (`feat:`, `fix:`, `chore:`, `refactor:`)
-- **Branches:** `main` protegida, features em `feat/<nome>`
-- **Testes:** obrigatórios para pipelines (transcrição, filtro, resumo) — usar Vitest
-- **Secrets:** nunca commitar. `.env.local` no `.gitignore`
-- **UAZAPI:** usar a skill `uazapi` do Claude quando for integrar
-- **Design:** não inventar novos tokens — usar os de `podZAP/tokens.css`
+- **Idioma:** PT-BR em UI, commits, comentários, docs
+- **Commits:** conventional commits (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`)
+- **Branches:** `main` protegida (CI publica imagem GHCR + webhook redeploy Portainer); features em `feat/<nome>`
+- **Testes:** Vitest pra `lib/` e `inngest/`; Playwright e2e roda **contra prod** (não dev — memória `playwright_credentials`)
+- **Secrets:** nunca commitar. `.env.local` no `.gitignore`. Env de prod no Portainer
+- **Design:** não inventar tokens novos — usar os de `app/globals.css` (portados de `podZAP/tokens.css`); checar `components/ui/` antes de criar componente
+- **Multi-tenant:** todo handler que toca DB filtra `tenant_id` explicitamente; nunca confiar só em RLS quando service role estiver em jogo
+- **Linguagem do produto:** "podcast" (não "resumo"), "áudio" (não "WAV"), "grupo" (não "chat")
 
 ---
 
-## 7. Como rodar (após setup)
+## 7. Como rodar
 
 ```bash
-# instalar
+# install
 npm install
 
-# rodar dev
+# dev server (porta 3000)
 npm run dev
 
-# migrations supabase
-npx supabase db push
+# Inngest dev (em outro terminal — aponta pra app local)
+npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
+# dashboard: http://127.0.0.1:8288
 
-# workers inngest (dev)
-npx inngest-cli dev
+# aplicar migration nova (via Supabase Management API, não supabase CLI)
+node --env-file=.env.local scripts/db-query.mjs db/migrations/0015_xxx.sql
+
+# rodar SQL ad-hoc
+node --env-file=.env.local scripts/db-query.mjs --sql "select count(*) from messages"
+
+# regenerar tipos depois de migration
+node --env-file=.env.local scripts/gen-types.mjs
+
+# n8n cron tick (em dev, n8n não roda — invocar manual quando precisar testar schedule)
+curl -X POST http://localhost:3000/api/worker/tick \
+  -H "Authorization: Bearer $WORKER_TICK_TOKEN"
+
+# tests
+npx vitest run tests/        # unit (Vitest)
+npx playwright test e2e/     # e2e (CONTRA PROD — ver memória)
+
+# typecheck + build
+npx tsc --noEmit && npm run build
 ```
+
+**Operacional rápido** (mais detalhes em [`docs/deploy/README.md`](docs/deploy/README.md)):
+- Prod: https://podzap.wsmart.com.br
+- Portainer: https://app.wsmart.com.br · Stack: `podzap`
+- Supabase project: `vqrqygyfsrjpzkaxjleo`
+- N8n: https://fluxwebhook.wsmart.com.br
+- Redeploy webhook (após CI verde): `POST https://app.wsmart.com.br/api/webhooks/85b67741-...` (ver memória `deploy_portainer_webhook`)
 
 ---
 
-## 8. Status atual — **MVP COMPLETO 🎉**
+## 8. Status atual — **MVP COMPLETO + extensões pós-MVP**
 
-Relatório consolidado: [`docs/MVP-COMPLETION.md`](docs/MVP-COMPLETION.md) — timeline, arquitetura, features, débitos priorizados, checklist de deploy. Métricas: 246 testes passando, 23 rotas, 10 workers Inngest, 6 migrations, ~29.447 LOC.
+Métricas (2026-04-26): **356 testes**, **35 rotas HTTP**, **9 workers Inngest registrados**, **15 migrations**, **~49k LOC TS/TSX**. Relatório completo: [`docs/MVP-COMPLETION.md`](docs/MVP-COMPLETION.md). Trilha cronológica de mudanças: [`docs/audits/`](docs/audits/README.md) (sessões + audits por fase).
 
-- [x] PRD definido
-- [x] Layout/design system (mockups em `podZAP/`)
 - [x] Fase 0: scaffolding Next.js + Supabase
-- [x] Fase 1: Auth + multi-tenancy (RLS, signup auto-cria tenant)
+- [x] Fase 1: Auth + multi-tenancy (RLS) — *signup auto-cria tenant foi removido na Fase 13*
 - [x] Fase 2: conexão WhatsApp (UAZAPI)
 - [x] Fase 3: listagem e seleção de grupos
-- [x] Fase 4: captura de mensagens (webhook) ✅
-- [x] Fase 5: transcrição multimodal (Groq + Gemini Vision via Inngest) ✅
-- [x] Fase 6: filtro de relevância + agrupamento por tópicos ✅
-- [x] Fase 7: geração do resumo (Gemini 2.5 Pro) ✅
-- [x] Fase 8: aprovação humana (review + edit + approve/reject/regenerate) ✅
-- [x] Fase 9: TTS (Gemini 2.5 Flash TTS → WAV no bucket `audios`) ✅
-- [x] Fase 10: entrega via UAZAPI (worker `deliver-to-whatsapp` on `audio.created` + redeliver manual) ✅
-- [x] Fase 11: agendamento (cron `*/5 * * * *` → `dueSchedulesNow` → `summary.requested` com `autoApprove`) ✅ — última fase MVP
-- [x] Fase 12 (pós-MVP housekeeping): remove `/health`, dark theme em `(app)`, superadmin (migration 0007 + `scripts/set-superadmin.mjs`), home redesenhada 1:1 com protótipo (hero player + stats + grid + 3 painéis sidebar) ✅ PASS WITH CONCERNS — ver `docs/audits/fase-12-audit.md`
-- [x] Fase 13 (admin-managed tenancy): migration 0008 (drop trigger `handle_new_user`, UNIQUE `whatsapp_instances(tenant_id)`, `tenants.is_active`, policies SELECT com superadmin bypass), login email+senha, proxy gateia `/admin`, `lib/admin/{tenants,users,uazapi}.ts` + APIs completas, route group `(admin)` com layout dark + dashboard. Onboarding ajustado para empty state "contate o admin". ✅ PASS WITH CONCERNS — ver `docs/audits/fase-13-audit.md` e `docs/integrations/admin-management.md`
-- [ ] Pós-MVP: ver `ROADMAP.md` + `docs/MVP-COMPLETION.md` §9 (UI `/schedule`, Upstash rate limit, MP3 TTS, chunking, dashboard analytics, e backlog PRD Fase 14+)
+- [x] Fase 4: captura de mensagens via webhook
+- [x] Fase 5: transcrição multimodal (Groq Whisper + Gemini Vision via Inngest)
+- [x] Fase 6: filtro + clustering (rule-based)
+- [x] Fase 7: resumo (Gemini 2.5 Pro)
+- [x] Fase 8: aprovação humana (`pending_review → approved | rejected`, regenerate)
+- [x] Fase 9: TTS (Gemini 2.5 Flash → WAV no bucket `audios`) — *com música de fundo desde commit `3a8d621`*
+- [x] Fase 10: entrega — **manual via `/podcasts` + `SendToMenu`** (worker `deliver-to-whatsapp` desregistrado intencionalmente, ver §16)
+- [x] Fase 11: agendamento (cron via n8n → `/api/worker/tick` → `runSchedulesHandler`) — *`approval_mode='auto'` baniu via CHECK 0011, sempre cai em `pending_review`*
+- [x] Fase 12: dark theme `(app)`, superadmin (0007 + `scripts/set-superadmin.mjs --yes`), home 1:1 com mockup ✅ PASS WITH CONCERNS — [`docs/audits/fase-12-audit.md`](docs/audits/fase-12-audit.md)
+- [x] Fase 13: admin-managed tenancy (0008, sem signup público, login email+senha, `/admin/*` gated 3 camadas) ✅ PASS WITH CONCERNS — [`docs/audits/fase-13-audit.md`](docs/audits/fase-13-audit.md)
+- [x] Pós-fase: parser wsmart cobre audio/image/video (sessão 2026-04-25), `.enc` decryption via `/message/download`, `audios.uazapi_delivered_message_id` (0015), HMAC obrigatório
+- [ ] Backlog ativo: ver [`ROADMAP.md`](ROADMAP.md) + débitos em [`docs/audits/`](docs/audits/README.md) sessions recentes
+
+**Workers Inngest registrados** (em `app/api/inngest/route.ts`): `ping`, `describeImage`, `transcribeAudio`, `retryPendingDownloads`, `mediaDownloadRetry`, `transcriptionRetry`, `generateSummary`, `generateTts`, `runSchedules`. Worker `deliverToWhatsapp` existe mas **não está no array** — entrega é manual.
 
 ---
 
 ## 9. Notas para Claude
 
-- Sempre ler `ROADMAP.md` antes de iniciar uma fase — ele define ordem e dependências
-- Ao implementar features, referenciar a seção correspondente do PRD
-- Respeitar multi-tenancy em **toda** query de banco
-- Usuários falam PT-BR; respostas e UI em português
-- Quando tocar em integrações externas (UAZAPI, Gemini, Groq), validar antes com chamada real ou mock explícito
+- Antes de iniciar fase nova, ler `ROADMAP.md` (ordem + dependências) e a sessão mais recente em `docs/audits/sessions/` (estado real)
+- **Multi-tenant em toda query de banco** — sempre filtrar `tenant_id` explicitamente; service role bypassa RLS
+- **Respostas em PT-BR** (UI, conversas, comentários)
+- **Integrações externas (UAZAPI, Gemini, Groq):** preferir validação contra prod via Playwright (memória) ou rodando script local com `.env.local`; mock só quando o serviço externo é caro/lento de chamar
+- **Aprovar ≠ enviar** (regra forte): áudio só vai pro grupo após clique humano em `/podcasts` (ver §16); nunca reativar `deliver-to-whatsapp` worker sem revisão UX
+- **Antes de mover/renomear arquivo:** `grep -rn` por refs primeiro; muitas docs cross-link por path (ex.: 15+ refs no `MVP-COMPLETION.md` apontam pra `docs/audits/fase-N-audit.md`)
+- **Env vars críticas que já causaram outage:** `UAZAPI_WEBHOOK_HMAC_SECRET`, `WORKER_TICK_TOKEN`, `ENCRYPTION_KEY` — checar Portainer antes de assumir bug de código
 
 ---
 
@@ -400,6 +445,8 @@ summaries.status = 'approved'
 
 - **Formato**: WAV (24 kHz · mono · 16-bit PCM). MP3 é pós-MVP.
 - **Vozes**: `female='Kore'` (default), `male='Charon'` — mapeadas em `VOICE_MAP`.
+- **Voice mode**: `single` (uma voz) ou `duo` (Ana+Beto conversando, default desde commit que entregou duo). Coluna `summaries.voice_mode` (migration 0010).
+- **Música de fundo**: `lib/audios/mix.ts` mixa o TTS com track de background via `ffmpeg` (commit `3a8d621`). Volume calibrado pra não competir com voz.
 - **Speed**: não-determinístico — apenas dica no prompt (Gemini TTS não tem knob real).
 - **Chunking**: não implementado. Resumos > ~5000 chars podem falhar (gap documentado).
 - **Erros**: `AudiosError` com `code ∈ { NOT_FOUND, ALREADY_EXISTS, TTS_ERROR, DB_ERROR }`. `ALREADY_EXISTS` em retry é sinal de sucesso idempotente.
@@ -501,8 +548,8 @@ Os mockups em `podZAP/*.jsx` são o **source of truth visual** — não inventar
 
 | Rota | Mockup |
 |---|---|
-| `/` (landing) | — (tela custom, não reflete protótipo) |
-| `/login` | — (tela custom, light theme) |
+| `/` (landing) | — (tela custom light, não reflete protótipo) |
+| `/login` | — (tela custom dark, email+senha) |
 | `/onboarding` | `podZAP/screen_onboarding.jsx` |
 | `/home` | `podZAP/screen_home.jsx` ⚠ parcialmente portado (ver débito Fase 12) |
 | `/groups` | `podZAP/screen_groups.jsx` |
@@ -511,7 +558,7 @@ Os mockups em `podZAP/*.jsx` são o **source of truth visual** — não inventar
 | `/schedule` | `podZAP/screen_schedule.jsx` |
 | `/podcasts` | `podZAP/screen_podcasts.jsx` |
 
-Tokens CSS vivem em `app/globals.css` (portados de `podZAP/tokens.css`). Tema dark ativo em todas as rotas do route group `(app)` via `data-theme="dark"` no wrapper do `app/(app)/layout.tsx` — rotas públicas (`/`, `/login`, `/auth/*`) seguem no tema claro.
+Tokens CSS vivem em `app/globals.css` (portados de `podZAP/tokens.css`). Tema dark ativo em `(app)/*`, `(admin)/*` e `/login` via `data-theme="dark"`. Landing `/` segue light.
 
 Componentes visuais compartilhados em `components/ui/`: `PodCover`, `PlayerWave`, `Waveform`, `MicMascot`, `Sticker`, etc. Portados direto dos mockups; usar esses antes de montar variantes ad-hoc.
 
@@ -569,7 +616,7 @@ Referência completa das 34 rotas HTTP (23 arquivos `route.ts`): [`docs/api/READ
 
 ## 22. UI primitives
 
-UI primitives compartilhados vivem em `components/ui/` (Button, Card, Modal, Select, RadioPill, Sticker, StatCard, PodCover, PlayerWave, Waveform, MicMascot). Shell (TopBar, Sidebar, AppSidebar, AdminSidebar, NavButton) em `components/shell/`. Ícones em `components/icons/Icons.tsx`.
+UI primitives compartilhados vivem em `components/ui/` (Button, Card, Modal, Select, RadioPill, Sticker, StatCard, PodCover, PlayerWave, Waveform, MicMascot, **SendToMenu** — dropdown via Portal usado em /home, /approval/[id], /podcasts pra delivery). Shell (TopBar, Sidebar, AppSidebar, AdminSidebar, NavButton) em `components/shell/`. Ícones em `components/icons/Icons.tsx`.
 
 Catálogo com props + snippets + tokens: [`docs/ui-components/README.md`](docs/ui-components/README.md). Tokens CSS (`--accent`, `--stroke`, `--shadow-chunk`, fontes, radii): [`docs/ui-components/tokens.md`](docs/ui-components/tokens.md).
 
