@@ -22,6 +22,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadAndStore } from "@/lib/media/download";
+import { decrypt } from "@/lib/crypto";
 import { inngest } from "@/inngest/client";
 import { messageCaptured } from "@/inngest/events";
 import type {
@@ -226,6 +227,41 @@ function hasDownloadableMedia(content: MessageUpsertEvent["content"]): boolean {
     return typeof content.mediaUrl === "string" && content.mediaUrl.length > 0;
   }
   return false;
+}
+
+/**
+ * Carrega o token da instância (decriptado) + o uazapi messageId num bundle
+ * pronto pra passar pro `downloadAndStore` via `uazapiResolve`. Retorna
+ * null em qualquer falha — o downloader vai pular o resolve e tentar a
+ * URL como-está (que vai falhar pra .enc, mas é melhor que crashar o
+ * webhook).
+ */
+async function loadUazapiResolveOpts(
+  supabase: ReturnType<typeof createAdminClient>,
+  instanceRowId: string,
+  whatsappMessageId: string,
+): Promise<{ instanceToken: string; whatsappMessageId: string } | null> {
+  const { data, error } = await supabase
+    .from("whatsapp_instances")
+    .select("uazapi_token_encrypted")
+    .eq("id", instanceRowId)
+    .maybeSingle();
+
+  if (error || !data?.uazapi_token_encrypted) {
+    console.warn(
+      `[webhooks/persist] could not load uazapi_token for instance ${instanceRowId}: ${error?.message ?? "no token"}`,
+    );
+    return null;
+  }
+  try {
+    const token = decrypt(data.uazapi_token_encrypted);
+    return { instanceToken: token, whatsappMessageId };
+  } catch (err) {
+    console.warn(
+      `[webhooks/persist] decrypt failed for instance ${instanceRowId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return null;
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -441,8 +477,18 @@ export async function persistIncomingMessage(
   // `pending` after TTL.
   const mediaUrl = insertRow.media_url;
   if (insertRow.media_download_status === "pending" && mediaUrl) {
+    // Encrypted WhatsApp URLs (.enc) need UAZAPI to decrypt first. We
+    // pass the instanceToken + whatsapp messageid so the downloader
+    // can call /message/download. Plain URLs (already-decrypted
+    // gateway-hosted) skip that step inside downloadAndStore.
+    const resolveOpts = await loadUazapiResolveOpts(
+      supabase,
+      instanceRow.id,
+      uazapiMessageId,
+    );
     void downloadAndStore(tenantId, row.id, mediaUrl, {
       hintedMime: insertRow.media_mime_type ?? undefined,
+      uazapiResolve: resolveOpts ?? undefined,
     }).catch((err: unknown) => {
       console.error("[webhooks/persist] media download failed:", err);
     });

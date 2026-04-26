@@ -27,6 +27,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type MessageRow = {
   id: string;
   tenant_id: string;
+  uazapi_message_id: string;
   media_url: string | null;
   media_mime_type: string | null;
   media_download_status: string | null;
@@ -36,14 +37,21 @@ type MessageRow = {
 
 type TranscriptRow = { message_id: string };
 
+type WhatsappInstanceRow = {
+  tenant_id: string;
+  uazapi_token_encrypted: string | null;
+};
+
 const db = {
   messages: [] as MessageRow[],
   transcripts: [] as TranscriptRow[],
+  whatsapp_instances: [] as WhatsappInstanceRow[],
 };
 
 function resetDb() {
   db.messages = [];
   db.transcripts = [];
+  db.whatsapp_instances = [];
 }
 
 type AnyRow = Record<string, unknown>;
@@ -277,6 +285,7 @@ function seedMessage(over: Partial<MessageRow> & { id: string }): MessageRow {
   const row: MessageRow = {
     id: over.id,
     tenant_id: over.tenant_id ?? TENANT,
+    uazapi_message_id: over.uazapi_message_id ?? `wamid_${over.id}`,
     // Use `in` to honour explicit null/undefined overrides (avoids `??`
     // swapping in the default when the test wants a null url).
     media_url:

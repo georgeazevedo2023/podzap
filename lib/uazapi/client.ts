@@ -376,6 +376,67 @@ export class UazapiClient {
     return SendMessageResponseSchema.parse(raw ?? {});
   }
 
+  // ── Media download (decrypt) ──────────────────────────────────────
+
+  /**
+   * Resolve an encrypted WhatsApp media URL (`mmg.whatsapp.net/...enc`)
+   * into a plain HTTPS URL hosted by UAZAPI that we can `fetch()` directly.
+   *
+   * Why: webhook payloads carry the original encrypted URL + a `mediaKey`
+   * required to decrypt the AES-CBC blob. Implementing the decrypt
+   * locally is doable but brittle (HKDF + sidecar handling). UAZAPI
+   * exposes `POST /message/download` that does it server-side and gives
+   * us back a stable URL on its own CDN — verified live 2026-04-25.
+   *
+   * Endpoint: `POST /message/download` with per-instance `token` header.
+   * Body: `{ id: <whatsapp-messageid>, return_link?: boolean,
+   *          generate_mp3?: boolean }`. Default `return_link=true` so we
+   *   get a URL back instead of base64 bytes (smaller payload, lets the
+   *   downstream downloader stream + cap size check). `generate_mp3` is
+   *   off by default — Whisper handles ogg/opus fine and the mp3
+   *   transcode adds latency.
+   * Response: `{ fileURL: string, mimetype: string, fileSize?: number }`.
+   */
+  async downloadMedia(
+    instanceToken: string,
+    whatsappMessageId: string,
+    opts?: { generateMp3?: boolean },
+  ): Promise<{ fileURL: string; mimetype?: string; fileSize?: number }> {
+    const raw = (await doRequest(this.baseUrl, {
+      method: "POST",
+      path: "/message/download",
+      headers: this.instanceHeaders(instanceToken),
+      body: {
+        id: whatsappMessageId,
+        return_link: true,
+        generate_mp3: opts?.generateMp3 === true,
+      },
+    })) as Record<string, unknown> | null;
+
+    if (!raw || typeof raw !== "object") {
+      throw new UazapiError({
+        status: 502,
+        code: "BAD_RESPONSE",
+        message: "downloadMedia: empty response",
+        body: raw,
+      });
+    }
+    const fileURL = typeof raw.fileURL === "string" ? raw.fileURL : "";
+    if (!fileURL) {
+      throw new UazapiError({
+        status: 502,
+        code: "BAD_RESPONSE",
+        message: "downloadMedia: missing fileURL in response",
+        body: raw,
+      });
+    }
+    return {
+      fileURL,
+      mimetype: typeof raw.mimetype === "string" ? raw.mimetype : undefined,
+      fileSize: typeof raw.fileSize === "number" ? raw.fileSize : undefined,
+    };
+  }
+
   // ── Webhook config ────────────────────────────────────────────────
 
   /**

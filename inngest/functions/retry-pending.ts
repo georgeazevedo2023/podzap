@@ -24,7 +24,34 @@ import { inngest } from "../client";
 import { messageCaptured } from "../events";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadAndStore } from "@/lib/media/download";
+import { decrypt } from "@/lib/crypto";
 import type { Database } from "@/lib/supabase/types";
+
+/**
+ * Carrega o instance token (decriptado) pra um tenant + bundle pronto pra
+ * `downloadAndStore`'s `uazapiResolve` opt. Retorna null em qualquer falha
+ * — o downloader vai pular o resolve (e a tentativa vai falhar pra .enc,
+ * o que é OK: o erro fica logado, próximo retry tenta de novo).
+ */
+async function loadResolveOptsForRetry(
+  tenantId: string,
+  whatsappMessageId: string,
+): Promise<{ instanceToken: string; whatsappMessageId: string } | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("whatsapp_instances")
+    .select("uazapi_token_encrypted")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  const row = data as InstanceTokenRow | null;
+  if (error || !row?.uazapi_token_encrypted) return null;
+  try {
+    return { instanceToken: decrypt(row.uazapi_token_encrypted), whatsappMessageId };
+  } catch {
+    return null;
+  }
+}
 
 type MessageType = Database["public"]["Enums"]["message_type"];
 
@@ -32,9 +59,14 @@ type MessageType = Database["public"]["Enums"]["message_type"];
 type StaleRow = {
   id: string;
   tenant_id: string;
+  uazapi_message_id: string;
   media_url: string | null;
   media_mime_type: string | null;
   type: MessageType;
+};
+
+type InstanceTokenRow = {
+  uazapi_token_encrypted: string | null;
 };
 
 const BATCH_SIZE = 50;
@@ -82,7 +114,7 @@ export async function retryPendingDownloadsHandler(
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("messages")
-      .select("id, tenant_id, media_url, media_mime_type, type")
+      .select("id, tenant_id, uazapi_message_id, media_url, media_mime_type, type")
       .eq("media_download_status", "pending")
       .lt("created_at", staleBefore)
       .gt("created_at", lookbackAfter)
@@ -108,8 +140,15 @@ export async function retryPendingDownloadsHandler(
     }
 
     const result = await step.run(`retry-${row.id}`, async () => {
+      // URLs encrypted (.enc) precisam do UAZAPI pra decriptar primeiro.
+      // Buscamos o token da instância tenant-scoped e plumbamos.
+      const resolveOpts = await loadResolveOptsForRetry(
+        row.tenant_id,
+        row.uazapi_message_id,
+      );
       return downloadAndStore(row.tenant_id, row.id, row.media_url!, {
         hintedMime: row.media_mime_type ?? undefined,
+        uazapiResolve: resolveOpts ?? undefined,
       });
     });
 

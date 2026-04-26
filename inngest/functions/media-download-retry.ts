@@ -19,6 +19,7 @@ import { inngest } from "../client";
 import { mediaDownloadRetry, messageCaptured } from "../events";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { downloadAndStore } from "@/lib/media/download";
+import { decrypt } from "@/lib/crypto";
 import type { Database } from "@/lib/supabase/types";
 
 type MessageType = Database["public"]["Enums"]["message_type"];
@@ -26,6 +27,7 @@ type MessageType = Database["public"]["Enums"]["message_type"];
 type LoadedRow = {
   id: string;
   tenant_id: string;
+  uazapi_message_id: string;
   media_url: string | null;
   media_mime_type: string | null;
   type: MessageType;
@@ -44,7 +46,7 @@ export const mediaDownloadRetryWorker = inngest.createFunction(
       const admin = createAdminClient();
       const { data, error } = await admin
         .from("messages")
-        .select("id, tenant_id, media_url, media_mime_type, type")
+        .select("id, tenant_id, uazapi_message_id, media_url, media_mime_type, type")
         .eq("id", messageId)
         .maybeSingle();
       if (error) {
@@ -63,8 +65,30 @@ export const mediaDownloadRetryWorker = inngest.createFunction(
     }
 
     const result = await step.run("download", async () => {
+      // .enc URLs precisam do UAZAPI pra decriptar — busca instance token.
+      const admin = createAdminClient();
+      const tokenLookup = await admin
+        .from("whatsapp_instances")
+        .select("uazapi_token_encrypted")
+        .eq("tenant_id", row.tenant_id)
+        .maybeSingle();
+      let resolveOpts:
+        | { instanceToken: string; whatsappMessageId: string }
+        | undefined;
+      const enc = (tokenLookup.data as { uazapi_token_encrypted: string | null } | null)?.uazapi_token_encrypted;
+      if (enc) {
+        try {
+          resolveOpts = {
+            instanceToken: decrypt(enc),
+            whatsappMessageId: row.uazapi_message_id,
+          };
+        } catch {
+          resolveOpts = undefined;
+        }
+      }
       return downloadAndStore(row.tenant_id, row.id, row.media_url!, {
         hintedMime: row.media_mime_type ?? undefined,
+        uazapiResolve: resolveOpts,
       });
     });
 

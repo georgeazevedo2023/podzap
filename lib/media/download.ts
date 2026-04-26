@@ -43,7 +43,29 @@ export type DownloadOpts = {
   /** MIME reported by UAZAPI in the payload; used only if magic-byte sniff
    *  fails to recognise the format. */
   hintedMime?: string;
+  /**
+   * UAZAPI context for resolving encrypted WhatsApp media URLs
+   * (`mmg.whatsapp.net/...enc`) into plain HTTPS URLs we can fetch.
+   * Optional — when omitted, encrypted URLs will fail at the AES decrypt
+   * step (we don't have mediaKey here). When provided, the downloader
+   * detects encrypted URLs and calls `client.downloadMedia` first.
+   */
+  uazapiResolve?: {
+    instanceToken: string;
+    whatsappMessageId: string;
+  };
 };
+
+/** True for `https://mmg.whatsapp.net/.../*.enc` style URLs. */
+function isEncryptedWhatsAppUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.endsWith("whatsapp.net")) return false;
+    return u.pathname.endsWith(".enc");
+  } catch {
+    return false;
+  }
+}
 
 const BUCKET = "media";
 const DEFAULT_MAX_SIZE = 50 * 1024 * 1024;
@@ -266,7 +288,43 @@ export async function downloadAndStore(
     return { status: "skipped", error: "empty sourceUrl" };
   }
 
-  const parsed = validateSourceUrl(sourceUrl);
+  // Encrypted WhatsApp URLs need UAZAPI to decrypt first. When we have the
+  // context, resolve to the plain CDN URL before continuing.
+  let resolvedUrl = sourceUrl;
+  let resolvedMime: string | undefined = opts?.hintedMime;
+  if (isEncryptedWhatsAppUrl(sourceUrl)) {
+    if (!opts?.uazapiResolve) {
+      const reason =
+        "encrypted WhatsApp URL (.enc) but no uazapiResolve opts — caller must pass instanceToken + whatsappMessageId";
+      await markFailed(tenantId, messageId, reason);
+      return { status: "failed", error: reason };
+    }
+    try {
+      const { UazapiClient } = await import("@/lib/uazapi/client");
+      const baseUrl = process.env.UAZAPI_BASE_URL ?? "";
+      const adminToken = process.env.UAZAPI_ADMIN_TOKEN ?? "";
+      if (!baseUrl || !adminToken) {
+        throw new Error(
+          "UAZAPI_BASE_URL or UAZAPI_ADMIN_TOKEN missing in env — cannot resolve encrypted URL",
+        );
+      }
+      // adminToken só satisfaz o constructor; o método usa instanceToken
+      // que vem por argumento.
+      const client = new UazapiClient(baseUrl, adminToken);
+      const resolved = await client.downloadMedia(
+        opts.uazapiResolve.instanceToken,
+        opts.uazapiResolve.whatsappMessageId,
+      );
+      resolvedUrl = resolved.fileURL;
+      if (resolved.mimetype) resolvedMime = resolved.mimetype;
+    } catch (err) {
+      const reason = `uazapi downloadMedia failed: ${err instanceof Error ? err.message : String(err)}`;
+      await markFailed(tenantId, messageId, reason);
+      return { status: "failed", error: reason };
+    }
+  }
+
+  const parsed = validateSourceUrl(resolvedUrl);
   if ("error" in parsed) {
     await markFailed(tenantId, messageId, parsed.error);
     return { status: "failed", error: parsed.error };
@@ -326,7 +384,7 @@ export async function downloadAndStore(
 
   const sniffed = sniffMimeType(buffer);
   const contentType = response.headers.get("content-type")?.split(";")[0]?.trim();
-  const mime = sniffed ?? (contentType && contentType.length > 0 ? contentType : undefined) ?? opts?.hintedMime ?? "application/octet-stream";
+  const mime = sniffed ?? (contentType && contentType.length > 0 ? contentType : undefined) ?? resolvedMime ?? "application/octet-stream";
   const ext = mimeToExtension(mime);
   const path = storagePathFor(tenantId, messageId, ext);
 
