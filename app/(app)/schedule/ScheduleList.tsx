@@ -280,6 +280,8 @@ function mergeGroupForEdit(
     host1Name: 'Ana',
     host2Name: 'Beto',
     promptOverride: null,
+    voice1Id: 'Kore',
+    voice2Id: 'Charon',
   };
   return [...monitored, placeholder];
 }

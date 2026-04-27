@@ -4,6 +4,12 @@ import { useState, type FormEvent } from 'react';
 
 import { Modal } from '@/components/ui/Modal';
 import { TEMPLATES, TEMPLATE_IDS, type TemplateId } from '@/lib/summary/templates';
+import {
+  FEMININE_VOICES,
+  MASCULINE_VOICES,
+  VOICES,
+  type VoiceId,
+} from '@/lib/audios/voices';
 import type { GroupView } from '@/lib/groups/service';
 import type { SummaryTone } from '@/lib/summary/prompt';
 
@@ -53,6 +59,8 @@ export function EditGroupModal({
   const [overrideText, setOverrideText] = useState<string>(
     group.promptOverride ?? '',
   );
+  const [voice1, setVoice1] = useState<VoiceId>(group.voice1Id);
+  const [voice2, setVoice2] = useState<VoiceId>(group.voice2Id);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,6 +76,8 @@ export function EditGroupModal({
     if (period !== group.defaultPeriod) patch.defaultPeriod = period;
     if (host1.trim() !== group.host1Name) patch.host1Name = host1.trim();
     if (host2.trim() !== group.host2Name) patch.host2Name = host2.trim();
+    if (voice1 !== group.voice1Id) patch.voice1Id = voice1;
+    if (voice2 !== group.voice2Id) patch.voice2Id = voice2;
     if (templateId !== group.promptTemplateId)
       patch.promptTemplateId = templateId;
 
@@ -189,8 +199,12 @@ export function EditGroupModal({
           <HostsTab
             host1={host1}
             host2={host2}
+            voice1={voice1}
+            voice2={voice2}
             onHost1={setHost1}
             onHost2={setHost2}
+            onVoice1={setVoice1}
+            onVoice2={setVoice2}
             disabled={submitting}
           />
         )}
@@ -361,43 +375,233 @@ function GeralTab({
 function HostsTab({
   host1,
   host2,
+  voice1,
+  voice2,
   onHost1,
   onHost2,
+  onVoice1,
+  onVoice2,
   disabled,
 }: {
   host1: string;
   host2: string;
+  voice1: VoiceId;
+  voice2: VoiceId;
   onHost1: (s: string) => void;
   onHost2: (s: string) => void;
+  onVoice1: (v: VoiceId) => void;
+  onVoice2: (v: VoiceId) => void;
   disabled: boolean;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)' }}>
-        nome dos apresentadores. substitui <code>{'{{host1_name}}'}</code> e{' '}
-        <code>{'{{host2_name}}'}</code> nos templates de prompt e nos
-        prefixos de fala que o TTS multi-speaker usa.
+        nome + voz de cada apresentador. nome substitui{' '}
+        <code>{'{{host1_name}}'}</code> e <code>{'{{host2_name}}'}</code>{' '}
+        nos templates; voz é mapeada no TTS multi-speaker do Gemini.
       </p>
 
-      <TextField
-        label="nome do apresentador 1"
-        value={host1}
-        onChange={onHost1}
-        placeholder="Ana"
-        disabled={disabled}
-        maxLength={60}
-        helpText="voz feminina por convenção (mapa de TTS)."
-      />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          padding: 14,
+          border: '2.5px solid var(--pink-500)',
+          background: 'rgba(255, 61, 165, 0.05)',
+          borderRadius: 'var(--radius-md)',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: 'var(--pink-500)',
+          }}
+        >
+          🎙️ apresentador 1 (host1)
+        </span>
+        <TextField
+          label="nome"
+          value={host1}
+          onChange={onHost1}
+          placeholder="Ana"
+          disabled={disabled}
+          maxLength={60}
+        />
+        <VoicePicker
+          label="voz"
+          value={voice1}
+          onChange={onVoice1}
+          options={[...FEMININE_VOICES, ...MASCULINE_VOICES]}
+          recommended={FEMININE_VOICES}
+          disabled={disabled}
+          accent="pink"
+        />
+      </div>
 
-      <TextField
-        label="nome do apresentador 2"
-        value={host2}
-        onChange={onHost2}
-        placeholder="Beto"
-        disabled={disabled}
-        maxLength={60}
-        helpText="voz masculina por convenção."
-      />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          padding: 14,
+          border: '2.5px solid var(--purple-600)',
+          background: 'rgba(91, 43, 232, 0.05)',
+          borderRadius: 'var(--radius-md)',
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: 'var(--purple-600)',
+          }}
+        >
+          🎙️ apresentador 2 (host2)
+        </span>
+        <TextField
+          label="nome"
+          value={host2}
+          onChange={onHost2}
+          placeholder="Beto"
+          disabled={disabled}
+          maxLength={60}
+        />
+        <VoicePicker
+          label="voz"
+          value={voice2}
+          onChange={onVoice2}
+          options={[...MASCULINE_VOICES, ...FEMININE_VOICES]}
+          recommended={MASCULINE_VOICES}
+          disabled={disabled}
+          accent="purple"
+        />
+      </div>
+    </div>
+  );
+}
+
+function VoicePicker({
+  label,
+  value,
+  onChange,
+  options,
+  recommended,
+  disabled,
+  accent,
+}: {
+  label: string;
+  value: VoiceId;
+  onChange: (v: VoiceId) => void;
+  options: VoiceId[];
+  recommended: VoiceId[];
+  disabled: boolean;
+  accent: 'pink' | 'purple';
+}) {
+  const accentColor =
+    accent === 'pink' ? 'var(--pink-500)' : 'var(--purple-600)';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--text-dim)',
+        }}
+      >
+        {label}
+      </span>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: 8,
+        }}
+      >
+        {options.map((id) => {
+          const v = VOICES[id];
+          const selected = value === id;
+          const isRecommended = recommended.includes(id);
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => !disabled && onChange(id)}
+              disabled={disabled}
+              style={{
+                textAlign: 'left',
+                padding: 10,
+                border: selected
+                  ? `2.5px solid ${accentColor}`
+                  : '2px solid var(--stroke)',
+                borderRadius: 'var(--radius-md)',
+                background: selected
+                  ? accent === 'pink'
+                    ? 'rgba(255, 61, 165, 0.12)'
+                    : 'rgba(91, 43, 232, 0.12)'
+                  : 'var(--surface)',
+                color: 'var(--text)',
+                cursor: disabled ? 'wait' : 'pointer',
+                boxShadow: selected
+                  ? `2px 2px 0 ${accentColor}`
+                  : '1px 1px 0 var(--stroke)',
+                fontFamily: 'var(--font-body)',
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start',
+                opacity: !isRecommended && !selected ? 0.65 : 1,
+                minWidth: 0,
+              }}
+              title={v.description}
+            >
+              <span style={{ fontSize: 18, flexShrink: 0 }}>{v.emoji}</span>
+              <span
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  minWidth: 0,
+                }}
+              >
+                <strong
+                  style={{
+                    fontSize: 13,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {v.label}
+                </strong>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--text-dim)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {v.gender}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+        💡 {recommended.length === 4 ? 'recomendados primeiro' : ''} —
+        qualquer voz funciona em qualquer host.
+      </span>
     </div>
   );
 }

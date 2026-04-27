@@ -57,6 +57,12 @@ const PatchSchema = z.object({
   promptOverride: z
     .union([z.string().min(100).max(6000), z.null()])
     .optional(),
+  voice1Id: z
+    .enum(['Kore', 'Leda', 'Sadachbia', 'Aoede', 'Charon', 'Puck', 'Orus', 'Fenrir'])
+    .optional(),
+  voice2Id: z
+    .enum(['Kore', 'Leda', 'Sadachbia', 'Aoede', 'Charon', 'Puck', 'Orus', 'Fenrir'])
+    .optional(),
 });
 
 export async function PATCH(

@@ -57,6 +57,8 @@ type GroupRow = {
   host1_name: string;
   host2_name: string;
   prompt_override: string | null;
+  voice1_id: string;
+  voice2_id: string;
 };
 
 const db = {
@@ -450,6 +452,8 @@ function seedGroup(partial: Partial<GroupRow> = {}): GroupRow {
     host1_name: 'Ana',
     host2_name: 'Beto',
     prompt_override: null,
+    voice1_id: 'Kore',
+    voice2_id: 'Charon',
     ...partial,
   };
   db.groups.push(row);
@@ -626,6 +630,26 @@ describe("updateGroupSettings", () => {
       promptOverride: null,
     });
     expect(cleared.promptOverride).toBeNull();
+  });
+
+  it("voice1Id/voice2Id são persistidos e expostos no GroupView", async () => {
+    const row = seedGroup({ voice1_id: "Kore", voice2_id: "Charon" });
+    const updated = await service.updateGroupSettings(TENANT_A, row.id, {
+      voice1Id: "Sadachbia",
+      voice2Id: "Puck",
+    });
+    expect(updated.voice1Id).toBe("Sadachbia");
+    expect(updated.voice2Id).toBe("Puck");
+  });
+
+  it("voice id desconhecido cai pro fallback (Kore/Charon)", async () => {
+    const row = seedGroup({
+      voice1_id: "FakeVoice" as unknown as string,
+      voice2_id: "AnotherFake" as unknown as string,
+    });
+    const got = await service.getGroup(TENANT_A, row.id);
+    expect(got!.voice1Id).toBe("Kore");
+    expect(got!.voice2Id).toBe("Charon");
   });
 });
 

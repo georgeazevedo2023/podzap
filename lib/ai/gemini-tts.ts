@@ -32,6 +32,17 @@ export type TtsInput = {
   speed?: number;
   /** Locution format. Default 'single'. */
   mode?: TtsMode;
+  /**
+   * Override do mapping speaker→voiceName em modo duo (Pacote 4 voice
+   * picker). Cada item: `speaker` precisa bater EXATAMENTE com o prefixo
+   * que o LLM emitiu no `text` ("Ana:", "Maria:", etc.); `voiceName` é
+   * o id de voz do Gemini (Kore/Charon/Leda/Puck/...).
+   *
+   * Quando ausente, cai no default legado (Ana=Kore, Beto=Charon) — esse
+   * caminho ainda é necessário porque resumos antigos têm prefixos
+   * "Ana:"/"Beto:" e nenhum group config gravado.
+   */
+  speakers?: ReadonlyArray<{ speaker: string; voiceName: string }>;
 };
 
 export type TtsResult = {
@@ -143,12 +154,14 @@ export async function generateAudio(input: TtsInput): Promise<TtsResult> {
   const mode: TtsMode = input.mode ?? 'single';
 
   // Single-speaker: prebuiltVoiceConfig (comportamento legado).
-  // Duo: multiSpeakerVoiceConfig com Ana (Kore) + Beto (Charon).
+  // Duo: multiSpeakerVoiceConfig — usa input.speakers se passado, senão
+  // cai no DUO_SPEAKERS legado (Ana=Kore, Beto=Charon).
+  const duoSpeakers = input.speakers ?? DUO_SPEAKERS;
   const speechConfig =
     mode === 'duo'
       ? {
           multiSpeakerVoiceConfig: {
-            speakerVoiceConfigs: DUO_SPEAKERS.map((s) => ({
+            speakerVoiceConfigs: duoSpeakers.map((s) => ({
               speaker: s.speaker,
               voiceConfig: {
                 prebuiltVoiceConfig: { voiceName: s.voiceName },

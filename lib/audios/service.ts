@@ -176,10 +176,18 @@ export async function listAudios(
 type SummaryLookupRow = {
   id: string;
   tenant_id: string;
+  group_id: string;
   text: string;
   status: string;
   prompt_version: string | null;
   voice_mode: "single" | "duo";
+};
+
+type GroupVoiceLookupRow = {
+  host1_name: string;
+  host2_name: string;
+  voice1_id: string;
+  voice2_id: string;
 };
 
 /**
@@ -208,7 +216,7 @@ export async function createAudioForSummary(
   // ── 1. Load summary ───────────────────────────────────────────────────
   const { data: summary, error: summaryErr } = await admin
     .from("summaries")
-    .select("id, tenant_id, text, status, prompt_version, voice_mode")
+    .select("id, tenant_id, group_id, text, status, prompt_version, voice_mode")
     .eq("tenant_id", tenantId)
     .eq("id", summaryId)
     .maybeSingle();
@@ -255,6 +263,34 @@ export async function createAudioForSummary(
   const mode = summaryRow.voice_mode ?? "single";
   const startedAt = Date.now();
 
+  // ── 3a. Pacote 4: voice picker per host ──────────────────────────────
+  // Em modo duo, busca o group config pra mapear speaker→voiceName.
+  // Read-only, best-effort: se a query falhar OU o grupo não tiver as
+  // colunas (rows pré-migration), cai no default (Ana=Kore, Beto=Charon)
+  // — gemini-tts.ts trata `speakers: undefined` como esse legado.
+  let speakers: Array<{ speaker: string; voiceName: string }> | undefined;
+  if (mode === "duo") {
+    const { data: groupCfg, error: groupErr } = await admin
+      .from("groups")
+      .select("host1_name, host2_name, voice1_id, voice2_id")
+      .eq("tenant_id", tenantId)
+      .eq("id", summaryRow.group_id)
+      .maybeSingle();
+    if (!groupErr && groupCfg) {
+      const cfg = groupCfg as GroupVoiceLookupRow;
+      const h1 = cfg.host1_name?.trim() || "Ana";
+      const h2 = cfg.host2_name?.trim() || "Beto";
+      const v1 = cfg.voice1_id || "Kore";
+      const v2 = cfg.voice2_id || "Charon";
+      speakers = [
+        { speaker: h1, voiceName: v1 },
+        { speaker: h2, voiceName: v2 },
+      ];
+    }
+    // Se groupErr OU groupCfg null, deixa speakers undefined → TTS usa
+    // DUO_SPEAKERS legado. NÃO bloqueia entrega.
+  }
+
   let ttsResult;
   try {
     ttsResult = await generateAudio({
@@ -262,6 +298,7 @@ export async function createAudioForSummary(
       voice,
       speed,
       mode,
+      speakers,
     });
   } catch (err) {
     throw new AudiosError(

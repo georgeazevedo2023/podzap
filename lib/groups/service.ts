@@ -28,6 +28,7 @@ import type { Database } from "@/lib/supabase/types";
 import type { Group } from "@/lib/uazapi/types";
 import type { SummaryTone } from "@/lib/summary/prompt";
 import type { TemplateId } from "@/lib/summary/templates";
+import type { VoiceId } from "@/lib/audios/voices";
 
 export type GroupVoiceMode = "single" | "duo";
 export type GroupPeriod = "24h" | "7d";
@@ -68,6 +69,14 @@ export type GroupView = {
    * o template do catálogo no fluxo de geração. NULL = usa template.
    */
   promptOverride: string | null;
+  /**
+   * Voice picker per host (Pacote 4). Ids do catálogo
+   * `lib/audios/voices.ts`. TTS multi-speaker mapeia
+   *   { speaker: host1Name, voiceName: voice1Id }
+   *   { speaker: host2Name, voiceName: voice2Id }
+   */
+  voice1Id: VoiceId;
+  voice2Id: VoiceId;
   /**
    * Contagem de mensagens capturadas nas últimas 24h. Só é populada em
    * `listGroups({ withRecentMessageCount: true })` pra evitar N queries
@@ -128,6 +137,8 @@ function toView(row: GroupRow): GroupView {
     host1Name: row.host1_name?.trim() || "Ana",
     host2Name: row.host2_name?.trim() || "Beto",
     promptOverride: row.prompt_override?.trim() || null,
+    voice1Id: normalizeVoiceId(row.voice1_id, "Kore"),
+    voice2Id: normalizeVoiceId(row.voice2_id, "Charon"),
   };
 }
 
@@ -152,6 +163,25 @@ const VALID_TEMPLATE_IDS: TemplateId[] = [
 function normalizeTemplateId(v: string | null | undefined): TemplateId {
   if (v && (VALID_TEMPLATE_IDS as string[]).includes(v)) return v as TemplateId;
   return "default-duo";
+}
+
+const VALID_VOICE_IDS: VoiceId[] = [
+  "Kore",
+  "Leda",
+  "Sadachbia",
+  "Aoede",
+  "Charon",
+  "Puck",
+  "Orus",
+  "Fenrir",
+];
+
+function normalizeVoiceId(
+  v: string | null | undefined,
+  fallback: VoiceId,
+): VoiceId {
+  if (v && (VALID_VOICE_IDS as string[]).includes(v)) return v as VoiceId;
+  return fallback;
 }
 
 /**
@@ -598,6 +628,8 @@ export type UpdateGroupSettingsPatch = {
   host2Name?: string;
   /** Passa null pra limpar (volta a usar o template). */
   promptOverride?: string | null;
+  voice1Id?: VoiceId;
+  voice2Id?: VoiceId;
 };
 
 export async function updateGroupSettings(
@@ -623,6 +655,8 @@ export async function updateGroupSettings(
       ? patch.promptOverride.trim()
       : null;
   }
+  if (patch.voice1Id !== undefined) dbPatch.voice1_id = patch.voice1Id;
+  if (patch.voice2Id !== undefined) dbPatch.voice2_id = patch.voice2Id;
 
   if (Object.keys(dbPatch).length === 0) {
     // Nada a atualizar — retorna a view atual em vez de fazer roundtrip
@@ -724,6 +758,8 @@ export async function duplicateGroupConfig(
     host1_name: source.host1Name,
     host2_name: source.host2Name,
     prompt_override: source.promptOverride,
+    voice1_id: source.voice1Id,
+    voice2_id: source.voice2Id,
   };
 
   const { error: upErr } = await supabase

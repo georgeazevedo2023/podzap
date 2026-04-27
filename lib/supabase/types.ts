@@ -166,6 +166,8 @@ export type Database = {
           prompt_template_id: string
           tenant_id: string
           uazapi_group_jid: string
+          voice1_id: string
+          voice2_id: string
         }
         Insert: {
           created_at?: string
@@ -185,6 +187,8 @@ export type Database = {
           prompt_template_id?: string
           tenant_id: string
           uazapi_group_jid: string
+          voice1_id?: string
+          voice2_id?: string
         }
         Update: {
           created_at?: string
@@ -204,6 +208,8 @@ export type Database = {
           prompt_template_id?: string
           tenant_id?: string
           uazapi_group_jid?: string
+          voice1_id?: string
+          voice2_id?: string
         }
         Relationships: [
           {
