@@ -103,7 +103,9 @@ export function StatusFilter({ current }: StatusFilterProps) {
             aria-selected={active}
             onClick={() => handleSelect(opt.value)}
             style={{
-              padding: '8px 14px',
+              // 44px tap target floor — was 38px which felt fiddly on mobile.
+              minHeight: 44,
+              padding: '10px 16px',
               background: active ? opt.activeBg : 'var(--surface)',
               color: active ? opt.activeFg : 'var(--text)',
               border: '2.5px solid var(--stroke)',

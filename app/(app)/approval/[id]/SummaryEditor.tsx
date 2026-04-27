@@ -364,7 +364,11 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
         spellCheck
         style={{
           width: '100%',
-          minHeight: 500,
+          // Fluid min-height — short enough to leave room for the toolbar +
+          // bottom nav on a phone, tall enough that desktop reviewers don't
+          // feel cramped. clamp(): 280px on phones, ~50% of viewport on
+          // tablets, capped at 500px on desktop.
+          minHeight: 'clamp(280px, 50vh, 500px)',
           padding: 18,
           fontFamily: 'var(--font-mono)',
           fontSize: 14,
@@ -380,11 +384,14 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
       />
 
       {/* Toolbar — sticky at the bottom of the viewport so long texts don't
-          push the actions off-screen. */}
+          push the actions off-screen. On mobile we offset by the BottomNav
+          height (`--bottom-nav-h`, defined in globals.css) so it floats
+          ABOVE the nav instead of being hidden behind it. On desktop the
+          var collapses to 0 and the toolbar sits 12px from the bottom. */}
       <div
         style={{
           position: 'sticky',
-          bottom: 12,
+          bottom: 'calc(12px + var(--bottom-nav-h))',
           zIndex: 5,
           display: 'flex',
           gap: 10,
@@ -453,7 +460,11 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
             disabled={!canMutate}
             aria-label="Tom para regeneração"
             style={{
-              padding: '8px 10px',
+              // 44px floor for the touch target — the surrounding `.btn`
+              // controls already meet it; the select used to land at ~36px
+              // and felt tiny next to "regenerar".
+              minHeight: 44,
+              padding: '10px 14px',
               border: '2.5px solid var(--stroke)',
               borderRadius: 999,
               background: 'var(--surface)',
@@ -528,7 +539,12 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
               disabled={rejecting}
               style={{
                 flex: 1,
-                minWidth: 220,
+                // Phone width is ~340px after page padding; 220 forced the
+                // input onto its own row but didn't fill it. Lower min keeps
+                // the input on the same row as the buttons when there's
+                // space, and lets the wrap behave naturally on narrow phones.
+                minWidth: 160,
+                minHeight: 44,
                 padding: '10px 14px',
                 fontFamily: 'var(--font-body)',
                 fontSize: 13,
@@ -590,7 +606,10 @@ export function SummaryEditor({ initial }: SummaryEditorProps) {
           style={{
             position: 'fixed',
             right: 24,
-            bottom: 24,
+            // Lift toast above the BottomNav on mobile so it isn't covered.
+            // var(--bottom-nav-h) is 0 at md+, so desktop sees the original
+            // 24px offset.
+            bottom: 'calc(24px + var(--bottom-nav-h))',
             maxWidth: 380,
             padding: '14px 18px',
             borderRadius: 'var(--radius-md)',

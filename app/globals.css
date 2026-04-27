@@ -290,6 +290,24 @@ body {
   [data-desktop-only][data-as="grid"] { display: grid; }
 }
 
+/* -------------------------------------------------------------------------- */
+/* Page-specific responsive layouts (mobile-first override at md+).           */
+/* Kept here so each page file stays declarative — inline `style={{}}` blocks */
+/* can't express `@media` rules without resorting to <style jsx>.             */
+/* -------------------------------------------------------------------------- */
+
+/* /approval/[id] — editor + metadata sidebar. Below md: editor full-width,
+   metadata stacks below. From md+: classic 2-col with sticky sidebar. */
+@media (min-width: 48rem) {
+  .approval-detail-grid {
+    grid-template-columns: minmax(0, 1fr) 320px !important;
+  }
+  .approval-detail-aside {
+    position: sticky;
+    top: 24px;
+  }
+}
+
 /* Scrollbars subtle */
 *::-webkit-scrollbar        { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb  { background: #443669; border-radius: 4px; }

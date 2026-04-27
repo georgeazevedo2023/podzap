@@ -80,11 +80,17 @@ export default async function ApprovalDetailPage({
         breadcrumb="podZAP · Fase 8"
       />
 
+      {/* Mobile-first grid: 1-col under md (editor on top, metadata stacks
+          below), 2-col `1fr 320px` from md+ (legacy desktop layout, sidebar
+          sticky). The class `approval-detail-grid` is defined in globals.css
+          alongside the `@media (min-width: 48rem)` rule so the grid template
+          can flip without resorting to CSS-in-JS hacks. */}
       <div
+        className="approval-detail-grid"
         style={{
           padding: '24px clamp(16px, 4vw, 36px) 40px',
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) 320px',
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gap: 20,
           alignItems: 'start',
         }}
@@ -92,12 +98,11 @@ export default async function ApprovalDetailPage({
         <SummaryEditor initial={summary} />
 
         <aside
+          className="approval-detail-aside"
           style={{
             display: 'flex',
             flexDirection: 'column',
             gap: 14,
-            position: 'sticky',
-            top: 24,
           }}
         >
           <MetadataCard title="Status">
