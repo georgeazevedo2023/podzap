@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import type { GroupView } from '@/lib/groups/service';
 
+import { DuplicateConfigModal } from './DuplicateConfigModal';
 import { EditGroupModal } from './EditGroupModal';
 import { GroupCard } from './GroupCard';
 
@@ -55,6 +56,7 @@ export function GroupsList({
   const [toggling, setToggling] = useState<Set<string>>(() => new Set());
   const [generating, setGenerating] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState<GroupView | null>(null);
+  const [duplicating, setDuplicating] = useState<GroupView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Re-seed local state when the server re-renders with new data (new page,
@@ -395,6 +397,7 @@ export function GroupsList({
                   void handleQuickGenerate(g);
                 }}
                 onEdit={(g) => setEditing(g)}
+                onDuplicate={(g) => setDuplicating(g)}
               />
             ))}
           </div>
@@ -408,6 +411,20 @@ export function GroupsList({
                 setGroups((prev) =>
                   prev.map((g) => (g.id === updated.id ? updated : g)),
                 );
+              }}
+            />
+          )}
+
+          {duplicating && (
+            <DuplicateConfigModal
+              source={duplicating}
+              open={true}
+              onClose={() => setDuplicating(null)}
+              onSaved={() => {
+                // Re-fetch da página pra refletir os settings novos nos
+                // cards target. router.refresh() reidrata o server
+                // component e o useEffect de seed se vira.
+                router.refresh();
               }}
             />
           )}

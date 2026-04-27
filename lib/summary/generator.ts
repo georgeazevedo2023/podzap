@@ -65,6 +65,8 @@ export type GenerateSummaryInput = {
     | "rapido";
   host1Name?: string;
   host2Name?: string;
+  /** Power-user prompt override; quando set ignora templateId. */
+  promptOverride?: string | null;
 };
 
 export type SummaryRecord = {
@@ -145,6 +147,7 @@ export async function generateSummary(
       templateId: input.templateId,
       host1Name: input.host1Name,
       host2Name: input.host2Name,
+      promptOverride: input.promptOverride,
     },
   );
 

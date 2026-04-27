@@ -162,6 +162,7 @@ export type Database = {
           member_count: number | null
           name: string
           picture_url: string | null
+          prompt_override: string | null
           prompt_template_id: string
           tenant_id: string
           uazapi_group_jid: string
@@ -180,6 +181,7 @@ export type Database = {
           member_count?: number | null
           name: string
           picture_url?: string | null
+          prompt_override?: string | null
           prompt_template_id?: string
           tenant_id: string
           uazapi_group_jid: string
@@ -198,6 +200,7 @@ export type Database = {
           member_count?: number | null
           name?: string
           picture_url?: string | null
+          prompt_override?: string | null
           prompt_template_id?: string
           tenant_id?: string
           uazapi_group_jid?: string

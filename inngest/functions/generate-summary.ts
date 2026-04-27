@@ -70,6 +70,7 @@ export type GenerateSummaryHandlerCtx = {
         | "rapido";
       host1Name?: string;
       host2Name?: string;
+      promptOverride?: string | null;
     };
   };
   step: {
@@ -121,6 +122,7 @@ export async function generateSummaryHandler(
       templateId: event.data.templateId,
       host1Name: event.data.host1Name,
       host2Name: event.data.host2Name,
+      promptOverride: event.data.promptOverride,
     }),
   );
 

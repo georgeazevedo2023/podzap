@@ -279,6 +279,7 @@ function mergeGroupForEdit(
     promptTemplateId: 'default-duo',
     host1Name: 'Ana',
     host2Name: 'Beto',
+    promptOverride: null,
   };
   return [...monitored, placeholder];
 }

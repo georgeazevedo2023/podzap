@@ -54,6 +54,9 @@ const PatchSchema = z.object({
     .optional(),
   host1Name: z.string().trim().min(1).max(60).optional(),
   host2Name: z.string().trim().min(1).max(60).optional(),
+  promptOverride: z
+    .union([z.string().min(100).max(6000), z.null()])
+    .optional(),
 });
 
 export async function PATCH(

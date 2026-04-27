@@ -64,6 +64,11 @@ export type GroupView = {
   host1Name: string;
   host2Name: string;
   /**
+   * Power-user system prompt customizado. Quando preenchido, sobrescreve
+   * o template do catálogo no fluxo de geração. NULL = usa template.
+   */
+  promptOverride: string | null;
+  /**
    * Contagem de mensagens capturadas nas últimas 24h. Só é populada em
    * `listGroups({ withRecentMessageCount: true })` pra evitar N queries
    * no render default. `null` significa "não carregado", não "zero".
@@ -122,6 +127,7 @@ function toView(row: GroupRow): GroupView {
     promptTemplateId: normalizeTemplateId(row.prompt_template_id),
     host1Name: row.host1_name?.trim() || "Ana",
     host2Name: row.host2_name?.trim() || "Beto",
+    promptOverride: row.prompt_override?.trim() || null,
   };
 }
 
@@ -590,6 +596,8 @@ export type UpdateGroupSettingsPatch = {
   promptTemplateId?: TemplateId;
   host1Name?: string;
   host2Name?: string;
+  /** Passa null pra limpar (volta a usar o template). */
+  promptOverride?: string | null;
 };
 
 export async function updateGroupSettings(
@@ -609,6 +617,12 @@ export async function updateGroupSettings(
     dbPatch.prompt_template_id = patch.promptTemplateId;
   if (patch.host1Name !== undefined) dbPatch.host1_name = patch.host1Name.trim();
   if (patch.host2Name !== undefined) dbPatch.host2_name = patch.host2Name.trim();
+  if (patch.promptOverride !== undefined) {
+    // null limpa; string set valor (já validado pelo Zod do endpoint).
+    dbPatch.prompt_override = patch.promptOverride
+      ? patch.promptOverride.trim()
+      : null;
+  }
 
   if (Object.keys(dbPatch).length === 0) {
     // Nada a atualizar — retorna a view atual em vez de fazer roundtrip
@@ -645,6 +659,87 @@ export async function updateGroupSettings(
     );
   }
   return toView(data as GroupRow);
+}
+
+/**
+ * Copia config (template/hosts/defaults/override) de um grupo SOURCE pra
+ * uma lista de grupos TARGET, todos no mesmo tenant. Não toca em
+ * `is_monitored` nem em metadata identitária (name, picture, member_count).
+ *
+ * Falha NOT_FOUND se source ou QUALQUER target não pertencer ao tenant —
+ * tudo-ou-nada (não fazemos partial copy pra evitar estado parcial confuso).
+ */
+export async function duplicateGroupConfig(
+  tenantId: string,
+  sourceGroupId: string,
+  targetGroupIds: string[],
+): Promise<{ updated: number }> {
+  if (targetGroupIds.length === 0) {
+    return { updated: 0 };
+  }
+  // Source não pode estar entre os targets (no-op confuso e overwrite).
+  const cleanTargets = targetGroupIds.filter((id) => id !== sourceGroupId);
+  if (cleanTargets.length === 0) {
+    return { updated: 0 };
+  }
+
+  const source = await getGroup(tenantId, sourceGroupId);
+  if (!source) {
+    throw new GroupsError(
+      "NOT_FOUND",
+      `Source group ${sourceGroupId} not found for tenant ${tenantId}`,
+    );
+  }
+
+  const supabase = createAdminClient();
+
+  // Pré-check: TODOS os targets precisam ser do tenant. Pull em uma
+  // query e abortar se algum falhar — mais barato que N round-trips.
+  const { data: existingTargets, error: existingErr } = await supabase
+    .from("groups")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .in("id", cleanTargets);
+  if (existingErr) {
+    throw new GroupsError(
+      "DB_ERROR",
+      `Failed to validate target groups: ${existingErr.message}`,
+      existingErr,
+    );
+  }
+  const foundIds = new Set((existingTargets ?? []).map((r) => r.id));
+  const missing = cleanTargets.filter((id) => !foundIds.has(id));
+  if (missing.length > 0) {
+    throw new GroupsError(
+      "NOT_FOUND",
+      `Target group(s) ${missing.join(", ")} not found for tenant ${tenantId}`,
+    );
+  }
+
+  const dbPatch: Database["public"]["Tables"]["groups"]["Update"] = {
+    default_tone: source.defaultTone,
+    default_voice_mode: source.defaultVoiceMode,
+    default_period: source.defaultPeriod,
+    prompt_template_id: source.promptTemplateId,
+    host1_name: source.host1Name,
+    host2_name: source.host2Name,
+    prompt_override: source.promptOverride,
+  };
+
+  const { error: upErr } = await supabase
+    .from("groups")
+    .update(dbPatch)
+    .eq("tenant_id", tenantId)
+    .in("id", cleanTargets);
+  if (upErr) {
+    throw new GroupsError(
+      "DB_ERROR",
+      `Failed to duplicate config: ${upErr.message}`,
+      upErr,
+    );
+  }
+
+  return { updated: cleanTargets.length };
 }
 
 /**

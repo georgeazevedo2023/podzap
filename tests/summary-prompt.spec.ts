@@ -368,6 +368,46 @@ describe("buildSummaryPrompt — templates (Fase B+C)", () => {
     expect(systemPrompt).not.toContain("Ana (descontraída");
     expect(systemPrompt).not.toContain("Beto (bem-humorado");
   });
+
+  it("promptOverride sobrescreve templateId completamente (power user)", () => {
+    const customSystem =
+      "Você é um podcast experimental sobre {{group_name}}. " +
+      "{{host1_name}} fala primeiro. {{host2_name}} responde. " +
+      "Sem regras formais. " +
+      "x".repeat(50);
+    const { systemPrompt, promptVersion } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "fofoca", // deve ser ignorado
+      promptOverride: customSystem,
+      host1Name: "Mc",
+      host2Name: "Dj",
+    });
+    // O texto exato do override aparece, vars substituídas.
+    expect(systemPrompt).toContain("podcast experimental");
+    expect(systemPrompt).toContain("Mc fala primeiro");
+    expect(systemPrompt).toContain("Dj responde");
+    // O texto do fofoca NÃO aparece.
+    expect(systemPrompt).not.toContain("notícia bombástica");
+    // Version reflete o caminho de override.
+    expect(promptVersion).toMatch(/^podzap-summary\/v9-override-/);
+  });
+
+  it("promptOverride vazio/null cai pra template normal", () => {
+    const { systemPrompt: a } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "fofoca",
+      promptOverride: "  ",
+    });
+    const { systemPrompt: b } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "fofoca",
+      promptOverride: null,
+    });
+    const { systemPrompt: c } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "fofoca",
+    });
+    // Os três caminhos produzem o mesmo systemPrompt (template fofoca).
+    expect(a).toBe(c);
+    expect(b).toBe(c);
+    expect(c).toContain("notícia bombástica");
+  });
 });
 
 describe("buildSummaryPrompt — time-of-day grounding", () => {

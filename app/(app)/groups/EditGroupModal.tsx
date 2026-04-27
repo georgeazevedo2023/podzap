@@ -47,6 +47,12 @@ export function EditGroupModal({
   const [templateId, setTemplateId] = useState<TemplateId>(
     group.promptTemplateId,
   );
+  const [overrideEnabled, setOverrideEnabled] = useState<boolean>(
+    () => !!group.promptOverride,
+  );
+  const [overrideText, setOverrideText] = useState<string>(
+    group.promptOverride ?? '',
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +70,18 @@ export function EditGroupModal({
     if (host2.trim() !== group.host2Name) patch.host2Name = host2.trim();
     if (templateId !== group.promptTemplateId)
       patch.promptTemplateId = templateId;
+
+    // promptOverride: 3 casos
+    //   1) overrideEnabled=false: limpa via null (se tinha valor antes)
+    //   2) overrideEnabled=true, texto inalterado: pula
+    //   3) overrideEnabled=true, texto novo: envia trim()
+    const currentOverride = group.promptOverride ?? '';
+    const nextOverride = overrideEnabled ? overrideText.trim() : '';
+    if (overrideEnabled && nextOverride !== currentOverride) {
+      patch.promptOverride = nextOverride;
+    } else if (!overrideEnabled && group.promptOverride) {
+      patch.promptOverride = null;
+    }
     return patch;
   }
 
@@ -78,6 +96,15 @@ export function EditGroupModal({
     if (!host2.trim()) {
       setError('nome do apresentador 2 não pode ficar vazio');
       return;
+    }
+    if (overrideEnabled) {
+      const len = overrideText.trim().length;
+      if (len < 100 || len > 6000) {
+        setError(
+          `prompt customizado precisa ter entre 100 e 6000 caracteres (atual: ${len})`,
+        );
+        return;
+      }
     }
 
     const patch = buildPatch();
@@ -172,6 +199,13 @@ export function EditGroupModal({
           <AdvancedTab
             templateId={templateId}
             onTemplateId={setTemplateId}
+            overrideEnabled={overrideEnabled}
+            overrideText={overrideText}
+            host1={host1}
+            host2={host2}
+            groupName={group.name || '(sem nome)'}
+            onOverrideEnabled={setOverrideEnabled}
+            onOverrideText={setOverrideText}
             disabled={submitting}
           />
         )}
@@ -375,21 +409,63 @@ function HostsTab({
 function AdvancedTab({
   templateId,
   onTemplateId,
+  overrideEnabled,
+  overrideText,
+  host1,
+  host2,
+  groupName,
+  onOverrideEnabled,
+  onOverrideText,
   disabled,
 }: {
   templateId: TemplateId;
   onTemplateId: (id: TemplateId) => void;
+  overrideEnabled: boolean;
+  overrideText: string;
+  host1: string;
+  host2: string;
+  groupName: string;
+  onOverrideEnabled: (v: boolean) => void;
+  onOverrideText: (v: string) => void;
   disabled: boolean;
 }) {
+  // Preview: substitui as vars no texto pra o user ver o resultado final.
+  const previewText = overrideEnabled
+    ? overrideText
+        .split('{{group_name}}')
+        .join(groupName)
+        .split('{{host1_name}}')
+        .join(host1)
+        .split('{{host2_name}}')
+        .join(host2)
+    : '';
+
+  const charCount = overrideText.trim().length;
+  const charCountColor =
+    !overrideEnabled
+      ? 'var(--text-dim)'
+      : charCount < 100 || charCount > 6000
+        ? 'var(--red-500)'
+        : 'var(--lime-500)';
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <p style={{ margin: 0, fontSize: 13, color: 'var(--text-dim)' }}>
         template de prompt — define o estilo do podcast. cada um produz
         áudios com vibe diferente. o "padrão" mantém o comportamento que
         o grupo já tinha.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          opacity: overrideEnabled ? 0.5 : 1,
+          pointerEvents: overrideEnabled ? 'none' : 'auto',
+        }}
+        aria-disabled={overrideEnabled}
+      >
         {TEMPLATE_IDS.map((id) => {
           const t = TEMPLATES[id];
           const selected = templateId === id;
@@ -400,7 +476,7 @@ function AdvancedTab({
               role="radio"
               aria-checked={selected}
               onClick={() => !disabled && onTemplateId(id)}
-              disabled={disabled}
+              disabled={disabled || overrideEnabled}
               style={{
                 textAlign: 'left',
                 padding: 14,
@@ -412,7 +488,8 @@ function AdvancedTab({
                   ? 'rgba(198, 255, 60, 0.08)'
                   : 'var(--surface)',
                 color: 'var(--text)',
-                cursor: disabled ? 'wait' : 'pointer',
+                cursor:
+                  disabled || overrideEnabled ? 'not-allowed' : 'pointer',
                 boxShadow: selected
                   ? '4px 4px 0 var(--lime-500)'
                   : '2px 2px 0 var(--stroke)',
@@ -451,6 +528,146 @@ function AdvancedTab({
         })}
       </div>
 
+      <div
+        style={{
+          marginTop: 4,
+          paddingTop: 16,
+          borderTop: '2px dashed var(--stroke)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+        }}
+      >
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            padding: 12,
+            background: overrideEnabled
+              ? 'rgba(255, 61, 165, 0.08)'
+              : 'var(--bg-2)',
+            border: overrideEnabled
+              ? '2.5px solid var(--pink-500)'
+              : '2.5px solid var(--stroke)',
+            borderRadius: 'var(--radius-md)',
+            cursor: disabled ? 'wait' : 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={overrideEnabled}
+            onChange={(e) => onOverrideEnabled(e.target.checked)}
+            disabled={disabled}
+            style={{
+              width: 18,
+              height: 18,
+              accentColor: 'var(--pink-500)',
+              flexShrink: 0,
+              marginTop: 2,
+            }}
+          />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800 }}>
+              ⚡ usar prompt customizado (power user)
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--text-dim)',
+                marginTop: 4,
+                lineHeight: 1.5,
+              }}
+            >
+              substitui o template acima por um texto livre. usa{' '}
+              <code>{'{{group_name}}'}</code>, <code>{'{{host1_name}}'}</code>{' '}
+              e <code>{'{{host2_name}}'}</code> como placeholders. ative
+              só se você sabe o que tá fazendo — prompt mal escrito pode
+              quebrar o JSON de saída e custar Gemini à toa.
+            </div>
+          </div>
+        </label>
+
+        {overrideEnabled && (
+          <>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-dim)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>system prompt</span>
+                <span style={{ color: charCountColor, fontFamily: 'var(--font-mono)' }}>
+                  {charCount}/6000
+                </span>
+              </span>
+              <textarea
+                value={overrideText}
+                onChange={(e) => onOverrideText(e.target.value)}
+                disabled={disabled}
+                rows={10}
+                maxLength={6000}
+                placeholder={`Você é o apresentador do podcast "{{group_name}}".\n\nFormato:\n{{host1_name}}: ...\n{{host2_name}}: ...\n\nRegras:\n- ...\n\nIMPORTANTE: cada linha de fala começa com "{{host1_name}}:" ou "{{host2_name}}:" seguido de um espaço.`}
+                style={{
+                  padding: '12px 14px',
+                  border: '2.5px solid var(--stroke)',
+                  borderRadius: 'var(--radius-md)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 12,
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  boxShadow: '2px 2px 0 var(--stroke)',
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  minHeight: 200,
+                }}
+              />
+            </label>
+
+            <details style={{ marginTop: 0 }}>
+              <summary
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: 'var(--text-dim)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                preview com vars substituídas
+              </summary>
+              <pre
+                style={{
+                  marginTop: 8,
+                  padding: 12,
+                  background: 'var(--bg-2)',
+                  border: '2px solid var(--stroke)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 11,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  maxHeight: 300,
+                  overflowY: 'auto',
+                }}
+              >
+                {previewText || '(vazio)'}
+              </pre>
+            </details>
+          </>
+        )}
+      </div>
+
       <details style={{ marginTop: 4 }}>
         <summary
           style={{
@@ -460,7 +677,7 @@ function AdvancedTab({
             color: 'var(--text-dim)',
           }}
         >
-          variáveis disponíveis nos templates
+          variáveis disponíveis
         </summary>
         <ul
           style={{

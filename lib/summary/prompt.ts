@@ -58,6 +58,14 @@ export type BuildPromptOptions = {
   host1Name?: string;
   /** Nome do apresentador 2 (era hardcoded "Beto"). Default "Beto". */
   host2Name?: string;
+  /**
+   * System prompt customizado (power user). Quando presente, tem
+   * prioridade MAIOR que `templateId` — substitui completamente o
+   * systemPrompt. Vars `{{group_name}}` / `{{host1_name}}` /
+   * `{{host2_name}}` continuam sendo substituídas.
+   * `voiceMode` é decidido por `opts.voiceMode` (sem template auto-force).
+   */
+  promptOverride?: string | null;
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
@@ -451,24 +459,35 @@ export function buildSummaryPrompt(
   const host2Name = opts?.host2Name?.trim() || DEFAULT_HOST2_NAME;
   const now = opts?.now ?? new Date();
 
-  // Template explícito: substitui o systemPrompt e força o voiceMode
-  // (quando o template tem um fixo). Ausência de templateId mantém o
-  // caminho legado (DUO/SOLO_SYSTEM_PROMPT por voiceMode + TONE_OVERRIDES).
-  const template = opts?.templateId ? resolveTemplate(opts.templateId) : null;
+  // Prioridade: promptOverride > templateId > legado (DUO/SOLO + tone).
+  // - promptOverride: power user. Ignora template, usa voiceMode do caller.
+  // - templateId: força voiceMode pelo template (evita mismatch de prefixos).
+  // - nenhum: caminho legado (engineered DUO/SOLO + TONE_OVERRIDES).
+  const override = opts?.promptOverride?.trim() || null;
+  const template =
+    !override && opts?.templateId ? resolveTemplate(opts.templateId) : null;
 
-  const voiceMode: VoiceMode = template
-    ? template.voiceMode === 'any'
-      ? opts?.voiceMode ?? 'single'
-      : template.voiceMode
-    : opts?.voiceMode ?? 'single';
+  const voiceMode: VoiceMode = override
+    ? opts?.voiceMode ?? 'single'
+    : template
+      ? template.voiceMode === 'any'
+        ? opts?.voiceMode ?? 'single'
+        : template.voiceMode
+      : opts?.voiceMode ?? 'single';
 
-  const systemPrompt = template
-    ? renderTemplate(template.systemPrompt, {
+  const systemPrompt = override
+    ? renderTemplate(override, {
         group_name: conv.groupName,
         host1_name: host1Name,
         host2_name: host2Name,
       })
-    : buildSystemPrompt(tone, voiceMode);
+    : template
+      ? renderTemplate(template.systemPrompt, {
+          group_name: conv.groupName,
+          host1_name: host1Name,
+          host2_name: host2Name,
+        })
+      : buildSystemPrompt(tone, voiceMode);
 
   const userPrompt = buildUserPrompt(
     conv,
@@ -482,9 +501,11 @@ export function buildSummaryPrompt(
   return {
     systemPrompt,
     userPrompt,
-    promptVersion: template
-      ? `${PROMPT_VERSION_BASE}-${template.id}-${voiceMode}`
-      : `${PROMPT_VERSION_BASE}-${voiceMode}-${tone}`,
+    promptVersion: override
+      ? `${PROMPT_VERSION_BASE}-override-${voiceMode}`
+      : template
+        ? `${PROMPT_VERSION_BASE}-${template.id}-${voiceMode}`
+        : `${PROMPT_VERSION_BASE}-${voiceMode}-${tone}`,
     estimatedTokens: estimateTokens(systemPrompt, userPrompt),
   };
 }

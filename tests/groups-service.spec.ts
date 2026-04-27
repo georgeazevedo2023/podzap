@@ -56,6 +56,7 @@ type GroupRow = {
   prompt_template_id: string;
   host1_name: string;
   host2_name: string;
+  prompt_override: string | null;
 };
 
 const db = {
@@ -73,6 +74,7 @@ type AnyRow = Record<string, unknown>;
 type FilterOp =
   | { kind: "eq"; col: string; val: unknown }
   | { kind: "neq"; col: string; val: unknown }
+  | { kind: "in"; col: string; values: unknown[] }
   | { kind: "ilike"; col: string; pattern: string }
   | { kind: "or"; clauses: Array<{ col: string; pattern: string }> };
 
@@ -107,6 +109,7 @@ function makeBuilder(table: keyof typeof db) {
       state.filters.every((f) => {
         if (f.kind === "eq") return r[f.col] === f.val;
         if (f.kind === "neq") return r[f.col] !== f.val;
+        if (f.kind === "in") return f.values.includes(r[f.col]);
         if (f.kind === "or") {
           return f.clauses.some((c) => {
             const v = r[c.col];
@@ -192,6 +195,14 @@ function makeBuilder(table: keyof typeof db) {
   };
   api.neq = (col: unknown, val: unknown) => {
     state.filters.push({ kind: "neq", col: col as string, val });
+    return api;
+  };
+  api.in = (col: unknown, values: unknown) => {
+    state.filters.push({
+      kind: "in",
+      col: col as string,
+      values: values as unknown[],
+    });
     return api;
   };
   api.ilike = (col: unknown, pattern: unknown) => {
@@ -438,6 +449,7 @@ function seedGroup(partial: Partial<GroupRow> = {}): GroupRow {
     prompt_template_id: 'default-duo',
     host1_name: 'Ana',
     host2_name: 'Beto',
+    prompt_override: null,
     ...partial,
   };
   db.groups.push(row);
@@ -600,6 +612,80 @@ describe("updateGroupSettings", () => {
     const row = seedGroup({ host1_name: "Maria" });
     const out = await service.updateGroupSettings(TENANT_A, row.id, {});
     expect(out.host1Name).toBe("Maria");
+  });
+
+  it("set + clear de promptOverride", async () => {
+    const row = seedGroup({ prompt_override: null });
+    const text = "x".repeat(150);
+    const set = await service.updateGroupSettings(TENANT_A, row.id, {
+      promptOverride: text,
+    });
+    expect(set.promptOverride).toBe(text);
+
+    const cleared = await service.updateGroupSettings(TENANT_A, row.id, {
+      promptOverride: null,
+    });
+    expect(cleared.promptOverride).toBeNull();
+  });
+});
+
+describe("duplicateGroupConfig", () => {
+  it("copia template/hosts/defaults/override pros targets", async () => {
+    const source = seedGroup({
+      name: "Source",
+      default_tone: "corporate",
+      default_voice_mode: "single",
+      default_period: "7d",
+      prompt_template_id: "fofoca",
+      host1_name: "Camila",
+      host2_name: "Leonardo",
+      prompt_override: "x".repeat(120),
+    });
+    const t1 = seedGroup({ name: "Target 1" });
+    const t2 = seedGroup({ name: "Target 2" });
+
+    const result = await service.duplicateGroupConfig(TENANT_A, source.id, [
+      t1.id,
+      t2.id,
+    ]);
+    expect(result.updated).toBe(2);
+
+    const t1After = await service.getGroup(TENANT_A, t1.id);
+    expect(t1After!.defaultTone).toBe("corporate");
+    expect(t1After!.promptTemplateId).toBe("fofoca");
+    expect(t1After!.host1Name).toBe("Camila");
+    expect(t1After!.promptOverride).toBe("x".repeat(120));
+
+    const t2After = await service.getGroup(TENANT_A, t2.id);
+    expect(t2After!.host2Name).toBe("Leonardo");
+  });
+
+  it("ignora source se vier na lista de targets", async () => {
+    const source = seedGroup({ name: "Source", host1_name: "Original" });
+    const result = await service.duplicateGroupConfig(TENANT_A, source.id, [
+      source.id,
+    ]);
+    expect(result.updated).toBe(0);
+  });
+
+  it("rejeita NOT_FOUND quando algum target é de outro tenant (atomicidade)", async () => {
+    const source = seedGroup({ name: "Source" });
+    const tA = seedGroup({ name: "MeuTarget" });
+    const tB = seedGroup({ name: "Outro", tenant_id: TENANT_B });
+
+    await expect(
+      service.duplicateGroupConfig(TENANT_A, source.id, [tA.id, tB.id]),
+    ).rejects.toMatchObject({ name: "GroupsError", code: "NOT_FOUND" });
+
+    // tA NÃO deve ter sido atualizado (atômico).
+    const tAAfter = await service.getGroup(TENANT_A, tA.id);
+    expect(tAAfter!.host1Name).toBe("Ana"); // default, não foi tocado
+  });
+
+  it("retorna 0 quando lista vazia", async () => {
+    const source = seedGroup({ name: "S" });
+    const result = await service.duplicateGroupConfig(TENANT_A, source.id, []);
+    expect(result.updated).toBe(0);
   });
 });
 

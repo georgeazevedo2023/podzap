@@ -116,6 +116,11 @@ export const summaryRequested = eventType("summary.requested", {
     host1Name?: string;
     /** Nome do apresentador 2 (default "Beto"). */
     host2Name?: string;
+    /**
+     * Power-user system prompt override. Quando set, ignora templateId
+     * e usa este texto direto como systemPrompt (com var substitution).
+     */
+    promptOverride?: string | null;
   }>(),
 });
 

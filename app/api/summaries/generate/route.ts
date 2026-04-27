@@ -66,6 +66,7 @@ const GenerateBodySchema = z.object({
     .optional(),
   host1Name: z.string().min(1).max(60).optional(),
   host2Name: z.string().min(1).max(60).optional(),
+  promptOverride: z.string().min(100).max(6000).nullable().optional(),
 });
 
 function periodToHours(p: "24h" | "7d"): number {
@@ -138,6 +139,12 @@ export async function POST(req: Request) {
   const templateId = body.templateId ?? group.promptTemplateId;
   const host1Name = body.host1Name ?? group.host1Name;
   const host2Name = body.host2Name ?? group.host2Name;
+  // body.promptOverride pode ser undefined (não passou) → usa do grupo;
+  // null explícito → limpa pra esta request específica; string → override.
+  const promptOverride =
+    body.promptOverride === undefined
+      ? group.promptOverride
+      : body.promptOverride;
 
   try {
     await inngest.send(
@@ -151,6 +158,7 @@ export async function POST(req: Request) {
         templateId,
         host1Name,
         host2Name,
+        promptOverride,
       }),
     );
     return NextResponse.json(
