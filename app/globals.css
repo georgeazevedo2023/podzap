@@ -348,6 +348,35 @@ body {
   }
 }
 
+/* /admin/* — modal footer responsive layout. md+: row aligned right; <md:
+   stacked column with full-width buttons (primary CTA at bottom). */
+.admin-modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+@media (max-width: 47.999rem) {
+  .admin-modal-footer {
+    flex-direction: column;
+  }
+  .admin-modal-footer > * {
+    width: 100%;
+  }
+}
+
+/* /admin/* — NewUserModal grid (tenant inicial + role) collapses to single
+   column under sm so labels/inputs don't squeeze. */
+.admin-form-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+@media (min-width: 40rem) {
+  .admin-form-grid-2 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* Scrollbars subtle */
 *::-webkit-scrollbar        { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb  { background: #443669; border-radius: 4px; }
@@ -451,6 +480,18 @@ body {
   /* Explicit opt-in for full-size touch target. Stack with .btn-ghost when
      a ghost button must remain tap-friendly on mobile (e.g. nav rows). */
   .btn-tap { min-height: 44px; }
+
+  /* Compact action button used in admin lists/cards. Smaller type/padding
+     than .btn but still hits the 44px floor (WCAG 2.5.5). Stack with
+     .btn-ghost / .btn-zap / .btn-pink etc. for color, with `data-danger`
+     attribute for destructive variants (red text). */
+  .btn-xs {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    min-height: 44px;
+  }
+  .btn-xs[data-danger="true"] { color: var(--red-500); }
 
   /* CARD ------------------------------------------------------------------- */
   .card {

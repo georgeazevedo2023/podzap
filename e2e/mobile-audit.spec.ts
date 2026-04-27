@@ -45,6 +45,7 @@ interface AuditFindings {
   smallTapTargets: Array<{ tag: string; label: string; w: number; h: number }>;
   hasMobileHeader: boolean;
   hasBottomNav: boolean;
+  smallAdminActions: Array<{ label: string; w: number; h: number }>;
 }
 
 async function auditPage(
@@ -116,6 +117,25 @@ async function auditPage(
       }
     }
 
+    // Admin action buttons specifically — must hit the 44px floor since
+    // they sit inside lists where users tap repeatedly.
+    const adminActions = document.querySelectorAll<HTMLElement>(
+      '[data-admin-action]',
+    );
+    const smallAdminActions: Array<{ label: string; w: number; h: number }> =
+      [];
+    for (const el of adminActions) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (r.width < 44 || r.height < 44) {
+        smallAdminActions.push({
+          label: (el.textContent ?? '').trim().slice(0, 30),
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+        });
+      }
+    }
+
     return {
       url: location.pathname,
       scrollWidth,
@@ -129,6 +149,7 @@ async function auditPage(
       hasBottomNav: !!document.querySelector(
         'nav[aria-label="Navegação principal"]',
       ),
+      smallAdminActions,
     };
   });
 }
@@ -185,6 +206,13 @@ test.describe('mobile audit @390x844 — admin routes', () => {
         findings.hasHorizontalOverflow,
         `horizontal overflow on ${route}: ${JSON.stringify(findings.overflowingElements)}`,
       ).toBe(false);
+
+      // Fase 4: every admin row action must hit 44px. Empty arrays mean all
+      // visible [data-admin-action] passed the floor.
+      expect(
+        findings.smallAdminActions,
+        `admin actions <44px on ${route}: ${JSON.stringify(findings.smallAdminActions)}`,
+      ).toEqual([]);
     });
   }
 });

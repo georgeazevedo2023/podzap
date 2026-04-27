@@ -3,10 +3,15 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { AdminEntityList, type AdminColumn } from '@/components/admin/AdminEntityList';
 import type { TenantAdminView } from '@/lib/admin/tenants';
 import type { UserAdminView } from '@/lib/admin/users';
 
 import {
+  fieldLabel,
+  FormError,
+  inputStyle,
+  ModalFooter,
   ModalShell,
   PlanBadge,
   StatusPill,
@@ -29,7 +34,9 @@ export function TenantDetailClient({
   members: MemberRow[];
 }) {
   const router = useRouter();
-  const [modal, setModal] = useState<'edit' | 'delete' | null>(null);
+  const [modal, setModal] = useState<
+    'edit' | 'delete' | { kind: 'remove-member'; member: MemberRow } | null
+  >(null);
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
@@ -98,8 +105,7 @@ export function TenantDetailClient({
     }
   }
 
-  async function removeMember(userId: string) {
-    if (!window.confirm('remover esse membro do tenant?')) return;
+  async function confirmRemoveMember(userId: string) {
     setBusy(true);
     setFlash(null);
     try {
@@ -107,6 +113,7 @@ export function TenantDetailClient({
         `/api/admin/users/${userId}?tenantId=${tenant.id}`,
         'DELETE',
       );
+      setModal(null);
       router.refresh();
     } catch (err) {
       setFlash(err instanceof Error ? err.message : 'erro');
@@ -115,13 +122,75 @@ export function TenantDetailClient({
     }
   }
 
+  const memberColumns: AdminColumn<MemberRow>[] = [
+    {
+      key: 'email',
+      label: 'email',
+      mobileHide: true,
+      render: (m) => <code style={{ fontSize: 12 }}>{m.email}</code>,
+    },
+    {
+      key: 'role',
+      label: 'role',
+      render: (m) => (
+        <select
+          value={m.tenantRole}
+          onChange={(e) =>
+            changeRole(
+              m.id,
+              e.target.value as 'owner' | 'admin' | 'member',
+            )
+          }
+          disabled={busy}
+          style={{
+            padding: '8px 12px',
+            border: '2px solid var(--stroke)',
+            borderRadius: 'var(--radius-sm)',
+            background: 'var(--surface)',
+            color: 'var(--text)',
+            fontSize: 12,
+            fontWeight: 700,
+            minHeight: 44,
+          }}
+        >
+          <option value="owner">owner</option>
+          <option value="admin">admin</option>
+          <option value="member">member</option>
+        </select>
+      ),
+    },
+    {
+      key: 'sa',
+      label: 'superadmin?',
+      render: (m) =>
+        m.isSuperadmin ? (
+          <span style={{ color: 'var(--pink-500)' }}>✓ sim</span>
+        ) : (
+          <span style={{ color: 'var(--text-dim)' }}>—</span>
+        ),
+    },
+  ];
+
+  const memberActions = (m: MemberRow) => (
+    <button
+      type="button"
+      className="btn btn-ghost btn-xs"
+      data-admin-action
+      data-danger="true"
+      onClick={() => setModal({ kind: 'remove-member', member: m })}
+      disabled={busy}
+    >
+      remover
+    </button>
+  );
+
   return (
     <>
       {/* Header actions row */}
       <div
         style={{
           display: 'flex',
-          gap: 20,
+          gap: 16,
           alignItems: 'center',
           flexWrap: 'wrap',
           marginBottom: 24,
@@ -131,32 +200,34 @@ export function TenantDetailClient({
           <PlanBadge plan={tenant.plan} />
           <StatusPill active={tenant.isActive} />
         </div>
-        <div style={{ flex: 1 }} />
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => setModal('edit')}
-          disabled={busy}
-        >
-          ✎ editar
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={toggleSuspend}
-          disabled={busy}
-        >
-          {tenant.isActive ? '⏸ suspender' : '▶ reativar'}
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => setModal('delete')}
-          disabled={busy}
-          style={{ color: 'var(--red-500)' }}
-        >
-          🗑 deletar
-        </button>
+        <div style={{ flex: 1, minWidth: 0 }} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-tap"
+            onClick={() => setModal('edit')}
+            disabled={busy}
+          >
+            ✎ editar
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-tap"
+            onClick={toggleSuspend}
+            disabled={busy}
+          >
+            {tenant.isActive ? '⏸ suspender' : '▶ reativar'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-tap"
+            onClick={() => setModal('delete')}
+            disabled={busy}
+            style={{ color: 'var(--red-500)' }}
+          >
+            🗑 deletar
+          </button>
+        </div>
       </div>
 
       {flash && (
@@ -201,110 +272,27 @@ export function TenantDetailClient({
             ({members.length})
           </span>
         </div>
-        {members.length === 0 ? (
-          <div
-            className="card"
-            style={{
-              padding: 20,
-              color: 'var(--text-dim)',
-              fontSize: 13,
-              textAlign: 'center',
-            }}
-          >
-            nenhum membro nesse tenant ainda. use <code>/admin/users</code>{' '}
-            pra criar um usuário já vinculado aqui.
-          </div>
-        ) : (
-          <div
-            className="card"
-            style={{ padding: 0, overflow: 'hidden' }}
-          >
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr
-                  style={{
-                    background: 'var(--bg-2)',
-                    borderBottom: '2.5px solid var(--stroke)',
-                  }}
-                >
-                  <ThAdmin>email</ThAdmin>
-                  <ThAdmin>role</ThAdmin>
-                  <ThAdmin>superadmin?</ThAdmin>
-                  <ThAdmin>ações</ThAdmin>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m, idx) => (
-                  <tr
-                    key={m.id}
-                    style={{
-                      borderBottom:
-                        idx === members.length - 1
-                          ? undefined
-                          : '1px solid var(--stroke)',
-                    }}
-                  >
-                    <TdAdmin>
-                      <code style={{ fontSize: 12 }}>{m.email}</code>
-                    </TdAdmin>
-                    <TdAdmin>
-                      <select
-                        value={m.tenantRole}
-                        onChange={(e) =>
-                          changeRole(
-                            m.id,
-                            e.target.value as
-                              | 'owner'
-                              | 'admin'
-                              | 'member',
-                          )
-                        }
-                        disabled={busy}
-                        style={{
-                          padding: '4px 8px',
-                          border: '2px solid var(--stroke)',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'var(--surface)',
-                          color: 'var(--text)',
-                          fontSize: 12,
-                          fontWeight: 700,
-                        }}
-                      >
-                        <option value="owner">owner</option>
-                        <option value="admin">admin</option>
-                        <option value="member">member</option>
-                      </select>
-                    </TdAdmin>
-                    <TdAdmin>
-                      {m.isSuperadmin ? (
-                        <span style={{ color: 'var(--pink-500)' }}>
-                          ✓ sim
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--text-dim)' }}>—</span>
-                      )}
-                    </TdAdmin>
-                    <TdAdmin>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        onClick={() => removeMember(m.id)}
-                        disabled={busy}
-                        style={{
-                          fontSize: 11,
-                          padding: '4px 8px',
-                          color: 'var(--red-500)',
-                        }}
-                      >
-                        remover
-                      </button>
-                    </TdAdmin>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <AdminEntityList<MemberRow>
+          rows={members}
+          columns={memberColumns}
+          getRowKey={(m) => m.id}
+          mobileTitle={(m) => <code style={{ fontSize: 14 }}>{m.email}</code>}
+          actions={memberActions}
+          emptyState={
+            <div
+              className="card"
+              style={{
+                padding: 20,
+                color: 'var(--text-dim)',
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              nenhum membro nesse tenant ainda. use <code>/admin/users</code>{' '}
+              pra criar um usuário já vinculado aqui.
+            </div>
+          }
+        />
       </section>
 
       {modal === 'edit' && (
@@ -322,6 +310,15 @@ export function TenantDetailClient({
           tenantName={tenant.name}
           onCancel={() => setModal(null)}
           onConfirm={confirmDelete}
+          busy={busy}
+        />
+      )}
+
+      {modal && typeof modal !== 'string' && modal.kind === 'remove-member' && (
+        <RemoveMemberModal
+          email={modal.member.email}
+          onCancel={() => setModal(null)}
+          onConfirm={() => confirmRemoveMember(modal.member.id)}
           busy={busy}
         />
       )}
@@ -401,28 +398,11 @@ function EditTenantModal({
             <option value="enterprise">enterprise</option>
           </select>
         </label>
-        {error && (
-          <div
-            role="alert"
-            style={{
-              padding: 10,
-              border: '2.5px solid var(--red-500)',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(255, 77, 60, 0.08)',
-              color: 'var(--red-500)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            ⚠ {error}
-          </div>
-        )}
-        <div
-          style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}
-        >
+        {error && <FormError>{error}</FormError>}
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={() => onClose(false)}
             disabled={submitting}
           >
@@ -435,7 +415,7 @@ function EditTenantModal({
           >
             {submitting ? '⟳ salvando...' : '✓ salvar'}
           </button>
-        </div>
+        </ModalFooter>
       </form>
     </ModalShell>
   );
@@ -494,10 +474,10 @@ function DeleteTenantModal({
             style={inputStyle}
           />
         </label>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={onCancel}
             disabled={busy}
           >
@@ -507,78 +487,74 @@ function DeleteTenantModal({
             type="button"
             onClick={onConfirm}
             disabled={!canDelete || busy}
+            className="btn"
             style={{
               background: 'var(--red-500)',
               color: '#fff',
-              border: '2.5px solid var(--stroke)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 16px',
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: canDelete && !busy ? 'pointer' : 'not-allowed',
               opacity: !canDelete || busy ? 0.5 : 1,
-              boxShadow: '2px 2px 0 var(--stroke)',
+              cursor: canDelete && !busy ? 'pointer' : 'not-allowed',
             }}
           >
             {busy ? '⟳ deletando...' : '🗑 deletar pra sempre'}
           </button>
-        </div>
+        </ModalFooter>
       </div>
     </ModalShell>
   );
 }
 
-function ThAdmin({ children }: { children: React.ReactNode }) {
+function RemoveMemberModal({
+  email,
+  onCancel,
+  onConfirm,
+  busy,
+}: {
+  email: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
   return (
-    <th
-      style={{
-        padding: '12px 16px',
-        textAlign: 'left',
-        fontSize: 11,
-        fontWeight: 800,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: 'var(--text-dim)',
-      }}
-    >
-      {children}
-    </th>
+    <ModalShell title="remover membro?" onClose={onCancel}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div
+          style={{
+            padding: 14,
+            border: '2.5px solid var(--yellow-500)',
+            borderRadius: 'var(--radius-md)',
+            background: 'rgba(255, 200, 40, 0.12)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>tira o vínculo</strong> de <code>{email}</code> com esse
+          tenant. o usuário em si <strong>não</strong> é deletado — só perde
+          acesso aqui.
+        </div>
+        <ModalFooter>
+          <button
+            type="button"
+            className="btn btn-ghost btn-tap"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="btn"
+            style={{
+              background: 'var(--red-500)',
+              color: '#fff',
+              opacity: busy ? 0.5 : 1,
+            }}
+          >
+            {busy ? '⟳ removendo...' : '🗑 remover do tenant'}
+          </button>
+        </ModalFooter>
+      </div>
+    </ModalShell>
   );
 }
-
-function TdAdmin({ children }: { children: React.ReactNode }) {
-  return (
-    <td
-      style={{
-        padding: '12px 16px',
-        fontSize: 13,
-        color: 'var(--text)',
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
-const fieldLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: 'var(--text-dim)',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  border: '2.5px solid var(--stroke)',
-  borderRadius: 'var(--radius-md)',
-  fontFamily: 'var(--font-body)',
-  fontSize: 14,
-  fontWeight: 600,
-  background: 'var(--surface)',
-  color: 'var(--text)',
-  boxShadow: '2px 2px 0 var(--stroke)',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};

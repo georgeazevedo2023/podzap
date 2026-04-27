@@ -3,19 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
+import { AdminEntityList, type AdminColumn } from '@/components/admin/AdminEntityList';
 import type { TenantAdminView } from '@/lib/admin/tenants';
 
-/**
- * Client-side table + modal shell for the tenants management screen.
- *
- * Owns the interactive state:
- *   - which modal (new / edit / delete-confirm) is open
- *   - submission state + error flash
- *
- * Mutations go through `/api/admin/tenants`. Every successful mutation
- * calls `router.refresh()` so the server-rendered list re-hydrates from
- * the DB (instead of shoehorning an optimistic update and drifting).
- */
 export function TenantsTable({ tenants }: { tenants: TenantAdminView[] }) {
   const router = useRouter();
   const [modal, setModal] = useState<
@@ -77,6 +67,79 @@ export function TenantsTable({ tenants }: { tenants: TenantAdminView[] }) {
     }
   }
 
+  const columns: AdminColumn<TenantAdminView>[] = [
+    {
+      key: 'name',
+      label: 'nome',
+      mobileHide: true,
+      render: (t) => (
+        <a
+          href={`/admin/tenants/${t.id}`}
+          style={{
+            color: 'var(--text)',
+            fontWeight: 700,
+            textDecoration: 'none',
+          }}
+        >
+          {t.name}
+        </a>
+      ),
+    },
+    { key: 'plan', label: 'plano', render: (t) => <PlanBadge plan={t.plan} /> },
+    {
+      key: 'status',
+      label: 'status',
+      render: (t) => <StatusPill active={t.isActive} />,
+    },
+    { key: 'memberCount', label: 'membros', render: (t) => t.memberCount },
+    {
+      key: 'hasInstance',
+      label: 'instância',
+      render: (t) =>
+        t.hasInstance ? (
+          <span style={{ color: 'var(--lime-500)' }}>● sim</span>
+        ) : (
+          <span style={{ color: 'var(--text-dim)' }}>— não</span>
+        ),
+    },
+    {
+      key: 'createdAt',
+      label: 'criado',
+      render: (t) => formatDate(t.createdAt),
+    },
+  ];
+
+  const renderActions = (t: TenantAdminView) => (
+    <>
+      <a
+        href={`/admin/tenants/${t.id}`}
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+      >
+        ver
+      </a>
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        disabled={busyId === t.id}
+        onClick={() => toggleSuspend(t)}
+      >
+        {t.isActive ? 'suspender' : 'reativar'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        data-danger="true"
+        disabled={busyId === t.id}
+        onClick={() => setModal({ kind: 'delete', tenant: t })}
+      >
+        deletar
+      </button>
+    </>
+  );
+
   return (
     <>
       <div
@@ -85,6 +148,8 @@ export function TenantsTable({ tenants }: { tenants: TenantAdminView[] }) {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 16,
+          gap: 12,
+          flexWrap: 'wrap',
         }}
       >
         <div style={{ color: 'var(--text-dim)', fontSize: 14 }}>
@@ -119,111 +184,21 @@ export function TenantsTable({ tenants }: { tenants: TenantAdminView[] }) {
         </div>
       )}
 
-      {tenants.length === 0 ? (
-        <EmptyState onCreate={() => setModal({ kind: 'new' })} />
-      ) : (
-        <div
-          className="card"
-          style={{ padding: 0, overflow: 'hidden' }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr
-                style={{
-                  background: 'var(--bg-2)',
-                  borderBottom: '2.5px solid var(--stroke)',
-                }}
-              >
-                <Th>nome</Th>
-                <Th>plano</Th>
-                <Th>status</Th>
-                <Th>membros</Th>
-                <Th>instância</Th>
-                <Th>criado</Th>
-                <Th>ações</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {tenants.map((t, idx) => (
-                <tr
-                  key={t.id}
-                  style={{
-                    borderBottom:
-                      idx === tenants.length - 1
-                        ? undefined
-                        : '1px solid var(--stroke)',
-                  }}
-                >
-                  <Td>
-                    <a
-                      href={`/admin/tenants/${t.id}`}
-                      style={{
-                        color: 'var(--text)',
-                        fontWeight: 700,
-                        textDecoration: 'none',
-                      }}
-                    >
-                      {t.name}
-                    </a>
-                  </Td>
-                  <Td>
-                    <PlanBadge plan={t.plan} />
-                  </Td>
-                  <Td>
-                    <StatusPill active={t.isActive} />
-                  </Td>
-                  <Td>{t.memberCount}</Td>
-                  <Td>
-                    {t.hasInstance ? (
-                      <span style={{ color: 'var(--lime-500)' }}>
-                        ● sim
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        — não
-                      </span>
-                    )}
-                  </Td>
-                  <Td>{formatDate(t.createdAt)}</Td>
-                  <Td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <a
-                        href={`/admin/tenants/${t.id}`}
-                        className="btn btn-ghost"
-                        style={{ fontSize: 11, padding: '4px 8px' }}
-                      >
-                        ver
-                      </a>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={busyId === t.id}
-                        style={{ fontSize: 11, padding: '4px 8px' }}
-                        onClick={() => toggleSuspend(t)}
-                      >
-                        {t.isActive ? 'suspender' : 'reativar'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={busyId === t.id}
-                        style={{
-                          fontSize: 11,
-                          padding: '4px 8px',
-                          color: 'var(--red-500)',
-                        }}
-                        onClick={() => setModal({ kind: 'delete', tenant: t })}
-                      >
-                        deletar
-                      </button>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AdminEntityList<TenantAdminView>
+        rows={tenants}
+        columns={columns}
+        getRowKey={(t) => t.id}
+        mobileTitle={(t) => (
+          <a
+            href={`/admin/tenants/${t.id}`}
+            style={{ color: 'var(--text)', textDecoration: 'none' }}
+          >
+            {t.name}
+          </a>
+        )}
+        actions={renderActions}
+        emptyState={<EmptyState onCreate={() => setModal({ kind: 'new' })} />}
+      />
 
       {modal?.kind === 'new' && (
         <TenantFormModal
@@ -318,33 +293,12 @@ function TenantFormModal({ onClose }: { onClose: (saved: boolean) => void }) {
           </select>
         </label>
 
-        {error && (
-          <div
-            role="alert"
-            style={{
-              padding: 10,
-              border: '2.5px solid var(--red-500)',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(255, 77, 60, 0.08)',
-              color: 'var(--red-500)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            ⚠ {error}
-          </div>
-        )}
+        {error && <FormError>{error}</FormError>}
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            justifyContent: 'flex-end',
-          }}
-        >
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={() => onClose(false)}
             disabled={submitting}
           >
@@ -357,7 +311,7 @@ function TenantFormModal({ onClose }: { onClose: (saved: boolean) => void }) {
           >
             {submitting ? '⟳ criando...' : '✓ criar tenant'}
           </button>
-        </div>
+        </ModalFooter>
       </form>
     </ModalShell>
   );
@@ -426,10 +380,10 @@ function DeleteConfirmModal({
             placeholder={tenantName}
           />
         </label>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={onCancel}
             disabled={busy}
           >
@@ -439,29 +393,24 @@ function DeleteConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={!canDelete || busy}
+            className="btn"
             style={{
               background: 'var(--red-500)',
               color: '#fff',
-              border: '2.5px solid var(--stroke)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 16px',
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: canDelete && !busy ? 'pointer' : 'not-allowed',
               opacity: !canDelete || busy ? 0.5 : 1,
-              boxShadow: '2px 2px 0 var(--stroke)',
+              cursor: canDelete && !busy ? 'pointer' : 'not-allowed',
             }}
           >
             {busy ? '⟳ deletando...' : '🗑 deletar pra sempre'}
           </button>
-        </div>
+        </ModalFooter>
       </div>
     </ModalShell>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Shared bits                                                                */
+/* Shared bits (also used by UsersTable, UazapiTable, TenantDetailClient)     */
 /* -------------------------------------------------------------------------- */
 
 export function ModalShell({
@@ -487,7 +436,7 @@ export function ModalShell({
         background: 'rgba(0, 0, 0, 0.5)',
         display: 'grid',
         placeItems: 'center',
-        padding: 24,
+        padding: 16,
         zIndex: 100,
         overflowY: 'auto',
       }}
@@ -499,7 +448,7 @@ export function ModalShell({
           maxWidth: 520,
           maxHeight: '90vh',
           overflowY: 'auto',
-          padding: 24,
+          padding: 20,
         }}
       >
         <div
@@ -508,13 +457,14 @@ export function ModalShell({
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: 18,
+            gap: 12,
           }}
         >
           <h2
             style={{
               margin: 0,
               fontFamily: 'var(--font-display)',
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: 800,
               letterSpacing: '-0.02em',
             }}
@@ -526,12 +476,13 @@ export function ModalShell({
             onClick={onClose}
             aria-label="Fechar"
             style={{
-              width: 32,
-              height: 32,
+              width: 44,
+              height: 44,
+              minWidth: 44,
               borderRadius: '50%',
               border: '2.5px solid var(--stroke)',
               background: 'var(--surface)',
-              fontSize: 14,
+              fontSize: 16,
               fontWeight: 800,
               cursor: 'pointer',
               boxShadow: '2px 2px 0 var(--stroke)',
@@ -543,6 +494,34 @@ export function ModalShell({
         </div>
         {children}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Footer that holds modal CTAs. Right-aligned row on md+, stacked
+ * full-width column on <md (primary CTA at bottom, closer to thumb).
+ * Behaviour driven by `.admin-modal-footer` rule in globals.css.
+ */
+export function ModalFooter({ children }: { children: React.ReactNode }) {
+  return <div className="admin-modal-footer">{children}</div>;
+}
+
+export function FormError({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="alert"
+      style={{
+        padding: 10,
+        border: '2.5px solid var(--red-500)',
+        borderRadius: 'var(--radius-md)',
+        background: 'rgba(255, 77, 60, 0.08)',
+        color: 'var(--red-500)',
+        fontSize: 13,
+        fontWeight: 600,
+      }}
+    >
+      ⚠ {children}
     </div>
   );
 }
@@ -590,38 +569,6 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
         + criar primeiro tenant
       </button>
     </div>
-  );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th
-      style={{
-        padding: '12px 16px',
-        textAlign: 'left',
-        fontSize: 11,
-        fontWeight: 800,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: 'var(--text-dim)',
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ children }: { children: React.ReactNode }) {
-  return (
-    <td
-      style={{
-        padding: '12px 16px',
-        fontSize: 13,
-        color: 'var(--text)',
-      }}
-    >
-      {children}
-    </td>
   );
 }
 
@@ -673,7 +620,7 @@ export function PlanBadge({ plan }: { plan: string }) {
   );
 }
 
-const fieldLabel: React.CSSProperties = {
+export const fieldLabel: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 800,
   letterSpacing: '0.1em',
@@ -681,7 +628,7 @@ const fieldLabel: React.CSSProperties = {
   color: 'var(--text-dim)',
 };
 
-const inputStyle: React.CSSProperties = {
+export const inputStyle: React.CSSProperties = {
   padding: '10px 14px',
   border: '2.5px solid var(--stroke)',
   borderRadius: 'var(--radius-md)',
@@ -696,7 +643,8 @@ const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-function formatDate(iso: string): string {
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
   try {
     return new Date(iso).toLocaleDateString('pt-BR', {
       day: '2-digit',

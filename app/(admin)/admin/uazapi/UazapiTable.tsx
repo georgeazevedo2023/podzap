@@ -3,10 +3,18 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
+import { AdminEntityList, type AdminColumn } from '@/components/admin/AdminEntityList';
 import type { TenantAdminView } from '@/lib/admin/tenants';
 import type { UazapiInstanceAdminView } from '@/lib/admin/uazapi';
 
-import { ModalShell } from '../tenants/TenantsTable';
+import {
+  fieldLabel,
+  formatDate,
+  FormError,
+  inputStyle,
+  ModalFooter,
+  ModalShell,
+} from '../tenants/TenantsTable';
 
 type ModalState =
   | { kind: 'attach'; instance: UazapiInstanceAdminView }
@@ -14,17 +22,6 @@ type ModalState =
   | { kind: 'create' }
   | null;
 
-/**
- * UAZAPI instances table — lists every instance the UAZAPI account knows
- * about, joined with the local `whatsapp_instances` row when attached.
- *
- * Actions:
- *   - "atribuir" → pick a tenant (only those without an instance) and
- *     call POST /api/admin/uazapi/attach.
- *   - "desatribuir" → destructive (cascades to groups/messages/etc).
- *   - "+ criar e atribuir" → create a new UAZAPI instance on the fly
- *     and bind it to the chosen tenant in one call.
- */
 export function UazapiTable({
   instances,
   tenants,
@@ -98,6 +95,115 @@ export function UazapiTable({
     }
   }
 
+  const columns: AdminColumn<UazapiInstanceAdminView>[] = [
+    {
+      key: 'name',
+      label: 'instância',
+      mobileHide: true,
+      render: (inst) => (
+        <>
+          <div style={{ fontWeight: 700 }}>{inst.name}</div>
+          <div
+            style={{
+              fontSize: 10,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-dim)',
+            }}
+          >
+            {inst.uazapiInstanceId}
+          </div>
+        </>
+      ),
+    },
+    {
+      key: 'status',
+      label: 'status',
+      render: (inst) => <InstanceStatus status={inst.status} />,
+    },
+    {
+      key: 'phone',
+      label: 'telefone',
+      render: (inst) => (
+        <code style={{ fontSize: 12 }}>{inst.phone ?? '—'}</code>
+      ),
+    },
+    {
+      key: 'tenant',
+      label: 'tenant',
+      render: (inst) =>
+        inst.attachedTenantId ? (
+          <a
+            href={`/admin/tenants/${inst.attachedTenantId}`}
+            style={{
+              padding: '3px 10px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--lime-500)',
+              color: 'var(--ink-900)',
+              fontSize: 11,
+              fontWeight: 800,
+              border: '2px solid var(--stroke)',
+              textDecoration: 'none',
+            }}
+          >
+            🔗 {inst.attachedTenantName}
+          </a>
+        ) : (
+          <span
+            style={{
+              padding: '3px 10px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--bg-2)',
+              color: 'var(--text-dim)',
+              fontSize: 11,
+              fontWeight: 800,
+              border: '2px solid var(--stroke)',
+            }}
+          >
+            ○ livre
+          </span>
+        ),
+    },
+    {
+      key: 'createdAt',
+      label: 'criado',
+      render: (inst) => formatDate(inst.createdAt),
+    },
+  ];
+
+  const renderActions = (inst: UazapiInstanceAdminView) => {
+    const attached = Boolean(inst.attachedTenantId);
+    return attached ? (
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        data-danger="true"
+        disabled={busyId === inst.uazapiInstanceId}
+        onClick={() => setModal({ kind: 'detach', instance: inst })}
+      >
+        desatribuir
+      </button>
+    ) : (
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        disabled={
+          busyId === inst.uazapiInstanceId ||
+          tenantsWithoutInstance.length === 0
+        }
+        title={
+          tenantsWithoutInstance.length === 0
+            ? 'nenhum tenant livre'
+            : undefined
+        }
+        onClick={() => setModal({ kind: 'attach', instance: inst })}
+      >
+        atribuir
+      </button>
+    );
+  };
+
   return (
     <>
       <div
@@ -148,142 +254,24 @@ export function UazapiTable({
         </div>
       )}
 
-      {instances.length === 0 ? (
-        <EmptyInstances
-          canCreate={tenantsWithoutInstance.length > 0}
-          onCreate={() => setModal({ kind: 'create' })}
-        />
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr
-                style={{
-                  background: 'var(--bg-2)',
-                  borderBottom: '2.5px solid var(--stroke)',
-                }}
-              >
-                <Th>nome UAZAPI</Th>
-                <Th>status</Th>
-                <Th>telefone</Th>
-                <Th>tenant</Th>
-                <Th>criado</Th>
-                <Th>ações</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {instances.map((inst, idx) => {
-                const attached = Boolean(inst.attachedTenantId);
-                return (
-                  <tr
-                    key={inst.uazapiInstanceId}
-                    style={{
-                      borderBottom:
-                        idx === instances.length - 1
-                          ? undefined
-                          : '1px solid var(--stroke)',
-                    }}
-                  >
-                    <Td>
-                      <div style={{ fontWeight: 700 }}>{inst.name}</div>
-                      <div
-                        style={{
-                          fontSize: 10,
-                          fontFamily: 'var(--font-mono)',
-                          color: 'var(--text-dim)',
-                        }}
-                      >
-                        {inst.uazapiInstanceId}
-                      </div>
-                    </Td>
-                    <Td>
-                      <InstanceStatus status={inst.status} />
-                    </Td>
-                    <Td>
-                      <code style={{ fontSize: 12 }}>
-                        {inst.phone ?? '—'}
-                      </code>
-                    </Td>
-                    <Td>
-                      {attached ? (
-                        <a
-                          href={`/admin/tenants/${inst.attachedTenantId}`}
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: 'var(--radius-pill)',
-                            background: 'var(--lime-500)',
-                            color: 'var(--ink-900)',
-                            fontSize: 11,
-                            fontWeight: 800,
-                            border: '2px solid var(--stroke)',
-                            textDecoration: 'none',
-                          }}
-                        >
-                          🔗 {inst.attachedTenantName}
-                        </a>
-                      ) : (
-                        <span
-                          style={{
-                            padding: '3px 10px',
-                            borderRadius: 'var(--radius-pill)',
-                            background: 'var(--bg-2)',
-                            color: 'var(--text-dim)',
-                            fontSize: 11,
-                            fontWeight: 800,
-                            border: '2px solid var(--stroke)',
-                          }}
-                        >
-                          ○ livre
-                        </span>
-                      )}
-                    </Td>
-                    <Td>{formatDate(inst.createdAt)}</Td>
-                    <Td>
-                      {attached ? (
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{
-                            fontSize: 11,
-                            padding: '4px 8px',
-                            color: 'var(--red-500)',
-                          }}
-                          disabled={busyId === inst.uazapiInstanceId}
-                          onClick={() =>
-                            setModal({ kind: 'detach', instance: inst })
-                          }
-                        >
-                          desatribuir
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          style={{ fontSize: 11, padding: '4px 8px' }}
-                          disabled={
-                            busyId === inst.uazapiInstanceId ||
-                            tenantsWithoutInstance.length === 0
-                          }
-                          title={
-                            tenantsWithoutInstance.length === 0
-                              ? 'nenhum tenant livre'
-                              : undefined
-                          }
-                          onClick={() =>
-                            setModal({ kind: 'attach', instance: inst })
-                          }
-                        >
-                          atribuir
-                        </button>
-                      )}
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AdminEntityList<UazapiInstanceAdminView>
+        rows={instances}
+        columns={columns}
+        getRowKey={(inst) => inst.uazapiInstanceId}
+        mobileTitle={(inst) => inst.name}
+        mobileSubtitle={(inst) => (
+          <code style={{ fontFamily: 'var(--font-mono)' }}>
+            {inst.uazapiInstanceId}
+          </code>
+        )}
+        actions={renderActions}
+        emptyState={
+          <EmptyInstances
+            canCreate={tenantsWithoutInstance.length > 0}
+            onCreate={() => setModal({ kind: 'create' })}
+          />
+        }
+      />
 
       {modal?.kind === 'attach' && (
         <AttachModal
@@ -375,12 +363,10 @@ function AttachModal({
             </select>
           </label>
         )}
-        <div
-          style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}
-        >
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={onCancel}
             disabled={busy}
           >
@@ -394,7 +380,7 @@ function AttachModal({
           >
             {busy ? '⟳ atribuindo...' : '✓ atribuir'}
           </button>
-        </div>
+        </ModalFooter>
       </div>
     </ModalShell>
   );
@@ -467,12 +453,10 @@ function DetachConfirmModal({
             entendo que o histórico do tenant vai ser apagado
           </div>
         </label>
-        <div
-          style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}
-        >
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={onCancel}
             disabled={busy}
           >
@@ -482,22 +466,17 @@ function DetachConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={!acknowledged || busy}
+            className="btn"
             style={{
               background: 'var(--red-500)',
               color: '#fff',
-              border: '2.5px solid var(--stroke)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 16px',
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: acknowledged && !busy ? 'pointer' : 'not-allowed',
               opacity: !acknowledged || busy ? 0.5 : 1,
-              boxShadow: '2px 2px 0 var(--stroke)',
+              cursor: acknowledged && !busy ? 'pointer' : 'not-allowed',
             }}
           >
             {busy ? '⟳ desatribuindo...' : '🔌 desatribuir'}
           </button>
-        </div>
+        </ModalFooter>
       </div>
     </ModalShell>
   );
@@ -582,28 +561,11 @@ function CreateAttachModal({
             placeholder="ex.: acme-prod"
           />
         </label>
-        {error && (
-          <div
-            role="alert"
-            style={{
-              padding: 10,
-              border: '2.5px solid var(--red-500)',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(255, 77, 60, 0.08)',
-              color: 'var(--red-500)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            ⚠ {error}
-          </div>
-        )}
-        <div
-          style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}
-        >
+        {error && <FormError>{error}</FormError>}
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={() => onClose(false)}
             disabled={submitting}
           >
@@ -616,7 +578,7 @@ function CreateAttachModal({
           >
             {submitting ? '⟳ criando...' : '✓ criar e atribuir'}
           </button>
-        </div>
+        </ModalFooter>
       </form>
     </ModalShell>
   );
@@ -706,72 +668,4 @@ function EmptyInstances({
       )}
     </div>
   );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th
-      style={{
-        padding: '12px 16px',
-        textAlign: 'left',
-        fontSize: 11,
-        fontWeight: 800,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: 'var(--text-dim)',
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ children }: { children: React.ReactNode }) {
-  return (
-    <td
-      style={{
-        padding: '12px 16px',
-        fontSize: 13,
-        color: 'var(--text)',
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
-const fieldLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: 'var(--text-dim)',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  border: '2.5px solid var(--stroke)',
-  borderRadius: 'var(--radius-md)',
-  fontFamily: 'var(--font-body)',
-  fontSize: 14,
-  fontWeight: 600,
-  background: 'var(--surface)',
-  color: 'var(--text)',
-  boxShadow: '2px 2px 0 var(--stroke)',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
 }

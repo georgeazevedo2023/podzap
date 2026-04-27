@@ -6,7 +6,8 @@ Histórico do projeto contado em 3 formatos:
 
 Mais recente primeiro:
 
-- [`session-2026-04-27.md`](session-2026-04-27.md) — Mobile-first migration: Fases 1-3 deployed (shell + drawer + bottom nav + PWA / `/approval` / `/home` + `/podcasts`), bug oculto do `/home` `display: contents` corrigido, **Fase 4 (admin no phone) pendente**. 47 specs Playwright, 0 regressions, 3 deploys consecutivos.
+- [`session-2026-04-27-fase4.md`](session-2026-04-27-fase4.md) — Mobile-first **Fase 4 entregue**: AdminEntityList component, /admin/{tenants,users,uazapi} + tabela membros agora viram cards stacked em <md, modais com CTAs full-width, window.confirm eliminado. 15/15 specs verde. Fecha o ciclo mobile-first.
+- [`session-2026-04-27.md`](session-2026-04-27.md) — Mobile-first migration: Fases 1-3 deployed (shell + drawer + bottom nav + PWA / `/approval` / `/home` + `/podcasts`), bug oculto do `/home` `display: contents` corrigido, **Fase 4 pendente** (entregue na continuação ↑). 47 specs Playwright, 0 regressions, 3 deploys consecutivos.
 - [`session-2026-04-26.md`](session-2026-04-26.md) — CLAUDE.md vira orquestrador real (-83% tokens, 640→105 lin) + 4 skills procedurais (`podzap-{test-webhook,deploy,migration,db}`) + 3 docs novos (architecture/structure/data-model) + memory `docs_orchestration` + vault Obsidian limpo
 - [`session-2026-04-25.md`](session-2026-04-25.md) — auditoria geral 5-agentes + parser wsmart cobre audio/image/video + decryption `.enc` via UAZAPI + áudio do owner end-to-end + descoberta do bug HMAC missing em prod
 - [`session-2026-04-24-evening-music-ui-n8n.md`](session-2026-04-24-evening-music-ui-n8n.md) — música de fundo no podcast + migração crons pro n8n + prompts v7/v8 + UI fixes (chunky button, copy)

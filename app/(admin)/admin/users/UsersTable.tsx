@@ -3,25 +3,26 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
+import { AdminEntityList, type AdminColumn } from '@/components/admin/AdminEntityList';
 import type { TenantAdminView } from '@/lib/admin/tenants';
 import type { UserAdminView } from '@/lib/admin/users';
 
-import { ModalShell } from '../tenants/TenantsTable';
+import {
+  fieldLabel,
+  formatDate,
+  FormError,
+  inputStyle,
+  ModalFooter,
+  ModalShell,
+} from '../tenants/TenantsTable';
 
 type ModalState =
   | { kind: 'new' }
   | { kind: 'reset'; user: UserAdminView }
   | { kind: 'delete'; user: UserAdminView }
+  | { kind: 'sa'; user: UserAdminView }
   | null;
 
-/**
- * Users management table — covers create, reset password, toggle
- * superadmin flag, and hard-delete.
- *
- * Edit-membership lives in the tenant detail screen (role dropdown) so
- * the user modal here focuses on identity (email, password, initial
- * tenant attachment).
- */
 export function UsersTable({
   users,
   tenants,
@@ -53,15 +54,14 @@ export function UsersTable({
     }
   }
 
-  async function toggleSuperadmin(user: UserAdminView) {
-    const verb = user.isSuperadmin ? 'remover' : 'promover';
-    if (!window.confirm(`${verb} superadmin em ${user.email}?`)) return;
+  async function applySuperadmin(user: UserAdminView) {
     setBusyId(user.id);
     setFlash(null);
     try {
       await callApi(`/api/admin/users/${user.id}`, 'PATCH', {
         isSuperadmin: !user.isSuperadmin,
       });
+      setModal(null);
       router.refresh();
     } catch (err) {
       setFlash(err instanceof Error ? err.message : 'erro');
@@ -84,6 +84,102 @@ export function UsersTable({
     }
   }
 
+  const columns: AdminColumn<UserAdminView>[] = [
+    {
+      key: 'email',
+      label: 'email',
+      mobileHide: true,
+      render: (u) => (
+        <code style={{ fontSize: 12, fontWeight: 700 }}>{u.email}</code>
+      ),
+    },
+    {
+      key: 'sa',
+      label: 'superadmin',
+      render: (u) =>
+        u.isSuperadmin ? (
+          <span
+            style={{
+              padding: '3px 10px',
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--pink-500)',
+              color: '#fff',
+              fontSize: 11,
+              fontWeight: 800,
+              border: '2px solid var(--stroke)',
+            }}
+          >
+            ⚡ SA
+          </span>
+        ) : (
+          <span style={{ color: 'var(--text-dim)' }}>—</span>
+        ),
+    },
+    {
+      key: 'tenants',
+      label: 'tenants',
+      render: (u) =>
+        u.tenants.length === 0 ? (
+          <span style={{ color: 'var(--text-dim)' }}>sem tenant</span>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+            }}
+          >
+            {u.tenants.map((t) => (
+              <RoleBadge
+                key={t.tenantId}
+                tenantName={t.tenantName}
+                role={t.role}
+              />
+            ))}
+          </div>
+        ),
+    },
+    {
+      key: 'createdAt',
+      label: 'criado',
+      render: (u) => formatDate(u.createdAt),
+    },
+  ];
+
+  const renderActions = (u: UserAdminView) => (
+    <>
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        onClick={() => setModal({ kind: 'reset', user: u })}
+        disabled={busyId === u.id}
+      >
+        senha
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        onClick={() => setModal({ kind: 'sa', user: u })}
+        disabled={busyId === u.id}
+      >
+        {u.isSuperadmin ? 'tirar SA' : 'tornar SA'}
+      </button>
+      <button
+        type="button"
+        className="btn btn-ghost btn-xs"
+        data-admin-action
+        data-danger="true"
+        onClick={() => setModal({ kind: 'delete', user: u })}
+        disabled={busyId === u.id}
+      >
+        deletar
+      </button>
+    </>
+  );
+
   return (
     <>
       <div
@@ -92,6 +188,8 @@ export function UsersTable({
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 16,
+          gap: 12,
+          flexWrap: 'wrap',
         }}
       >
         <div style={{ color: 'var(--text-dim)', fontSize: 14 }}>
@@ -130,124 +228,21 @@ export function UsersTable({
         </div>
       )}
 
-      {users.length === 0 ? (
-        <EmptyUsers
-          hasTenant={tenants.length > 0}
-          onCreate={() => setModal({ kind: 'new' })}
-        />
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr
-                style={{
-                  background: 'var(--bg-2)',
-                  borderBottom: '2.5px solid var(--stroke)',
-                }}
-              >
-                <Th>email</Th>
-                <Th>superadmin</Th>
-                <Th>tenants</Th>
-                <Th>criado</Th>
-                <Th>ações</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u, idx) => (
-                <tr
-                  key={u.id}
-                  style={{
-                    borderBottom:
-                      idx === users.length - 1
-                        ? undefined
-                        : '1px solid var(--stroke)',
-                  }}
-                >
-                  <Td>
-                    <code style={{ fontSize: 12, fontWeight: 700 }}>
-                      {u.email}
-                    </code>
-                  </Td>
-                  <Td>
-                    {u.isSuperadmin ? (
-                      <span
-                        style={{
-                          padding: '3px 10px',
-                          borderRadius: 'var(--radius-pill)',
-                          background: 'var(--pink-500)',
-                          color: '#fff',
-                          fontSize: 11,
-                          fontWeight: 800,
-                          border: '2px solid var(--stroke)',
-                        }}
-                      >
-                        ⚡ SA
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-dim)' }}>—</span>
-                    )}
-                  </Td>
-                  <Td>
-                    {u.tenants.length === 0 ? (
-                      <span style={{ color: 'var(--text-dim)' }}>
-                        sem tenant
-                      </span>
-                    ) : (
-                      <div
-                        style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}
-                      >
-                        {u.tenants.map((t) => (
-                          <RoleBadge
-                            key={t.tenantId}
-                            tenantName={t.tenantName}
-                            role={t.role}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </Td>
-                  <Td>{formatDate(u.createdAt)}</Td>
-                  <Td>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: 11, padding: '4px 8px' }}
-                        onClick={() => setModal({ kind: 'reset', user: u })}
-                        disabled={busyId === u.id}
-                      >
-                        senha
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{ fontSize: 11, padding: '4px 8px' }}
-                        onClick={() => toggleSuperadmin(u)}
-                        disabled={busyId === u.id}
-                      >
-                        {u.isSuperadmin ? 'tirar SA' : 'tornar SA'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        style={{
-                          fontSize: 11,
-                          padding: '4px 8px',
-                          color: 'var(--red-500)',
-                        }}
-                        onClick={() => setModal({ kind: 'delete', user: u })}
-                        disabled={busyId === u.id}
-                      >
-                        deletar
-                      </button>
-                    </div>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <AdminEntityList<UserAdminView>
+        rows={users}
+        columns={columns}
+        getRowKey={(u) => u.id}
+        mobileTitle={(u) => (
+          <code style={{ fontSize: 14 }}>{u.email}</code>
+        )}
+        actions={renderActions}
+        emptyState={
+          <EmptyUsers
+            hasTenant={tenants.length > 0}
+            onCreate={() => setModal({ kind: 'new' })}
+          />
+        }
+      />
 
       {modal?.kind === 'new' && (
         <NewUserModal
@@ -263,6 +258,15 @@ export function UsersTable({
         <ResetPasswordModal
           user={modal.user}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {modal?.kind === 'sa' && (
+        <SuperadminConfirmModal
+          user={modal.user}
+          onCancel={() => setModal(null)}
+          onConfirm={() => applySuperadmin(modal.user)}
+          busy={busyId === modal.user.id}
         />
       )}
 
@@ -365,9 +369,7 @@ function NewUserModal({
             autoComplete="new-password"
           />
         </label>
-        <div
-          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}
-        >
+        <div className="admin-form-grid-2">
           <label
             style={{ display: 'flex', flexDirection: 'column', gap: 6 }}
           >
@@ -436,28 +438,11 @@ function NewUserModal({
             </div>
           </div>
         </label>
-        {error && (
-          <div
-            role="alert"
-            style={{
-              padding: 10,
-              border: '2.5px solid var(--red-500)',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(255, 77, 60, 0.08)',
-              color: 'var(--red-500)',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            ⚠ {error}
-          </div>
-        )}
-        <div
-          style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}
-        >
+        {error && <FormError>{error}</FormError>}
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={() => onClose(false)}
             disabled={submitting}
           >
@@ -470,7 +455,7 @@ function NewUserModal({
           >
             {submitting ? '⟳ criando...' : '✓ criar usuário'}
           </button>
-        </div>
+        </ModalFooter>
       </form>
     </ModalShell>
   );
@@ -565,28 +550,11 @@ function ResetPasswordModal({
               autoComplete="new-password"
             />
           </label>
-          {error && (
-            <div
-              role="alert"
-              style={{
-                padding: 10,
-                border: '2.5px solid var(--red-500)',
-                borderRadius: 'var(--radius-md)',
-                background: 'rgba(255, 77, 60, 0.08)',
-                color: 'var(--red-500)',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              ⚠ {error}
-            </div>
-          )}
-          <div
-            style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}
-          >
+          {error && <FormError>{error}</FormError>}
+          <ModalFooter>
             <button
               type="button"
-              className="btn btn-ghost"
+              className="btn btn-ghost btn-tap"
               onClick={onClose}
               disabled={submitting}
             >
@@ -599,9 +567,89 @@ function ResetPasswordModal({
             >
               {submitting ? '⟳ salvando...' : '✓ resetar'}
             </button>
-          </div>
+          </ModalFooter>
         </form>
       )}
+    </ModalShell>
+  );
+}
+
+function SuperadminConfirmModal({
+  user,
+  onCancel,
+  onConfirm,
+  busy,
+}: {
+  user: UserAdminView;
+  onCancel: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  const promoting = !user.isSuperadmin;
+  return (
+    <ModalShell
+      title={promoting ? 'tornar superadmin?' : 'remover superadmin?'}
+      onClose={onCancel}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div
+          style={{
+            padding: 14,
+            border: `2.5px solid var(${promoting ? '--pink-500' : '--yellow-500'})`,
+            borderRadius: 'var(--radius-md)',
+            background: promoting
+              ? 'rgba(255, 61, 165, 0.08)'
+              : 'rgba(255, 200, 40, 0.12)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {promoting ? (
+            <>
+              <strong style={{ color: 'var(--pink-500)' }}>
+                ⚡ acesso total ao admin.
+              </strong>
+              <div style={{ marginTop: 6 }}>
+                <code>{user.email}</code> vai poder criar/deletar tenants,
+                resetar senhas, atribuir instâncias UAZAPI e promover outros
+                superadmins.
+              </div>
+            </>
+          ) : (
+            <>
+              <strong style={{ color: 'var(--text)' }}>
+                remove o acesso ao painel admin.
+              </strong>
+              <div style={{ marginTop: 6 }}>
+                <code>{user.email}</code> volta a ser usuário comum — só vê
+                os tenants em que é membro.
+              </div>
+            </>
+          )}
+        </div>
+        <ModalFooter>
+          <button
+            type="button"
+            className="btn btn-ghost btn-tap"
+            onClick={onCancel}
+            disabled={busy}
+          >
+            cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`btn ${promoting ? 'btn-pink' : 'btn-yellow'}`}
+          >
+            {busy
+              ? '⟳ aplicando...'
+              : promoting
+                ? '⚡ tornar SA'
+                : '↩ remover SA'}
+          </button>
+        </ModalFooter>
+      </div>
     </ModalShell>
   );
 }
@@ -658,10 +706,10 @@ function DeleteUserModal({
             style={inputStyle}
           />
         </label>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+        <ModalFooter>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-tap"
             onClick={onCancel}
             disabled={busy}
           >
@@ -671,22 +719,17 @@ function DeleteUserModal({
             type="button"
             onClick={onConfirm}
             disabled={!canDelete || busy}
+            className="btn"
             style={{
               background: 'var(--red-500)',
               color: '#fff',
-              border: '2.5px solid var(--stroke)',
-              borderRadius: 'var(--radius-md)',
-              padding: '10px 16px',
-              fontWeight: 800,
-              fontSize: 13,
-              cursor: canDelete && !busy ? 'pointer' : 'not-allowed',
               opacity: !canDelete || busy ? 0.5 : 1,
-              boxShadow: '2px 2px 0 var(--stroke)',
+              cursor: canDelete && !busy ? 'pointer' : 'not-allowed',
             }}
           >
             {busy ? '⟳ deletando...' : '🗑 deletar'}
           </button>
-        </div>
+        </ModalFooter>
       </div>
     </ModalShell>
   );
@@ -774,71 +817,4 @@ function RoleBadge({
       {tenantName} · {role}
     </span>
   );
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th
-      style={{
-        padding: '12px 16px',
-        textAlign: 'left',
-        fontSize: 11,
-        fontWeight: 800,
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        color: 'var(--text-dim)',
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({ children }: { children: React.ReactNode }) {
-  return (
-    <td
-      style={{
-        padding: '12px 16px',
-        fontSize: 13,
-        color: 'var(--text)',
-      }}
-    >
-      {children}
-    </td>
-  );
-}
-
-const fieldLabel: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  color: 'var(--text-dim)',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  border: '2.5px solid var(--stroke)',
-  borderRadius: 'var(--radius-md)',
-  fontFamily: 'var(--font-body)',
-  fontSize: 14,
-  fontWeight: 600,
-  background: 'var(--surface)',
-  color: 'var(--text)',
-  boxShadow: '2px 2px 0 var(--stroke)',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
 }
