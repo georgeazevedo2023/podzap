@@ -40,13 +40,19 @@ test.describe('approval detail — mobile @390x844', () => {
     // Default tab is "pendentes" which is often empty on real tenants.
     // Use "approved" to find a real card without depending on test data.
     await authedPage.goto('/approval?status=approved');
+    await authedPage.waitForLoadState('networkidle');
+    // Match ONLY card links (`/approval/<uuid>`), not the StatusFilter
+    // pills which navigate to `/approval?status=...`. The card is rendered
+    // inside an <article>, so we scope to that.
     const firstCard = authedPage
       .locator('a[href^="/approval/"]')
       .first();
     const count = await firstCard.count();
     test.skip(count === 0, 'no summaries available on this tenant');
-    await firstCard.click();
-    await authedPage.waitForURL(/\/approval\/[^/]+$/);
+    const href = await firstCard.getAttribute('href');
+    expect(href).toMatch(/^\/approval\/[a-f0-9-]+$/);
+    await authedPage.goto(href!);
+    await authedPage.waitForLoadState('networkidle');
 
     // Grid resolves to 1fr (single column) on mobile.
     const gridCols = await authedPage
@@ -81,13 +87,16 @@ test.describe('approval detail — desktop @1280x800', () => {
     // Default tab is "pendentes" which is often empty on real tenants.
     // Use "approved" to find a real card without depending on test data.
     await authedPage.goto('/approval?status=approved');
+    await authedPage.waitForLoadState('networkidle');
     const firstCard = authedPage
       .locator('a[href^="/approval/"]')
       .first();
     const count = await firstCard.count();
     test.skip(count === 0, 'no summaries available on this tenant');
-    await firstCard.click();
-    await authedPage.waitForURL(/\/approval\/[^/]+$/);
+    const href = await firstCard.getAttribute('href');
+    expect(href).toMatch(/^\/approval\/[a-f0-9-]+$/);
+    await authedPage.goto(href!);
+    await authedPage.waitForLoadState('networkidle');
 
     const gridCols = await authedPage
       .locator('.approval-detail-grid')

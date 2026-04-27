@@ -40,27 +40,22 @@ export default async function HomePage() {
   const { tenant } = context;
   const stats = await getHomeStats(tenant.id);
 
+  // Layout responsivo: a classe `.home-grid` define mobile-first grid em
+  // globals.css (1-col abaixo de md, 1fr/320px em md+). `.home-stats` e
+  // `.home-episodes` aplicam-se aos contentores reais (2-up em mobile,
+  // 4-up em desktop). A versão anterior usava `display: contents` num
+  // wrapper + inline `<style>` — a regra de media query não tinha efeito
+  // porque o wrapper não formava box.
   return (
     <div
       className="home-grid"
       style={{
-        padding: '24px 36px 40px',
+        padding: '24px clamp(16px, 4vw, 36px) 40px',
         display: 'grid',
         gap: 20,
-        gridTemplateColumns: '1fr 320px',
         minHeight: '100%',
       }}
     >
-      {/* Collapses sidebar column on narrow viewports. Inline style block
-          keeps the rule scoped to this page (no globals.css edits). */}
-      <style>
-        {`@media (max-width: 900px) {
-            .home-grid { grid-template-columns: 1fr !important; }
-            .home-stats { grid-template-columns: repeat(2, 1fr) !important; }
-            .home-episodes { grid-template-columns: repeat(2, 1fr) !important; }
-          }`}
-      </style>
-
       {/* LEFT */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <HeroPlayer
@@ -71,12 +66,8 @@ export default async function HomePage() {
           capturedMessagesCount={stats.capturedMessagesCount}
           pendingApprovalsCount={stats.pendingApprovalsCount}
         />
-        <div className="home-stats" style={{ display: 'contents' }}>
-          <StatsRow stats={stats} />
-        </div>
-        <div className="home-episodes" style={{ display: 'contents' }}>
-          <LastEpisodesGrid episodes={stats.latestEpisodes} />
-        </div>
+        <StatsRow stats={stats} />
+        <LastEpisodesGrid episodes={stats.latestEpisodes} />
       </div>
 
       {/* RIGHT */}

@@ -242,16 +242,27 @@ export function SendToMenu({
           boxShadow: '3px 3px 0 var(--stroke)',
         };
 
-  // Posição do menu portalado: 8px abaixo da borda inferior do botão,
-  // alinhado à direita. Usa viewport coords (position: fixed) porque o
-  // portal vive em document.body, não no container do botão.
+  // Posição do menu portalado: 8px abaixo da borda inferior do botão.
+  // Em desktop, alinha à direita do botão; em mobile (<768px) o menu
+  // span a viewport com 12px de padding lateral pra evitar sair da tela
+  // quando o botão está em qualquer outra posição que não a direita.
+  // Usa `position: fixed` porque o portal vive em document.body.
+  const isMobileViewport =
+    typeof window !== 'undefined' && window.innerWidth < 768;
   const menuStyle: React.CSSProperties | undefined = anchorRect
-    ? {
-        position: 'fixed',
-        top: anchorRect.bottom + 8,
-        left: anchorRect.right - 280,
-        minWidth: 260,
-      }
+    ? isMobileViewport
+      ? {
+          position: 'fixed',
+          top: anchorRect.bottom + 8,
+          left: 12,
+          right: 12,
+        }
+      : {
+          position: 'fixed',
+          top: anchorRect.bottom + 8,
+          left: anchorRect.right - 280,
+          minWidth: 260,
+        }
     : undefined;
 
   return (
@@ -404,7 +415,11 @@ function MenuItem({
         alignItems: 'center',
         gap: 12,
         width: '100%',
-        padding: '10px 12px',
+        // 44px floor — menu items used to be ~36px and felt fiddly on
+        // mobile where this menu spans the viewport. The icon (18px) +
+        // 10px padding now lands at ~52px which is comfortable.
+        minHeight: 48,
+        padding: '12px 14px',
         background: 'transparent',
         border: 'none',
         borderRadius: 'var(--radius-sm, 8px)',

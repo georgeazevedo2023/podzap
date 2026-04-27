@@ -308,6 +308,46 @@ body {
   }
 }
 
+/* /home — main grid (left column + sidebar) + stat row + episode grid.
+   Mobile-first: everything single-column. Desktop (md+) flips to the
+   classic 2-col layout, stats become 4-up, episodes become 4-up. The
+   page used to ship an inline <style> with a `@media (max-width: 900px)`
+   rule that targeted a `display: contents` wrapper — which silently
+   never matched. Anchoring the rule on the actual grid elements here
+   makes the responsive behaviour real. */
+.home-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.home-episodes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (min-width: 48rem) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 320px !important;
+  }
+  .home-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .home-episodes {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* /podcasts — empty state stacks copy + visual vertically on mobile;
+   from md+ it returns to the original 2-col with auto-sized art. */
+@media (min-width: 48rem) {
+  .podcasts-empty-state {
+    grid-template-columns: minmax(0, 1fr) auto !important;
+  }
+}
+
 /* Scrollbars subtle */
 *::-webkit-scrollbar        { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb  { background: #443669; border-radius: 4px; }

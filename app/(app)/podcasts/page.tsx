@@ -437,12 +437,15 @@ function UnavailableBadge() {
 function EmptyState() {
   return (
     <div
-      className="card"
+      className="card podcasts-empty-state"
       style={{
-        padding: 36,
+        padding: 'clamp(20px, 4vw, 36px)',
         display: 'grid',
-        gridTemplateColumns: 'minmax(0, 1fr) auto',
-        gap: 28,
+        // Mobile-first: stack copy + visual vertically. Desktop override
+        // (`min-width: 48rem`) flips to two columns. Rule lives in
+        // `app/globals.css` next to the other page-specific layouts.
+        gridTemplateColumns: 'minmax(0, 1fr)',
+        gap: 'clamp(18px, 3vw, 28px)',
         alignItems: 'center',
       }}
     >

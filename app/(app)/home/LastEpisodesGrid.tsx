@@ -122,11 +122,11 @@ export function LastEpisodesGrid({
       </div>
 
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-        }}
+        // `.home-episodes` (em globals.css) controla o grid: 2-up em <md,
+        // 4-up em md+. Mantemos só `gap` inline porque o CSS responsivo
+        // já redefine `display: grid` + `gridTemplateColumns`.
+        className="home-episodes"
+        style={{ gap: 14 }}
       >
         {episodes.length > 0
           ? episodes.map((ep, i) => (

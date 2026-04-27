@@ -73,7 +73,10 @@ export function CopyableCaption({
           aria-live="polite"
           style={{
             cursor: 'pointer',
-            padding: '8px 16px',
+            // 44px tap target floor (was ~38px). Vertical padding bumped so
+            // the pill keeps its proportions instead of looking inflated.
+            minHeight: 44,
+            padding: '10px 18px',
             border: '2.5px solid var(--stroke)',
             borderRadius: 999,
             background: buttonBg,

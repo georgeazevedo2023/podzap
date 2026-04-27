@@ -35,13 +35,9 @@ export function fmtPercent(rate: number, summariesThisWeek: number): string {
 
 export function StatsRow({ stats }: StatsRowProps): React.ReactElement {
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 12,
-      }}
-    >
+    // `.home-stats` (em globals.css) é mobile-first: 2-up em <md, 4-up em md+.
+    // Não setamos `gridTemplateColumns` inline aqui pra deixar o CSS vencer.
+    <div className="home-stats">
       <StatCard
         label="resumos na semana"
         value={String(stats.summariesThisWeek)}
