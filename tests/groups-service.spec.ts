@@ -50,6 +50,9 @@ type GroupRow = {
   member_count: number | null;
   last_synced_at: string | null;
   created_at: string;
+  default_tone: 'formal' | 'fun' | 'corporate';
+  default_voice_mode: string;
+  default_period: string;
 };
 
 const db = {
@@ -426,6 +429,9 @@ function seedGroup(partial: Partial<GroupRow> = {}): GroupRow {
     member_count: 10,
     last_synced_at: null,
     created_at: now,
+    default_tone: 'fun',
+    default_voice_mode: 'duo',
+    default_period: '24h',
     ...partial,
   };
   db.groups.push(row);
@@ -503,6 +509,32 @@ describe("getGroup", () => {
     expect(got!.id).toBe(row.id);
     expect(got!.name).toBe("HR Team");
     expect(got!.isMonitored).toBe(true);
+  });
+
+  it("exposes the per-group defaults consumed by 1-click generate", async () => {
+    const row = seedGroup({
+      name: "Power group",
+      default_tone: "corporate",
+      default_voice_mode: "single",
+      default_period: "7d",
+    });
+    const got = await service.getGroup(TENANT_A, row.id);
+    expect(got).not.toBeNull();
+    expect(got!.defaultTone).toBe("corporate");
+    expect(got!.defaultVoiceMode).toBe("single");
+    expect(got!.defaultPeriod).toBe("7d");
+  });
+
+  it("normalises unknown voice_mode/period strings to safe defaults", async () => {
+    // Defensive: should the DB ever drift, the view should still render a
+    // valid duo+24h ticket instead of crashing the page.
+    const row = seedGroup({
+      default_voice_mode: "trio" as unknown as string,
+      default_period: "30d" as unknown as string,
+    });
+    const got = await service.getGroup(TENANT_A, row.id);
+    expect(got!.defaultVoiceMode).toBe("duo");
+    expect(got!.defaultPeriod).toBe("24h");
   });
 });
 

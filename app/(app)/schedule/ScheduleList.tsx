@@ -273,6 +273,9 @@ function mergeGroupForEdit(
     memberCount: null,
     lastSyncedAt: null,
     createdAt: editing.createdAt,
+    defaultTone: 'fun',
+    defaultVoiceMode: 'duo',
+    defaultPeriod: '24h',
   };
   return [...monitored, placeholder];
 }

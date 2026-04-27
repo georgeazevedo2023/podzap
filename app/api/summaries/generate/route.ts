@@ -5,8 +5,22 @@
  * is deferred to an Inngest worker (`inngest/functions/generate-summary.ts`)
  * because it routinely takes 10-30s — far too long to block a request.
  *
- * Body:
- *   { groupId, periodStart, periodEnd, tone }
+ * Body (todos opcionais exceto groupId — preenche do grupo quando ausente):
+ *   {
+ *     groupId,
+ *     periodStart?,    // ISO timestamp (com offset)
+ *     periodEnd?,      // ISO timestamp (com offset)
+ *     period?,         // "24h" | "7d" — atalho pra calcular start/end
+ *     tone?,           // override; senão usa group.default_tone
+ *     voiceMode?,      // override; senão usa group.default_voice_mode
+ *   }
+ *
+ * Caminhos:
+ *   - "1-click gerar" do GroupCard manda só { groupId } e a API resolve
+ *     tudo do grupo. Foi a feature que essa API ganhou na Fase A do
+ *     mobile-first follow-up.
+ *   - GenerateNowModal continua mandando todos os campos quando o usuário
+ *     quer override explícito.
  *
  * Reply: `202 { ok: true, dispatched: true }`
  *
@@ -20,6 +34,7 @@ import { z } from "zod";
 
 import { inngest } from "@/inngest/client";
 import { summaryRequested } from "@/inngest/events";
+import { getGroup } from "@/lib/groups/service";
 import {
   applyRateLimit,
   errorResponse,
@@ -31,20 +46,18 @@ import {
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 3_600_000; // 1h
 
-// `tone` values mirror the `summary_tone` DB enum. Keep in sync with
-// `lib/supabase/types.ts` and `inngest/events.ts#summaryRequested`.
-const GenerateBodySchema = z
-  .object({
-    groupId: z.string().uuid(),
-    periodStart: z.string().datetime({ offset: true }),
-    periodEnd: z.string().datetime({ offset: true }),
-    tone: z.enum(["formal", "fun", "corporate"]).default("fun"),
-    voiceMode: z.enum(["single", "duo"]).default("single"),
-  })
-  .refine(
-    (body) => new Date(body.periodEnd) > new Date(body.periodStart),
-    { message: "periodEnd must be after periodStart", path: ["periodEnd"] },
-  );
+const GenerateBodySchema = z.object({
+  groupId: z.string().uuid(),
+  periodStart: z.string().datetime({ offset: true }).optional(),
+  periodEnd: z.string().datetime({ offset: true }).optional(),
+  period: z.enum(["24h", "7d"]).optional(),
+  tone: z.enum(["formal", "fun", "corporate"]).optional(),
+  voiceMode: z.enum(["single", "duo"]).optional(),
+});
+
+function periodToHours(p: "24h" | "7d"): number {
+  return p === "7d" ? 24 * 7 : 24;
+}
 
 export async function POST(req: Request) {
   const auth = await requireAuth();
@@ -70,13 +83,51 @@ export async function POST(req: Request) {
     );
   }
 
-  const { groupId, periodStart, periodEnd, tone, voiceMode } = parsed.data;
+  const body = parsed.data;
+
+  let group;
+  try {
+    group = await getGroup(tenant.id, body.groupId);
+  } catch (err) {
+    return mapErrorToResponse(err);
+  }
+  if (!group) {
+    return errorResponse(
+      404,
+      "NOT_FOUND",
+      "Grupo não encontrado para este tenant.",
+    );
+  }
+
+  // Resolve period: explicit start/end > period shortcut > group default.
+  let periodStart: string;
+  let periodEnd: string;
+  if (body.periodStart && body.periodEnd) {
+    if (new Date(body.periodEnd) <= new Date(body.periodStart)) {
+      return errorResponse(
+        400,
+        "VALIDATION_ERROR",
+        "periodEnd must be after periodStart.",
+      );
+    }
+    periodStart = body.periodStart;
+    periodEnd = body.periodEnd;
+  } else {
+    const shortcut = body.period ?? group.defaultPeriod;
+    const hours = periodToHours(shortcut);
+    const now = new Date();
+    periodEnd = now.toISOString();
+    periodStart = new Date(now.getTime() - hours * 3_600_000).toISOString();
+  }
+
+  const tone = body.tone ?? group.defaultTone;
+  const voiceMode = body.voiceMode ?? group.defaultVoiceMode;
 
   try {
     await inngest.send(
       summaryRequested.create({
         tenantId: tenant.id,
-        groupId,
+        groupId: group.id,
         periodStart,
         periodEnd,
         tone,

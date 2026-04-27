@@ -26,6 +26,10 @@ import { decrypt, CryptoError } from "@/lib/crypto";
 import { UazapiClient } from "@/lib/uazapi/client";
 import type { Database } from "@/lib/supabase/types";
 import type { Group } from "@/lib/uazapi/types";
+import type { SummaryTone } from "@/lib/summary/prompt";
+
+export type GroupVoiceMode = "single" | "duo";
+export type GroupPeriod = "24h" | "7d";
 
 // ──────────────────────────────────────────────────────────────────────────
 //  Public types
@@ -42,6 +46,14 @@ export type GroupView = {
   memberCount: number | null;
   lastSyncedAt: string | null;
   createdAt: string;
+  /**
+   * Defaults usados pelo "1-click gerar" no card. A API
+   * `/api/summaries/generate` lê esses campos quando o body não traz
+   * `tone` / `voiceMode` / `period` explícitos.
+   */
+  defaultTone: SummaryTone;
+  defaultVoiceMode: GroupVoiceMode;
+  defaultPeriod: GroupPeriod;
   /**
    * Contagem de mensagens capturadas nas últimas 24h. Só é populada em
    * `listGroups({ withRecentMessageCount: true })` pra evitar N queries
@@ -85,7 +97,18 @@ function toView(row: GroupRow): GroupView {
     memberCount: row.member_count ?? null,
     lastSyncedAt: row.last_synced_at ?? null,
     createdAt: row.created_at,
+    defaultTone: row.default_tone,
+    defaultVoiceMode: normalizeVoiceMode(row.default_voice_mode),
+    defaultPeriod: normalizePeriod(row.default_period),
   };
+}
+
+function normalizeVoiceMode(v: string): GroupVoiceMode {
+  return v === "single" ? "single" : "duo";
+}
+
+function normalizePeriod(v: string): GroupPeriod {
+  return v === "7d" ? "7d" : "24h";
 }
 
 /**

@@ -9,8 +9,14 @@ export interface GroupCardProps {
   group: GroupView;
   onToggle: (on: boolean) => void;
   isToggling: boolean;
-  /** Callback quando o user clica "gerar resumo agora" no card monitorado. */
-  onGenerate?: (groupId: string) => void;
+  /**
+   * Callback do "✨ gerar agora" — 1-clique, usa os defaults do grupo
+   * (tom, voiceMode, período). Se a chamada falhar, o pai mostra o erro
+   * no banner global da `/groups` page.
+   */
+  onQuickGenerate?: (group: GroupView) => void;
+  /** True enquanto o POST está em voo pra travar duplo clique. */
+  isGenerating?: boolean;
 }
 
 /**
@@ -28,7 +34,8 @@ export function GroupCard({
   group,
   onToggle,
   isToggling,
-  onGenerate,
+  onQuickGenerate,
+  isGenerating = false,
 }: GroupCardProps) {
   const on = group.isMonitored;
   const recentCount = group.recentMessageCount ?? null;
@@ -159,14 +166,15 @@ export function GroupCard({
                 ? '1 msg (24h)'
                 : `${recentCount} msgs (24h)`}
           </span>
-          {canGenerate && onGenerate && (
+          {canGenerate && onQuickGenerate && (
             <button
               type="button"
               data-generate-btn
               onClick={(e) => {
                 e.stopPropagation();
-                onGenerate(group.id);
+                if (!isGenerating) onQuickGenerate(group);
               }}
+              disabled={isGenerating}
               className="btn"
               style={{
                 marginLeft: 'auto',
@@ -178,13 +186,15 @@ export function GroupCard({
                 fontFamily: 'var(--font-body)',
                 fontSize: 11,
                 fontWeight: 800,
-                cursor: 'pointer',
+                cursor: isGenerating ? 'wait' : 'pointer',
                 boxShadow: '2px 2px 0 var(--stroke)',
                 letterSpacing: '0.02em',
+                opacity: isGenerating ? 0.6 : 1,
               }}
-              aria-label={`Gerar resumo agora pro grupo ${group.name}`}
+              aria-label={`Gerar resumo agora pro grupo ${group.name} (${group.defaultPeriod}, ${group.defaultVoiceMode === 'duo' ? 'dupla' : 'solo'})`}
+              title={`Tom: ${group.defaultTone} · ${group.defaultPeriod} · ${group.defaultVoiceMode === 'duo' ? 'dupla Ana+Beto' : 'solo'}`}
             >
-              ✨ gerar resumo
+              {isGenerating ? '⟳ gerando...' : '✨ gerar resumo'}
             </button>
           )}
         </div>

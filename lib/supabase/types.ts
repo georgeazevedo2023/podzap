@@ -150,6 +150,9 @@ export type Database = {
       groups: {
         Row: {
           created_at: string
+          default_period: string
+          default_tone: Database["public"]["Enums"]["summary_tone"]
+          default_voice_mode: string
           id: string
           instance_id: string
           is_monitored: boolean
@@ -162,6 +165,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_period?: string
+          default_tone?: Database["public"]["Enums"]["summary_tone"]
+          default_voice_mode?: string
           id?: string
           instance_id: string
           is_monitored?: boolean
@@ -174,6 +180,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_period?: string
+          default_tone?: Database["public"]["Enums"]["summary_tone"]
+          default_voice_mode?: string
           id?: string
           instance_id?: string
           is_monitored?: boolean

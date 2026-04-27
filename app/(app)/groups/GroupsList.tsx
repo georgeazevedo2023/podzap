@@ -5,9 +5,15 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import type { GroupView } from '@/lib/groups/service';
 
-import { GenerateNowModal } from '@/app/(app)/home/GenerateNowModal';
-
 import { GroupCard } from './GroupCard';
+
+/**
+ * Mesma chave que `GenerateNowModal` e `GeneratingBanner` usam — manter em
+ * sincronia. Quando o card 1-clique grava o ticket aqui, o banner em
+ * `/approval` lê e mostra o countdown. NÃO importar de `GenerateNowModal`
+ * pra evitar pegar todo o bundle do modal só pra ler o nome da chave.
+ */
+const GENERATING_STORAGE_KEY = 'podzap_generating';
 
 /** ms of "stop typing" before we update the URL (which triggers a re-fetch). */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -46,7 +52,7 @@ export function GroupsList({
   const [groups, setGroups] = useState<GroupView[]>(initial);
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [toggling, setToggling] = useState<Set<string>>(() => new Set());
-  const [generateGroupId, setGenerateGroupId] = useState<string | null>(null);
+  const [generating, setGenerating] = useState<Set<string>>(() => new Set());
   const [error, setError] = useState<string | null>(null);
 
   // Re-seed local state when the server re-renders with new data (new page,
@@ -145,6 +151,67 @@ export function GroupsList({
       }
     },
     [],
+  );
+
+  const handleQuickGenerate = useCallback(
+    async (group: GroupView) => {
+      // Se já tem outro ticket cozinhando (mesmo de outro grupo), redireciona
+      // pra /approval em vez de disparar duplicata.
+      if (typeof window !== 'undefined') {
+        const existing = window.localStorage.getItem(GENERATING_STORAGE_KEY);
+        if (existing) {
+          router.push('/approval');
+          return;
+        }
+      }
+
+      setGenerating((prev) => new Set(prev).add(group.id));
+      setError(null);
+      const startedAt = new Date().toISOString();
+      try {
+        const res = await fetch('/api/summaries/generate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ groupId: group.id }),
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as
+            | { error?: { message?: string } }
+            | null;
+          throw new Error(
+            body?.error?.message ?? `Falha ao gerar (${res.status})`,
+          );
+        }
+        // Grava o ticket pro GeneratingBanner pegar ao renderizar /approval.
+        if (typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem(
+              GENERATING_STORAGE_KEY,
+              JSON.stringify({
+                requestId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                groupId: group.id,
+                groupName: group.name || '(sem nome)',
+                tone: group.defaultTone,
+                startedAt,
+              }),
+            );
+          } catch {
+            // storage indisponível — segue, banner some sozinho.
+          }
+        }
+        router.push('/approval');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'erro ao gerar resumo');
+      } finally {
+        setGenerating((prev) => {
+          const next = new Set(prev);
+          next.delete(group.id);
+          return next;
+        });
+      }
+    },
+    [router],
   );
 
   const handleSearchKeyDown = useCallback(
@@ -318,21 +385,16 @@ export function GroupsList({
                 key={group.id}
                 group={group}
                 isToggling={toggling.has(group.id)}
+                isGenerating={generating.has(group.id)}
                 onToggle={(on) => {
                   void handleToggle(group.id, on);
                 }}
-                onGenerate={(id) => setGenerateGroupId(id)}
+                onQuickGenerate={(g) => {
+                  void handleQuickGenerate(g);
+                }}
               />
             ))}
           </div>
-
-          {generateGroupId && (
-            <GenerateNowModal
-              open={true}
-              onClose={() => setGenerateGroupId(null)}
-              initialGroupId={generateGroupId}
-            />
-          )}
 
           {totalPages > 1 && (
             <div
