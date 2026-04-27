@@ -69,16 +69,72 @@ Bucket: **`audios`** (separado do `media`, que guarda mídia original das mensag
 
 ## Voices
 
-Gemini TTS usa o catálogo de "prebuilt voices" documentado em <https://ai.google.dev/gemini-api/docs/speech-generation>. O MVP expõe apenas duas opções de alto nível:
+Gemini TTS usa o catálogo de "prebuilt voices" documentado em <https://ai.google.dev/gemini-api/docs/speech-generation>. Catálogo canônico exposto pela UI em `lib/audios/voices.ts` (Pacote 4):
 
-| Parâmetro `voice` | Gemini voiceName | Perfil                    |
-| ----------------- | ---------------- | ------------------------- |
-| `female` (default)| `Kore`           | morna, registro médio     |
-| `male`            | `Charon`         | firme, registro grave     |
+| Voice ID | Gênero | Perfil |
+|---|---|---|
+| `Kore` | feminina | warm, mid-pitched (default host1) |
+| `Leda` | feminina | jovial, brilhante |
+| `Sadachbia` | feminina | profissional, clara |
+| `Aoede` | feminina | suave, melódica |
+| `Charon` | masculino | firme, low-pitched (default host2) |
+| `Puck` | masculino | jovem, brincalhão |
+| `Orus` | masculino | ressonante, sério |
+| `Fenrir` | masculino | profundo, dramático |
 
-Mapeamento fica em `lib/ai/gemini-tts.ts` → `VOICE_MAP`. Para expor mais vozes (`Puck`, `Aoede`, `Fenrir`, …) basta estender o map + o union type `TtsVoice`. Nenhuma migração de DB é necessária — a coluna `audios.voice` é `text`.
+### Solo mode
 
-Não há teste formal de qualidade PT-BR por voice name — o prompt (`Narre em português do Brasil…`) é o que força o idioma; a voice name controla só o timbre.
+`gemini-tts.ts::TtsInput.voice: 'female' | 'male'` — usa `VOICE_MAP` legado (Kore/Charon). Pra expor outras vozes em solo, estender `VOICE_MAP`.
+
+### Duo mode (multi-speaker, Fase B+C+Pacote 4)
+
+Gemini TTS multi-speaker mapeia prefixos `host1:` / `host2:` no texto pra speaker configs. Em vez de `DUO_SPEAKERS` hardcoded (Ana=Kore, Beto=Charon), a partir da Pacote 4 o `audios/service.ts` busca a config do GRUPO via JOIN summaries→groups e passa via `TtsInput.speakers`:
+
+```ts
+speakers: [
+  { speaker: group.host1_name, voiceName: group.voice1_id },
+  { speaker: group.host2_name, voiceName: group.voice2_id },
+]
+```
+
+Quando `speakers` não é passado (resumos antigos, retries), cai no `DUO_SPEAKERS` legado. **Não bloqueia entrega**.
+
+Schema:
+- `groups.voice1_id text default 'Kore'` (CHECK contra os 8 IDs)
+- `groups.voice2_id text default 'Charon'`
+- `groups.host1_name text default 'Ana'`
+- `groups.host2_name text default 'Beto'`
+
+UI pra editar: `EditGroupModal` aba "Hosts & Vozes" (`app/(app)/groups/EditGroupModal.tsx`).
+
+Não há teste formal de qualidade PT-BR por voice name — o prompt força o idioma; a voice name controla só o timbre.
+
+---
+
+## Background music (Pacote 5)
+
+Pós-TTS, o áudio é mixado com uma trilha de fundo via `lib/audios/mix.ts::mixWithBackgroundMusic` (ffmpeg). Catálogo canônico em `lib/audios/music.ts`:
+
+| ID | Label | Status |
+|---|---|---|
+| `none` | Sem música | só voz, mais limpo |
+| `default` | Padrão | **arquivo presente** (`assets/podcast-music.mp3`) |
+| `chillout` | Chillout | ⚠️ arquivo pendente |
+| `upbeat` | Upbeat | ⚠️ arquivo pendente |
+| `epic` | Épico | ⚠️ arquivo pendente |
+| `lofi` | Lo-fi | ⚠️ arquivo pendente |
+
+Schema: `groups.background_music text default 'default'` (CHECK enumerado).
+
+Comportamento do mixer:
+- `music.id === 'none'` → skip mixing, áudio sai voz pura.
+- `music.filePath` não existe → cai pro `default`, com warning no console.
+- Mixer falha (ffmpeg ausente, erro IO) → fallback voz pura, com warning.
+
+UI: `EditGroupModal` aba Geral, `MusicPicker`. Pra adicionar track nova:
+1. Subir `assets/podcast-music-<id>.mp3` no repo
+2. Adicionar id no CHECK constraint da migration `0020` (ou criar nova)
+3. Adicionar entry em `MUSIC_TRACKS` (label/description/emoji/filePath)
 
 ---
 

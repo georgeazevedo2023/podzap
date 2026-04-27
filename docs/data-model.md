@@ -1,6 +1,6 @@
 # Modelo de dados — podZAP
 
-Schema canônico em `lib/supabase/types.ts` (autogerado via `scripts/gen-types.mjs`). Migrations em `db/migrations/0001..0015`.
+Schema canônico em `lib/supabase/types.ts` (autogerado via `scripts/gen-types.mjs`). Migrations em `db/migrations/0001..0020`.
 
 ## Tabelas (todas em `public`, com RLS habilitada)
 
@@ -10,7 +10,7 @@ Schema canônico em `lib/supabase/types.ts` (autogerado via `scripts/gen-types.m
 | `tenant_members` | Liga `auth.users` ↔ `tenants` com role | `role ∈ {owner, member}`, `phone_e164` |
 | `superadmins` | Bit global cross-tenant — staff podZAP | `user_id`, `note`. Helper: `public.is_superadmin()` |
 | `whatsapp_instances` | Conexão UAZAPI **1:1 por tenant** (UNIQUE) | `uazapi_token_encrypted` (AES-256-GCM), `uazapi_instance_name`, `uazapi_instance_id`, `status`, `phone` |
-| `groups` | Grupos sincronizados | `is_monitored` (controla pipeline), `uazapi_group_jid`, `member_count` |
+| `groups` | Grupos sincronizados + config rica por grupo | `is_monitored`, `uazapi_group_jid`, `member_count` · **defaults** (Fase A): `default_tone`, `default_voice_mode`, `default_period` · **estilo** (Fase B+C+P2): `prompt_template_id`, `host1_name`, `host2_name`, `prompt_override` · **áudio** (P4+P5): `voice1_id`, `voice2_id`, `background_music` |
 | `messages` | Mensagens capturadas via webhook | `type ∈ {text, audio, image, video, other}`, `media_url`, `media_storage_path`, `media_download_status`, `raw_payload` (body HTTP cru) |
 | `transcripts` | Texto de áudio (Groq) ou descrição de imagem (Gemini Vision) | `message_id` (FK), `text`, `language`, `confidence` |
 | `summaries` | Resumo gerado pelo LLM | `status ∈ {pending_review, approved, rejected}`, `voice_mode ∈ {single, duo}`, `caption`, `prompt_version`, `period_start`, `period_end` |
@@ -67,3 +67,8 @@ Lista cronológica:
 | 0013 | summary_caption — caption emoji-rich curta |
 | 0014 | backfill_empty_group_names |
 | 0015 | audios_uazapi_delivered_message_id — distinção podcast vs owner audio |
+| 0016 | group_defaults — `default_tone`/`default_voice_mode`/`default_period` (Fase A click-reduction) |
+| 0017 | group_templates_hosts — `prompt_template_id`/`host1_name`/`host2_name` (Fase B+C) |
+| 0018 | group_prompt_override — system prompt customizado, 100..6000 chars (Pacote 2) |
+| 0019 | group_voices — `voice1_id`/`voice2_id` Gemini TTS (Pacote 4) |
+| 0020 | group_background_music — track de fundo enum (Pacote 5) |

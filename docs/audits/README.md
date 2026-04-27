@@ -6,6 +6,7 @@ Histórico do projeto contado em 3 formatos:
 
 Mais recente primeiro:
 
+- [`session-2026-04-27-pacotes-1-5.md`](session-2026-04-27-pacotes-1-5.md) — **Pacotes 1-5 entregues**: card rico em /groups (stats grid + recolher), free-form prompt + duplicar config, schedule inline, voice picker per host (8 vozes Gemini), música por grupo (6 tracks). 5 commits, 5 deploys, 380 unit tests verde. Jornada do podcast 9→3 cliques (-66%).
 - [`session-2026-04-27-fase-bcd.md`](session-2026-04-27-fase-bcd.md) — **Fases B+C entregues**: catálogo de 7 templates de prompt (`lib/summary/templates.ts`), modal Editar grupo (Geral/Hosts&Vozes/Avançado), `PATCH /api/groups/[id]`, hosts customizáveis. 369 unit tests verde. Setup-uma-vez-por-grupo + "✨ gerar" 1-clique = jornada de podcast em ~3 cliques (toggle → gerar → aprovar).
 - [`session-2026-04-27-fase4.md`](session-2026-04-27-fase4.md) — Mobile-first **Fase 4 entregue**: AdminEntityList component, /admin/{tenants,users,uazapi} + tabela membros agora viram cards stacked em <md, modais com CTAs full-width, window.confirm eliminado. 15/15 specs verde. Fecha o ciclo mobile-first.
 - [`session-2026-04-27.md`](session-2026-04-27.md) — Mobile-first migration: Fases 1-3 deployed (shell + drawer + bottom nav + PWA / `/approval` / `/home` + `/podcasts`), bug oculto do `/home` `display: contents` corrigido, **Fase 4 pendente** (entregue na continuação ↑). 47 specs Playwright, 0 regressions, 3 deploys consecutivos.

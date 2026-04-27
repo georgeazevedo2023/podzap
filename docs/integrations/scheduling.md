@@ -209,6 +209,25 @@ dashboard Inngest para testar também não deve duplicar.
 | `PATCH`  | `/api/schedules/[id]`        | Patch parcial (frequency, time, dow, tone, approval_mode, voice, is_active) |
 | `DELETE` | `/api/schedules/[id]`        | Remove (ou use PATCH `is_active=false` para pausar) |
 
+## UI: schedule inline (Pacote 3)
+
+`/groups` GroupCard tem botão **"⏰ agendar"** que abre
+`ScheduleInlineModal` (`app/(app)/groups/ScheduleInlineModal.tsx`).
+Mini-form com escopo enxuto:
+
+- Frequency: só `daily`
+- TriggerType: só `fixed_time`
+- Approval mode: required (default) | optional
+- Tom/voiceMode/template/hosts: herdados do grupo (Fase A defaults)
+
+Detecta schedule existente automaticamente (POST → PATCH; DELETE inline
+disponível). `/schedule` continua existindo pra cases complexos
+(semanal, custom cron, dia da semana específico).
+
+`/groups/page.tsx` faz pre-fetch do `listSchedules()` e passa um
+`Set<groupId>` com schedules ATIVOS via prop pra `GroupsList`. Card
+mostra **"⏰ ativo"** em verde quando `hasSchedule=true`.
+
 Códigos de erro do service (`SchedulesError.code`): `NOT_FOUND`,
 `CONFLICT`, `VALIDATION_ERROR`, `DB_ERROR` — mapeados na API route para
 404 / 409 / 422 / 500.

@@ -81,11 +81,12 @@ Lê só o que é relevante pra task atual:
 | Webhook ingestion / parser wsmart | [`@docs/integrations/uazapi.md`](docs/integrations/uazapi.md) |
 | Worker novo Inngest | [`@docs/integrations/inngest.md`](docs/integrations/inngest.md) (eventos canônicos!) |
 | Pipeline filter/cluster/normalize | [`@docs/integrations/pipeline.md`](docs/integrations/pipeline.md) |
-| Resumo (Gemini 2.5 Pro + prompt) | [`@docs/integrations/summary-generation.md`](docs/integrations/summary-generation.md) |
+| Resumo (Gemini 2.5 Pro + prompt + templates + free-form) | [`@docs/integrations/summary-generation.md`](docs/integrations/summary-generation.md) — catálogo `lib/summary/templates.ts` |
 | Aprovação humana | [`@docs/integrations/approval.md`](docs/integrations/approval.md) |
-| TTS (música de fundo, voice_mode duo) | [`@docs/integrations/tts.md`](docs/integrations/tts.md) |
+| TTS (voice picker per host, música por grupo, voice_mode duo) | [`@docs/integrations/tts.md`](docs/integrations/tts.md) — catálogos `lib/audios/voices.ts` + `lib/audios/music.ts` |
 | Entrega WhatsApp (manual via /podcasts) | [`@docs/integrations/delivery.md`](docs/integrations/delivery.md) |
-| Agendamento (cron via n8n) | [`@docs/integrations/scheduling.md`](docs/integrations/scheduling.md) |
+| Agendamento (cron via n8n + schedule inline no card) | [`@docs/integrations/scheduling.md`](docs/integrations/scheduling.md) |
+| Grupos: card rico + Editar/Duplicar config | [`@docs/integrations/groups-sync.md`](docs/integrations/groups-sync.md) |
 | Admin panel | [`@docs/integrations/superadmin.md`](docs/integrations/superadmin.md) + [`@docs/integrations/admin-management.md`](docs/integrations/admin-management.md) |
 | Lib internals (crypto, ratelimit, media, …) | [`@docs/internals/README.md`](docs/internals/README.md) |
 | API rota nova / debug 4xx | [`@docs/api/README.md`](docs/api/README.md) |

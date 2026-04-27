@@ -11,7 +11,9 @@ Código: `lib/summary/prompt.ts`, `lib/summary/generator.ts`, `lib/ai-tracking/s
 
 ## Overview
 
-1. **Prompt** (`buildSummaryPrompt`) em PT-BR com tom configurável (`formal | fun | corporate`).
+1. **Prompt** (`buildSummaryPrompt`) em PT-BR — 3 caminhos de prioridade:
+   `promptOverride` (free-form, `groups.prompt_override`) > `templateId`
+   (catálogo `lib/summary/templates.ts`) > legado (`tone + voiceMode`).
 2. **Gemini 2.5 Pro** via `lib/ai/gemini-llm.ts::generateSummaryFromPrompt` (structured output).
 3. **Persiste** em `summaries` com `status='pending_review'` + `prompt_version` + `model`.
 4. **Tracking** em `ai_calls` via `trackAiCall` — best-effort, nunca derruba geração.
@@ -20,17 +22,56 @@ Código: `lib/summary/prompt.ts`, `lib/summary/generator.ts`, `lib/ai-tracking/s
 
 ```
 POST /api/summaries/generate (auth + 10/h/tenant rate limit)
+  → preenche tone/voiceMode/template/hosts/promptOverride do GROUPO
+    quando body omite (1-clique gerar usa só { groupId })
   → inngest event summary.requested
   → worker generate-summary
   → generateSummary(input)
     ├─ buildNormalizedConversation (Fase 6)
-    ├─ buildSummaryPrompt(conv, tone) → podzap-summary/v1-<tone>
+    ├─ buildSummaryPrompt(conv, tone, { templateId, host1Name,
+    │     host2Name, promptOverride, voiceMode })
+    │   → podzap-summary/v9-{override|template-id|tone}-{voice}
     ├─ generateSummaryFromPrompt (Gemini 2.5 Pro, JSON schema)
     ├─ INSERT summaries (pending_review)
     └─ trackAiCall (best-effort)
 ```
 
-## Tones
+## Catálogo de templates (Fase B+C)
+
+`lib/summary/templates.ts` define 7 templates. Cada um é um system prompt
+completo com placeholders `{{group_name}}` / `{{host1_name}}` /
+`{{host2_name}}`. O user prompt (formato JSON + conversation data +
+caption) é appended em todos os casos.
+
+| ID | Label | Voice mode | Quando usar |
+|---|---|---|---|
+| `default-duo` | Padrão (dupla) | duo | engineered DUO_SYSTEM_PROMPT refatorado |
+| `default-solo` | Padrão (solo) | single | engineered SOLO_SYSTEM_PROMPT refatorado |
+| `divertido` | Descontraído e divertido | duo | tom de bar, gírias, piadas |
+| `informativo` | Profissional e informativo | duo | abertura formal, 5 partes obrigatórias |
+| `fofoca` | Fofoca e novidades | duo | "vocês não vão acreditar...", suspense |
+| `esportivo` | Esportivo e narração | duo | narrador de estádio + comentarista |
+| `rapido` | Rápido e direto | duo | resumo curto, 3-5 destaques |
+
+Default = `default-duo`. Template seleciona-se via `groups.prompt_template_id`
+(persistido) ou via `templateId` no body do POST `/api/summaries/generate`.
+Quando set, o template **força o voiceMode** (preserva consistência dos
+prefixos `host1:` / `host2:`).
+
+### Free-form prompt override (Pacote 2)
+
+`groups.prompt_override` (text, 100..6000 chars) — power user define um
+system prompt completamente customizado. Quando preenchido, IGNORA o
+`templateId` e vai direto pro Gemini com vars substituídas.
+
+Riscos conhecidos: prompt injection, output JSON quebrado. Mitigado por:
+campo PRIVATE pro tenant + length cap + rate limit do
+`/api/summaries/generate` (10/h/tenant).
+
+## Tones (caminho legado)
+
+Quando NEM `promptOverride` NEM `templateId` são passados, cai no caminho
+legado: DUO/SOLO_SYSTEM_PROMPT engineered + sufixo de tom.
 
 | Tom | Quando | System prompt suffix |
 |---|---|---|
@@ -38,7 +79,8 @@ POST /api/summaries/generate (auth + 10/h/tenant rate limit)
 | `fun` | Grupos sociais, comunidades | "descontraído e caloroso, humor leve sem forçar, frases curtas" |
 | `corporate` | Times internos, stand-ups | "executivo sênior, decisões e impactos, frases diretas" |
 
-Default = `fun`.
+Default = `fun`. Schedules antigas (Fase 11) ainda usam este caminho via
+`schedules.tone`.
 
 ## Cost tracking — `ai_calls`
 
@@ -55,7 +97,15 @@ Programmatic: `getAiUsageForTenant(tenantId, start, end)`.
 
 ## Prompt versioning
 
-`podzap-summary/v<N>-<tone>`. Bump version → update tests → document diff em AUDIT → nunca reescrever `prompt_version` retroativamente.
+3 formatos válidos pra `prompt_version`:
+
+- `podzap-summary/v9-override-{voice}` — power user free-form ativo
+- `podzap-summary/v9-{template-id}-{voice}` — template do catálogo
+- `podzap-summary/v9-{voice}-{tone}` — caminho legado
+
+Bump version → update tests → document diff em AUDIT → nunca reescrever
+`prompt_version` retroativamente. O field é audit log do que foi enviado
+naquela request específica, não o estado atual do template/grupo.
 
 ## Hallucination mitigation
 

@@ -125,26 +125,44 @@ route.
 | Method + Path | Auth | Request | Success response | Notes |
 |---|---|---|---|---|
 | `POST /api/groups/sync` | Session | (none) | `200 { ok: true, count: number }` | Rate limit 6/min/tenant. `409 NO_INSTANCE` if tenant has no instance. `502 UAZAPI_ERROR` if upstream fails. |
-| `GET /api/groups` | Session | Query: `?monitored=true` (optional) | `200 { ok: true, groups: Group[] }` | Client-side refresh after toggle/sync. |
-| `POST /api/groups/[id]/monitor` | Session | `{ monitored: boolean }` | `200 { ok: true, group: Group }` | Tenant-check enforced in the update `WHERE` clause on top of RLS (defence in depth). Returns `404 NOT_FOUND` if the id doesn't belong to the tenant. |
+| `GET /api/groups` | Session | Query: `?monitoredOnly=true&search=&pageSize=` | `200 { groups: GroupView[], total, page, pageSize }` | Client-side refresh after toggle/sync. Server-paginated. |
+| `POST /api/groups/[id]/monitor` | Session | `{ on: boolean }` | `200 { group: GroupView }` | Tenant-check enforced in the update `WHERE` clause on top of RLS (defence in depth). Returns `404 NOT_FOUND` if the id doesn't belong to the tenant. |
+| `PATCH /api/groups/[id]` | Session | Patch parcial (`defaultTone`, `defaultVoiceMode`, `defaultPeriod`, `promptTemplateId`, `host1Name`, `host2Name`, `promptOverride`, `voice1Id`, `voice2Id`, `backgroundMusic`) | `200 { group: GroupView }` | UI: `EditGroupModal`. Só envia o que mudou. NÃO mexe em `is_monitored`. |
+| `POST /api/groups/[id]/duplicate-config` | Session | `{ targetGroupIds: string[] }` (1..50) | `200 { updated: number }` | Atômico — falha NOT_FOUND se algum target for de outro tenant. UI: `DuplicateConfigModal`. |
 
-`Group` DTO returned by the API:
+`GroupView` DTO retornado pela API (todos os caminhos):
 
 ```ts
 {
   id: string;
+  tenantId: string;
+  instanceId: string;
   uazapiGroupJid: string;
   name: string;
   pictureUrl: string | null;
-  membersCount: number | null;
   isMonitored: boolean;
-  lastSyncedAt: string; // ISO
+  memberCount: number | null;
+  lastSyncedAt: string | null;
+  createdAt: string;
+  // Defaults Fase A:
+  defaultTone: 'formal' | 'fun' | 'corporate';
+  defaultVoiceMode: 'single' | 'duo';
+  defaultPeriod: '24h' | '7d';
+  // Estilo Fase B+C+P2:
+  promptTemplateId: TemplateId; // ver lib/summary/templates.ts
+  host1Name: string;
+  host2Name: string;
+  promptOverride: string | null; // power user free-form
+  // Áudio P4+P5:
+  voice1Id: VoiceId; // ver lib/audios/voices.ts (8 IDs)
+  voice2Id: VoiceId;
+  backgroundMusic: MusicId; // ver lib/audios/music.ts (6 IDs)
+  // Stats opcionais (só com listGroups({withRecentMessageCount, withGroupStats: true})):
+  recentMessageCount?: number | null;
+  summaryCount?: number | null;
+  lastSummaryAt?: string | null;
 }
 ```
-
-> **TODO (sync with implementation agents):** the plan lists the route as
-> `/api/groups/:id/monitor`; if the implementation ships a different final
-> shape (e.g. `PATCH /api/groups/[id]`), update this table accordingly.
 
 ---
 
