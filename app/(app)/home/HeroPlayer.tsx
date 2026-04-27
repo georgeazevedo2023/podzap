@@ -463,8 +463,8 @@ export function HeroPlayer({
           >
             <button
               type="button"
-              className="btn btn-ghost"
-              style={{ color: '#fff', padding: 10 }}
+              className="btn btn-ghost btn-tap"
+              style={{ color: '#fff', padding: 10, minWidth: 44 }}
               title="voltar 15s"
               onClick={() => {
                 const el = audioRef.current;
@@ -491,8 +491,8 @@ export function HeroPlayer({
             </button>
             <button
               type="button"
-              className="btn btn-ghost"
-              style={{ color: '#fff', padding: 10 }}
+              className="btn btn-ghost btn-tap"
+              style={{ color: '#fff', padding: 10, minWidth: 44 }}
               title="pular 15s"
               onClick={() => {
                 const el = audioRef.current;

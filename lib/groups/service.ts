@@ -69,6 +69,16 @@ export type GroupView = {
    * no render default. `null` significa "não carregado", não "zero".
    */
   recentMessageCount?: number | null;
+  /**
+   * Total de podcasts gerados pra este grupo (qualquer status). Populado
+   * em `listGroups({ withGroupStats: true })`.
+   */
+  summaryCount?: number | null;
+  /**
+   * Timestamp do último podcast gerado (qualquer status). `null` quando
+   * o grupo nunca teve resumo gerado.
+   */
+  lastSummaryAt?: string | null;
 };
 
 /**
@@ -237,6 +247,12 @@ export async function listGroups(
      * N. Use em `/groups` pra mostrar contagem por card.
      */
     withRecentMessageCount?: boolean;
+    /**
+     * Anexa `summaryCount` (total de podcasts) e `lastSummaryAt` em cada
+     * GroupView. Mesma estratégia: 1 query agregada por página. Usado pelo
+     * card rico em `/groups` (Fase D).
+     */
+    withGroupStats?: boolean;
   },
 ): Promise<ListGroupsResult> {
   const supabase = createAdminClient();
@@ -308,6 +324,41 @@ export async function listGroups(
       }
       for (const v of views) {
         v.recentMessageCount = counts.get(v.id) ?? 0;
+      }
+    }
+  }
+
+  // Anexa stats de resumos (total + timestamp do último). Uma query só
+  // selecionando group_id + created_at, ordenada DESC pra reuso no
+  // último timestamp + count client-side. Cap implícito é o tamanho do
+  // historical de summaries — em prod com poucos meses de dados isso é
+  // cheap; se virar problema, vira agregação SQL. Por ora vale a
+  // simplicidade.
+  if (opts?.withGroupStats && views.length > 0) {
+    const ids = views.map((v) => v.id);
+    const { data: sums, error: sumsErr } = await supabase
+      .from("summaries")
+      .select("group_id, created_at")
+      .eq("tenant_id", tenantId)
+      .in("group_id", ids)
+      .order("created_at", { ascending: false });
+    if (!sumsErr && sums) {
+      const counts = new Map<string, number>();
+      const lastAt = new Map<string, string>();
+      for (const s of sums as Array<{
+        group_id: string;
+        created_at: string;
+      }>) {
+        counts.set(s.group_id, (counts.get(s.group_id) ?? 0) + 1);
+        // Como ordenamos DESC, a primeira ocorrência por group_id é a
+        // mais recente.
+        if (!lastAt.has(s.group_id)) {
+          lastAt.set(s.group_id, s.created_at);
+        }
+      }
+      for (const v of views) {
+        v.summaryCount = counts.get(v.id) ?? 0;
+        v.lastSummaryAt = lastAt.get(v.id) ?? null;
       }
     }
   }
