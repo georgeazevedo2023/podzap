@@ -19,13 +19,11 @@
  *     which costs money and is rarely what we want.
  */
 
-import { existsSync } from "node:fs";
-
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAudio } from "@/lib/ai/gemini-tts";
 import { trackAiCall } from "@/lib/ai-tracking/service";
 import { mixWithBackgroundMusic, MixError } from "@/lib/audios/mix";
-import { resolveMusic } from "@/lib/audios/music";
+import { resolveMusicAsync } from "@/lib/audios/music";
 
 const AUDIOS_BUCKET = "audios";
 
@@ -312,43 +310,29 @@ export async function createAudioForSummary(
   }
   const durationMs = Date.now() - startedAt;
 
-  // ── 3b. Mixa voz + música de fundo (best-effort, Pacote 5) ───────────
-  // - Se musicId = 'none': pula mixing, áudio sai voz pura.
-  // - Se musicId tem arquivo mas o file não existe (track ainda não foi
-  //   subida pro repo), faz fallback pro 'default' antes de tentar mixar.
-  // - Se ffmpeg/mixer falhar, cai pra voz pura — música é enhancement.
+  // ── 3b. Mixa voz + música de fundo (best-effort) ─────────────────────
+  // resolveMusicAsync hits o catálogo `music_tracks` no DB:
+  // - se 'none': filePath=null → pula mixing
+  // - se upload (Storage): baixa pra /tmp cache + retorna path local
+  // - se builtin (assets/): retorna path direto
+  // - falha: cai pro fallback default (voz pura no pior caso)
   let finalAudio = ttsResult.audio;
   let finalDurationSeconds = ttsResult.durationSeconds;
-  const music = resolveMusic(musicId);
-  if (music.id !== "none" && music.filePath) {
-    let musicPath = music.filePath;
-    if (!existsSync(musicPath)) {
-      const fallback = resolveMusic("default");
+  const music = await resolveMusicAsync(musicId);
+  if (music.filePath) {
+    try {
+      const mixed = await mixWithBackgroundMusic(ttsResult.audio, {
+        musicPath: music.filePath,
+      });
+      finalAudio = mixed.mixed;
+      finalDurationSeconds = mixed.durationSeconds;
+    } catch (err) {
+      const code = err instanceof MixError ? err.code : "UNKNOWN";
+      const msg = err instanceof Error ? err.message : String(err);
       // eslint-disable-next-line no-console
       console.warn(
-        `[audios] music file '${music.id}' not found at ${musicPath}, falling back to default`,
+        `[audios] background music mix failed (${code}), falling back to voice-only: ${msg}`,
       );
-      if (fallback.filePath && existsSync(fallback.filePath)) {
-        musicPath = fallback.filePath;
-      } else {
-        musicPath = "";
-      }
-    }
-    if (musicPath) {
-      try {
-        const mixed = await mixWithBackgroundMusic(ttsResult.audio, {
-          musicPath,
-        });
-        finalAudio = mixed.mixed;
-        finalDurationSeconds = mixed.durationSeconds;
-      } catch (err) {
-        const code = err instanceof MixError ? err.code : "UNKNOWN";
-        const msg = err instanceof Error ? err.message : String(err);
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[audios] background music mix failed (${code}), falling back to voice-only: ${msg}`,
-        );
-      }
     }
   }
 

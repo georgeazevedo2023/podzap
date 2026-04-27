@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 
 import { Modal } from '@/components/ui/Modal';
 import { TEMPLATES, TEMPLATE_IDS, type TemplateId } from '@/lib/summary/templates';
@@ -10,9 +10,32 @@ import {
   VOICES,
   type VoiceId,
 } from '@/lib/audios/voices';
-import { MUSIC_IDS, MUSIC_TRACKS, type MusicId } from '@/lib/audios/music';
+import { MUSIC_TRACKS, type MusicId } from '@/lib/audios/music';
 import type { GroupView } from '@/lib/groups/service';
 import type { SummaryTone } from '@/lib/summary/prompt';
+
+/** Snapshot público de uma track ativa, retornado por GET /api/groups/music. */
+type PublicTrack = {
+  id: string;
+  label: string;
+  description: string;
+  emoji: string;
+  sortOrder: number;
+};
+
+/**
+ * Fallback estático — usado enquanto o fetch de /api/groups/music está em
+ * voo, ou se ele falhar. Inclui só os 6 IDs do seed da migration 0021.
+ */
+const FALLBACK_TRACKS: PublicTrack[] = Object.values(MUSIC_TRACKS).map(
+  (m, idx) => ({
+    id: m.id,
+    label: m.label,
+    description: m.description,
+    emoji: m.emoji,
+    sortOrder: idx,
+  }),
+);
 
 /**
  * Modal "Editar grupo" — fechamento da Fase B+C do mobile-first follow-up.
@@ -63,8 +86,31 @@ export function EditGroupModal({
   const [voice1, setVoice1] = useState<VoiceId>(group.voice1Id);
   const [voice2, setVoice2] = useState<VoiceId>(group.voice2Id);
   const [music, setMusic] = useState<MusicId>(group.backgroundMusic);
+  const [tracks, setTracks] = useState<PublicTrack[]>(FALLBACK_TRACKS);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Carrega tracks ativas do catálogo dinâmico (music_tracks). Best-effort
+  // — se falhar, fica no fallback estático e o user ainda consegue editar.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/groups/music', { cache: 'no-store' });
+        if (!res.ok) return;
+        const body = (await res.json()) as { tracks?: PublicTrack[] };
+        if (!cancelled && Array.isArray(body.tracks) && body.tracks.length > 0) {
+          setTracks(body.tracks);
+        }
+      } catch {
+        /* keep fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   /**
    * Diff manual: só inclui campos que de fato mudaram em relação ao grupo
@@ -192,6 +238,7 @@ export function EditGroupModal({
             voiceMode={voiceMode}
             period={period}
             music={music}
+            tracks={tracks}
             onTone={setTone}
             onVoiceMode={setVoiceMode}
             onPeriod={setPeriod}
@@ -319,6 +366,7 @@ function GeralTab({
   voiceMode,
   period,
   music,
+  tracks,
   onTone,
   onVoiceMode,
   onPeriod,
@@ -329,6 +377,7 @@ function GeralTab({
   voiceMode: 'single' | 'duo';
   period: '24h' | '7d';
   music: MusicId;
+  tracks: PublicTrack[];
   onTone: (t: SummaryTone) => void;
   onVoiceMode: (v: 'single' | 'duo') => void;
   onPeriod: (p: '24h' | '7d') => void;
@@ -376,6 +425,7 @@ function GeralTab({
 
       <MusicPicker
         value={music}
+        tracks={tracks}
         onChange={onMusic}
         disabled={disabled}
       />
@@ -385,10 +435,12 @@ function GeralTab({
 
 function MusicPicker({
   value,
+  tracks,
   onChange,
   disabled,
 }: {
   value: MusicId;
+  tracks: PublicTrack[];
   onChange: (id: MusicId) => void;
   disabled: boolean;
 }) {
@@ -412,16 +464,15 @@ function MusicPicker({
           gap: 8,
         }}
       >
-        {MUSIC_IDS.map((id) => {
-          const m = MUSIC_TRACKS[id];
-          const selected = value === id;
+        {tracks.map((m) => {
+          const selected = value === m.id;
           return (
             <button
-              key={id}
+              key={m.id}
               type="button"
               role="radio"
               aria-checked={selected}
-              onClick={() => !disabled && onChange(id)}
+              onClick={() => !disabled && onChange(m.id)}
               disabled={disabled}
               title={m.description}
               style={{
@@ -471,8 +522,8 @@ function MusicPicker({
         })}
       </div>
       <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
-        💡 tracks novas (chillout/upbeat/epic/lofi) precisam dos arquivos
-        em <code>assets/</code> — antes disso o sistema cai no padrão.
+        💡 tracks gerenciadas pelo admin em <code>/admin/music</code>. se uma
+        track sumir, o áudio cai no padrão silenciosamente.
       </span>
     </div>
   );

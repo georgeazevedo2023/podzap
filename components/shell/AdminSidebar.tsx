@@ -11,7 +11,7 @@ import { Sticker } from '../ui/Sticker';
  * `/admin/*`. Kept separate from the tenant-app `NavId` union so the two
  * sidebars can evolve independently.
  */
-export type AdminNavId = 'dashboard' | 'tenants' | 'users' | 'uazapi';
+export type AdminNavId = 'dashboard' | 'tenants' | 'users' | 'uazapi' | 'music';
 
 interface AdminNavItem {
   id: AdminNavId;
@@ -24,6 +24,7 @@ const ROUTES: Record<AdminNavId, string> = {
   tenants: '/admin/tenants',
   users: '/admin/users',
   uazapi: '/admin/uazapi',
+  music: '/admin/music',
 };
 
 /**
@@ -70,6 +71,7 @@ export function AdminSidebar({ userEmail }: AdminSidebarProps) {
     { id: 'tenants', label: 'Tenants', icon: <Icons.Group /> },
     { id: 'users', label: 'Usuários', icon: <Icons.Check /> },
     { id: 'uazapi', label: 'Instâncias', icon: <Icons.Zap /> },
+    { id: 'music', label: 'Músicas', icon: <span aria-hidden>🎵</span> },
   ];
 
   const truncatedEmail =

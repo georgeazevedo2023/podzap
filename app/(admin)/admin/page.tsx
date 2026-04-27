@@ -146,6 +146,12 @@ export default async function AdminDashboardPage() {
               title="atribuir instância"
               desc="vincula UAZAPI a tenant"
             />
+            <QuickLink
+              href="/admin/music"
+              emoji="🎵"
+              title="catálogo de músicas"
+              desc="upload de tracks de fundo"
+            />
           </div>
         </section>
       </div>

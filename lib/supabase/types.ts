@@ -306,6 +306,45 @@ export type Database = {
           },
         ]
       }
+      music_tracks: {
+        Row: {
+          builtin_filename: string | null
+          created_at: string
+          description: string
+          emoji: string
+          id: string
+          is_active: boolean
+          label: string
+          sort_order: number
+          storage_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          builtin_filename?: string | null
+          created_at?: string
+          description?: string
+          emoji?: string
+          id: string
+          is_active?: boolean
+          label: string
+          sort_order?: number
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          builtin_filename?: string | null
+          created_at?: string
+          description?: string
+          emoji?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          sort_order?: number
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       schedules: {
         Row: {
           approval_mode: Database["public"]["Enums"]["schedule_approval_mode"]

@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { requireSuperadmin } from "@/lib/tenant";
 import type { CurrentTenant, CurrentUser } from "@/lib/tenant";
 import { UazapiAdminError } from "@/lib/admin/uazapi";
+import { MusicAdminError } from "@/lib/admin/music";
 import { UazapiError } from "@/lib/uazapi/types";
 
 export type AdminErrorCode =
@@ -89,6 +90,23 @@ export function mapErrorToResponse(err: unknown): NextResponse {
         return errorResponse(409, "CONFLICT", err.message);
       case "UAZAPI_ERROR":
         return errorResponse(502, "UAZAPI_ERROR", err.message);
+      case "DB_ERROR":
+      default:
+        return errorResponse(500, "INTERNAL_ERROR", err.message);
+    }
+  }
+
+  if (err instanceof MusicAdminError) {
+    switch (err.code) {
+      case "NOT_FOUND":
+        return errorResponse(404, "NOT_FOUND", err.message);
+      case "ALREADY_EXISTS":
+        return errorResponse(409, "CONFLICT", err.message);
+      case "INVALID_INPUT":
+        return errorResponse(400, "VALIDATION_ERROR", err.message);
+      case "IMMUTABLE_TRACK":
+        return errorResponse(403, "FORBIDDEN", err.message);
+      case "STORAGE_ERROR":
       case "DB_ERROR":
       default:
         return errorResponse(500, "INTERNAL_ERROR", err.message);
