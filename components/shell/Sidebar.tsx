@@ -510,6 +510,10 @@ function WhatsappNavRow({
         alignItems: 'center',
         gap: 12,
         padding: '10px 12px',
+        // 44px floor for the WCAG tap target. The nav row's icon (18px) +
+        // 10px vertical padding + border lands at ~42px without this; the
+        // explicit min-height nudges it over the line on every viewport.
+        minHeight: 44,
         background: active ? 'var(--purple-600)' : 'transparent',
         color: active ? '#fff' : 'var(--text)',
         borderRadius: 'var(--r-md)',

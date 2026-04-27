@@ -189,7 +189,7 @@ export function AdminSidebar({ userEmail }: AdminSidebarProps) {
           back to the regular app shell without logging out. */}
       <a
         href="/home"
-        className="btn btn-ghost"
+        className="btn btn-ghost btn-tap"
         style={{
           fontSize: 12,
           padding: '10px 12px',

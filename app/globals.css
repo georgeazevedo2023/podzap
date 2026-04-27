@@ -95,6 +95,46 @@
   --shadow-soft:       0 10px 30px rgba(10, 4, 32, 0.12);
   --shadow-glow-lime:  0 0 40px rgba(198, 255, 60, 0.4);
   --shadow-glow-pink:  0 0 40px rgba(255, 61, 165, 0.35);
+
+  /* Breakpoints — Tailwind v4 reads --breakpoint-* to generate variants
+     (sm:, md:, lg:, xl:). Mobile-first: each breakpoint is a min-width.
+     480 = phone landscape / phablet, 640 = small tablet, 768 = tablet,
+     1024 = small laptop. We skip xl (>=1280) — podZAP doesn't have ultra-wide
+     specific layouts, fewer variants = less surface for inconsistency. */
+  --breakpoint-xs: 30rem;   /* 480px */
+  --breakpoint-sm: 40rem;   /* 640px */
+  --breakpoint-md: 48rem;   /* 768px */
+  --breakpoint-lg: 64rem;   /* 1024px */
+
+  /* Fluid type scale — clamp(min, fluid, max). Used by .fs-* utilities and
+     by inline styles that want to opt-in to mobile-friendly sizing. The
+     prototype's fixed 38px h1 collapses to ~24px on a 360px phone, then
+     scales up to 38px on a 1024px+ desktop. */
+  --fs-display: clamp(28px, 5.5vw, 44px);
+  --fs-h1:      clamp(22px, 4.5vw, 38px);
+  --fs-h2:      clamp(18px, 3.4vw, 26px);
+  --fs-h3:      clamp(16px, 2.6vw, 22px);
+  --fs-body:    clamp(14px, 1.6vw, 16px);
+  --fs-small:   clamp(12px, 1.3vw, 14px);
+
+  /* Touch target floor — buttons/inputs must hit at least this in mobile.
+     44px is the WCAG/Apple HIG minimum; we ship 48 to leave breathing room
+     for the chunky 2.5px border (which visually shrinks the hit area). */
+  --tap-min: 48px;
+
+  /* Safe area insets — exposed as CSS vars so the bottom nav and any
+     fixed-bottom UI can use `padding-bottom: var(--safe-bottom)` without
+     duplicating the `env()` everywhere. Falls back to 0 on browsers that
+     don't support env(). */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+
+  /* Reserved space for the fixed mobile bottom nav. AppShell uses this on
+     <main> so content doesn't end up under the nav. Overridden to 0 at md+
+     where the nav is hidden — keeps desktop main fully usable. */
+  --bottom-nav-h: calc(64px + var(--safe-bottom));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -210,7 +250,44 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+  /* Default: natural document scroll (mobile / small viewports).
+     Desktop layouts that need an "app shell" feel (sidebar fixed, only main
+     scrolls) opt-in via `data-shell="fixed"` on body or a parent at md+.
+     Previously this was a flat `overflow: hidden` which broke iOS Safari
+     scroll on every route. */
+  overflow: auto;
+  /* Prevent iOS Safari from bouncing the whole page when overscroll happens
+     inside an inner scroll container (main). Per-element overscroll-behavior
+     can override this where needed. */
+  overscroll-behavior-y: none;
+}
+
+/* Desktop app-shell mode: locks body so only inner <main> scrolls. Activated
+   by [data-shell="fixed"] which the (app)/(admin) layouts apply at md+ via
+   inline style. Keeps the legacy "no body scroll" desktop UX intact. */
+@media (min-width: 48rem) {
+  body[data-shell="fixed"] { overflow: hidden; }
+  /* No bottom nav on desktop — reclaim the reserved space. */
+  :root { --bottom-nav-h: 0px; }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Responsive show/hide helpers — drive the mobile vs desktop chrome split.   */
+/* `data-mobile-only` on header / bottom-nav / drawer wrapper. `data-desktop-  */
+/* only` on the persistent sidebar column. md = 48rem (768px).                */
+/* -------------------------------------------------------------------------- */
+[data-mobile-only]  { display: none; }
+[data-desktop-only] { display: none; }
+
+@media (max-width: 47.999rem) {
+  [data-mobile-only] { display: revert; }
+  [data-mobile-only][data-as="flex"] { display: flex; }
+  [data-mobile-only][data-as="grid"] { display: grid; }
+}
+@media (min-width: 48rem) {
+  [data-desktop-only] { display: revert; }
+  [data-desktop-only][data-as="flex"] { display: flex; }
+  [data-desktop-only][data-as="grid"] { display: grid; }
 }
 
 /* Scrollbars subtle */
@@ -271,8 +348,12 @@ body {
   .btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 12px 20px;
+    /* Floor at 44px hit area (WCAG 2.5.5). Buttons that need to be smaller
+       (icon-only utility, ghost in chips) override via inline style. */
+    min-height: 44px;
     font-family: var(--font-body);
     font-weight: 700;
     font-size: 14px;
@@ -294,12 +375,24 @@ body {
   .btn-purple { background: #5B2BE8; color: #fff; }
   .btn-yellow { background: #FFC828; }
   .btn-zap    { background: #22C55E; color: #fff; }
-  .btn-ghost  { background: transparent; box-shadow: none; color: var(--text); }
+  .btn-ghost  {
+    background: transparent;
+    box-shadow: none;
+    color: var(--text);
+    /* Ghost buttons are commonly used as inline chips ("sair", filter pills)
+       where the 44px floor would visually inflate them. Opt out here; pages
+       that want a ghost-styled tap target should add `.btn-tap` (below) or
+       set min-height inline. */
+    min-height: auto;
+  }
   .btn-ghost:hover {
     background: color-mix(in srgb, var(--text) 10%, transparent);
     box-shadow: none;
     transform: none;
   }
+  /* Explicit opt-in for full-size touch target. Stack with .btn-ghost when
+     a ghost button must remain tap-friendly on mobile (e.g. nav rows). */
+  .btn-tap { min-height: 44px; }
 
   /* CARD ------------------------------------------------------------------- */
   .card {

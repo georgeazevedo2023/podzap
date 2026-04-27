@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
-import { AppSidebar } from '@/components/shell/AppSidebar';
+import { AppShell } from '@/components/shell/AppShell';
 import type { WhatsappStatus } from '@/components/shell/Sidebar';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCurrentUserAndTenant, isSuperadmin } from '@/lib/tenant';
@@ -117,46 +117,24 @@ export default async function AppLayout({
     isSuperadmin(user.id),
   ]);
 
+  // `AppShell` is a client component that owns the responsive split:
+  //   - desktop (≥md): persistent sidebar + main, body overflow locked so
+  //     only main scrolls (legacy app-shell UX);
+  //   - mobile (<md): MobileHeader + main + BottomNav, sidebar renders
+  //     inside a Drawer triggered by the hamburger / "Mais" item, body
+  //     scrolls naturally so iOS Safari address-bar collapse works.
+  // All auth + data fetching stays here; the shell receives plain props.
   return (
-    // `data-theme="dark"` flips the semantic tokens (--bg, --surface, --text,
-    // --stroke, shadow) declared in `app/globals.css`. Applying it on the
-    // wrapper (not <html>) keeps `/login`, `/auth/*`, and the landing page
-    // on the default light palette while every `(app)` route renders dark.
-    <div
-      data-theme="dark"
-      style={{
-        display: 'flex',
-        // CRÍTICO: altura FIXA (não minHeight). body já tem overflow:hidden,
-        // então a única forma de scrollar o conteúdo é `<main>` ter
-        // overflow-y:auto com altura capada. Com minHeight, o flex growia
-        // pra acomodar o filho e main nunca tinha overflow → scroll travava
-        // (repro: https://playwright → scrollHeight === clientHeight).
-        height: '100vh',
-        background: 'var(--bg)',
-        color: 'var(--text)',
-      }}
+    <AppShell
+      userEmail={user.email}
+      tenantName={tenant.name}
+      tenantPlan={tenant.plan}
+      whatsappStatus={whatsapp.status}
+      whatsappPhone={whatsapp.phone}
+      pendingApprovals={pendingApprovals}
+      isSuperadmin={superadmin}
     >
-      <AppSidebar
-        userEmail={user.email}
-        tenantName={tenant.name}
-        tenantPlan={tenant.plan}
-        whatsappStatus={whatsapp.status}
-        whatsappPhone={whatsapp.phone}
-        pendingApprovals={pendingApprovals}
-        isSuperadmin={superadmin}
-      />
-      <main
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          minWidth: 0,
-          // height herdada via flex — agora que o parent é 100vh fixo, main
-          // é exatamente 100vh e o overflow-y:auto de fato dispara quando o
-          // conteúdo (lista + paginação) ultrapassar a altura.
-        }}
-      >
-        {children}
-      </main>
-    </div>
+      {children}
+    </AppShell>
   );
 }

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
-import { AdminSidebar } from '@/components/shell/AdminSidebar';
+import { AdminShell } from '@/components/shell/AdminShell';
 import { requireSuperadmin } from '@/lib/tenant';
 
 /**
@@ -42,26 +42,5 @@ export default async function AdminLayout({
 
   const { user } = guard;
 
-  return (
-    <div
-      data-theme="dark"
-      style={{
-        display: 'flex',
-        minHeight: '100vh',
-        background: 'var(--bg)',
-        color: 'var(--text)',
-      }}
-    >
-      <AdminSidebar userEmail={user.email} />
-      <main
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          minWidth: 0,
-        }}
-      >
-        {children}
-      </main>
-    </div>
-  );
+  return <AdminShell userEmail={user.email}>{children}</AdminShell>;
 }
