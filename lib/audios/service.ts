@@ -23,7 +23,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAudio } from "@/lib/ai/gemini-tts";
 import { trackAiCall } from "@/lib/ai-tracking/service";
 import { mixWithBackgroundMusic, MixError } from "@/lib/audios/mix";
-import { resolveMusicAsync } from "@/lib/audios/music";
+import { resolveMusicAsync } from "@/lib/audios/music-resolver";
 
 const AUDIOS_BUCKET = "audios";
 
