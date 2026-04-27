@@ -3,6 +3,7 @@
 // NOTE: imports only the `GroupView` type from the service module, which is
 // authored in parallel by another Fase 3 agent.
 
+import { TEMPLATES } from '@/lib/summary/templates';
 import type { GroupView } from '@/lib/groups/service';
 
 export interface GroupCardProps {
@@ -17,6 +18,8 @@ export interface GroupCardProps {
   onQuickGenerate?: (group: GroupView) => void;
   /** True enquanto o POST está em voo pra travar duplo clique. */
   isGenerating?: boolean;
+  /** Callback quando user clica "✎ editar" — abre EditGroupModal no pai. */
+  onEdit?: (group: GroupView) => void;
 }
 
 /**
@@ -36,10 +39,12 @@ export function GroupCard({
   isToggling,
   onQuickGenerate,
   isGenerating = false,
+  onEdit,
 }: GroupCardProps) {
   const on = group.isMonitored;
   const recentCount = group.recentMessageCount ?? null;
   const canGenerate = on && recentCount !== null && recentCount >= 3;
+  const template = TEMPLATES[group.promptTemplateId];
 
   const handleCardClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (isToggling) return;
@@ -47,7 +52,9 @@ export function GroupCard({
     const target = event.target as HTMLElement;
     if (
       target.closest('[data-toggle-btn]') ||
-      target.closest('[data-generate-btn]')
+      target.closest('[data-generate-btn]') ||
+      target.closest('[data-edit-btn]') ||
+      target.closest('[data-card-config]')
     ) {
       return;
     }
@@ -85,6 +92,9 @@ export function GroupCard({
         position: 'relative',
         opacity: isToggling ? 0.6 : 1,
         outline: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0,
       }}
     >
       {/* Toggle (top-right) */}
@@ -192,11 +202,72 @@ export function GroupCard({
                 opacity: isGenerating ? 0.6 : 1,
               }}
               aria-label={`Gerar resumo agora pro grupo ${group.name} (${group.defaultPeriod}, ${group.defaultVoiceMode === 'duo' ? 'dupla' : 'solo'})`}
-              title={`Tom: ${group.defaultTone} · ${group.defaultPeriod} · ${group.defaultVoiceMode === 'duo' ? 'dupla Ana+Beto' : 'solo'}`}
+              title={`${template.label} · ${group.host1Name}+${group.host2Name} · ${group.defaultPeriod}`}
             >
               {isGenerating ? '⟳ gerando...' : '✨ gerar resumo'}
             </button>
           )}
+        </div>
+      )}
+
+      {on && onEdit && (
+        <div
+          data-card-config
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            marginTop: 10,
+            paddingTop: 10,
+            borderTop: '1px solid var(--stroke)',
+            fontSize: 11,
+            color: 'var(--text-dim)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              minWidth: 0,
+              flex: 1,
+            }}
+            title={`Template: ${template.label} · ${template.description}`}
+          >
+            <span aria-hidden>{template.emoji}</span>
+            <span
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                fontWeight: 700,
+              }}
+            >
+              {template.label}
+            </span>
+            <span style={{ opacity: 0.6 }}>·</span>
+            <span style={{ whiteSpace: 'nowrap' }}>
+              {group.host1Name}+{group.host2Name}
+            </span>
+          </div>
+          <button
+            type="button"
+            data-edit-btn
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(group);
+            }}
+            className="btn btn-ghost btn-tap"
+            style={{
+              fontSize: 11,
+              padding: '6px 12px',
+              flexShrink: 0,
+            }}
+            aria-label={`Editar configuração do grupo ${group.name}`}
+          >
+            ✎ editar
+          </button>
         </div>
       )}
     </div>

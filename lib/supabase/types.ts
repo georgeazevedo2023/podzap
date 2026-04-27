@@ -153,6 +153,8 @@ export type Database = {
           default_period: string
           default_tone: Database["public"]["Enums"]["summary_tone"]
           default_voice_mode: string
+          host1_name: string
+          host2_name: string
           id: string
           instance_id: string
           is_monitored: boolean
@@ -160,6 +162,7 @@ export type Database = {
           member_count: number | null
           name: string
           picture_url: string | null
+          prompt_template_id: string
           tenant_id: string
           uazapi_group_jid: string
         }
@@ -168,6 +171,8 @@ export type Database = {
           default_period?: string
           default_tone?: Database["public"]["Enums"]["summary_tone"]
           default_voice_mode?: string
+          host1_name?: string
+          host2_name?: string
           id?: string
           instance_id: string
           is_monitored?: boolean
@@ -175,6 +180,7 @@ export type Database = {
           member_count?: number | null
           name: string
           picture_url?: string | null
+          prompt_template_id?: string
           tenant_id: string
           uazapi_group_jid: string
         }
@@ -183,6 +189,8 @@ export type Database = {
           default_period?: string
           default_tone?: Database["public"]["Enums"]["summary_tone"]
           default_voice_mode?: string
+          host1_name?: string
+          host2_name?: string
           id?: string
           instance_id?: string
           is_monitored?: boolean
@@ -190,6 +198,7 @@ export type Database = {
           member_count?: number | null
           name?: string
           picture_url?: string | null
+          prompt_template_id?: string
           tenant_id?: string
           uazapi_group_jid?: string
         }

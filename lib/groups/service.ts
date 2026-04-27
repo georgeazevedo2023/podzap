@@ -27,6 +27,7 @@ import { UazapiClient } from "@/lib/uazapi/client";
 import type { Database } from "@/lib/supabase/types";
 import type { Group } from "@/lib/uazapi/types";
 import type { SummaryTone } from "@/lib/summary/prompt";
+import type { TemplateId } from "@/lib/summary/templates";
 
 export type GroupVoiceMode = "single" | "duo";
 export type GroupPeriod = "24h" | "7d";
@@ -54,6 +55,14 @@ export type GroupView = {
   defaultTone: SummaryTone;
   defaultVoiceMode: GroupVoiceMode;
   defaultPeriod: GroupPeriod;
+  /**
+   * Template + hosts (Fase B+C). O template seleciona o estilo do podcast;
+   * os hosts são substituídos nos placeholders {{host1_name}} /
+   * {{host2_name}} de TODOS os templates (incluindo default-duo).
+   */
+  promptTemplateId: TemplateId;
+  host1Name: string;
+  host2Name: string;
   /**
    * Contagem de mensagens capturadas nas últimas 24h. Só é populada em
    * `listGroups({ withRecentMessageCount: true })` pra evitar N queries
@@ -100,6 +109,9 @@ function toView(row: GroupRow): GroupView {
     defaultTone: row.default_tone,
     defaultVoiceMode: normalizeVoiceMode(row.default_voice_mode),
     defaultPeriod: normalizePeriod(row.default_period),
+    promptTemplateId: normalizeTemplateId(row.prompt_template_id),
+    host1Name: row.host1_name?.trim() || "Ana",
+    host2Name: row.host2_name?.trim() || "Beto",
   };
 }
 
@@ -109,6 +121,21 @@ function normalizeVoiceMode(v: string): GroupVoiceMode {
 
 function normalizePeriod(v: string): GroupPeriod {
   return v === "7d" ? "7d" : "24h";
+}
+
+const VALID_TEMPLATE_IDS: TemplateId[] = [
+  "default-duo",
+  "default-solo",
+  "divertido",
+  "informativo",
+  "fofoca",
+  "esportivo",
+  "rapido",
+];
+
+function normalizeTemplateId(v: string | null | undefined): TemplateId {
+  if (v && (VALID_TEMPLATE_IDS as string[]).includes(v)) return v as TemplateId;
+  return "default-duo";
 }
 
 /**
@@ -492,6 +519,81 @@ export async function syncGroups(
   const total = (allRows ?? []).length;
 
   return { synced, total };
+}
+
+/**
+ * Atualizar settings do grupo (defaults + hosts + template). Tenant-scoped;
+ * cada campo é opcional. Retorna a view fresca pós-update.
+ *
+ * Campos editáveis (Fase A+B+C):
+ *   - defaultTone / defaultVoiceMode / defaultPeriod (Fase A)
+ *   - promptTemplateId / host1Name / host2Name (Fase B+C)
+ *
+ * `is_monitored` continua mudando via `toggleMonitor` pra manter o
+ * fluxo do toggle no card simples e auditável separadamente.
+ */
+export type UpdateGroupSettingsPatch = {
+  defaultTone?: SummaryTone;
+  defaultVoiceMode?: GroupVoiceMode;
+  defaultPeriod?: GroupPeriod;
+  promptTemplateId?: TemplateId;
+  host1Name?: string;
+  host2Name?: string;
+};
+
+export async function updateGroupSettings(
+  tenantId: string,
+  groupId: string,
+  patch: UpdateGroupSettingsPatch,
+): Promise<GroupView> {
+  const supabase = createAdminClient();
+
+  const dbPatch: Database["public"]["Tables"]["groups"]["Update"] = {};
+  if (patch.defaultTone !== undefined) dbPatch.default_tone = patch.defaultTone;
+  if (patch.defaultVoiceMode !== undefined)
+    dbPatch.default_voice_mode = patch.defaultVoiceMode;
+  if (patch.defaultPeriod !== undefined)
+    dbPatch.default_period = patch.defaultPeriod;
+  if (patch.promptTemplateId !== undefined)
+    dbPatch.prompt_template_id = patch.promptTemplateId;
+  if (patch.host1Name !== undefined) dbPatch.host1_name = patch.host1Name.trim();
+  if (patch.host2Name !== undefined) dbPatch.host2_name = patch.host2Name.trim();
+
+  if (Object.keys(dbPatch).length === 0) {
+    // Nada a atualizar — retorna a view atual em vez de fazer roundtrip
+    // no-op (que o PostgREST aceita mas devolve a mesma row).
+    const got = await getGroup(tenantId, groupId);
+    if (!got) {
+      throw new GroupsError(
+        "NOT_FOUND",
+        `Group ${groupId} not found for tenant ${tenantId}`,
+      );
+    }
+    return got;
+  }
+
+  const { data, error } = await supabase
+    .from("groups")
+    .update(dbPatch)
+    .eq("id", groupId)
+    .eq("tenant_id", tenantId)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw new GroupsError(
+      "DB_ERROR",
+      `Failed to update group settings ${groupId}: ${error.message}`,
+      error,
+    );
+  }
+  if (!data) {
+    throw new GroupsError(
+      "NOT_FOUND",
+      `Group ${groupId} not found for tenant ${tenantId}`,
+    );
+  }
+  return toView(data as GroupRow);
 }
 
 /**

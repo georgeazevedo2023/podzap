@@ -60,6 +60,16 @@ export type GenerateSummaryHandlerCtx = {
       periodEnd: string;
       tone?: SummaryTone;
       voiceMode?: "single" | "duo";
+      templateId?:
+        | "default-duo"
+        | "default-solo"
+        | "divertido"
+        | "informativo"
+        | "fofoca"
+        | "esportivo"
+        | "rapido";
+      host1Name?: string;
+      host2Name?: string;
     };
   };
   step: {
@@ -108,6 +118,9 @@ export async function generateSummaryHandler(
       periodEnd,
       tone: event.data.tone,
       voiceMode: event.data.voiceMode,
+      templateId: event.data.templateId,
+      host1Name: event.data.host1Name,
+      host2Name: event.data.host2Name,
     }),
   );
 

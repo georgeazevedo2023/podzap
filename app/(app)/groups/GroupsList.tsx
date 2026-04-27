@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 
 import type { GroupView } from '@/lib/groups/service';
 
+import { EditGroupModal } from './EditGroupModal';
 import { GroupCard } from './GroupCard';
 
 /**
@@ -53,6 +54,7 @@ export function GroupsList({
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [toggling, setToggling] = useState<Set<string>>(() => new Set());
   const [generating, setGenerating] = useState<Set<string>>(() => new Set());
+  const [editing, setEditing] = useState<GroupView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Re-seed local state when the server re-renders with new data (new page,
@@ -392,9 +394,23 @@ export function GroupsList({
                 onQuickGenerate={(g) => {
                   void handleQuickGenerate(g);
                 }}
+                onEdit={(g) => setEditing(g)}
               />
             ))}
           </div>
+
+          {editing && (
+            <EditGroupModal
+              group={editing}
+              open={true}
+              onClose={() => setEditing(null)}
+              onSaved={(updated) => {
+                setGroups((prev) =>
+                  prev.map((g) => (g.id === updated.id ? updated : g)),
+                );
+              }}
+            />
+          )}
 
           {totalPages > 1 && (
             <div

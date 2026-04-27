@@ -237,12 +237,12 @@ describe("buildSummaryPrompt — metadata", () => {
     expect(big.estimatedTokens).toBeGreaterThan(small.estimatedTokens);
   });
 
-  it("promptVersion matches `podzap-summary/v8-<mode>-<tone>` for every tone (default mode=single)", () => {
-    const pattern = /^podzap-summary\/v8-(single|duo)-(formal|fun|corporate)$/;
+  it("promptVersion matches `podzap-summary/v9-<mode>-<tone>` for every tone (default mode=single)", () => {
+    const pattern = /^podzap-summary\/v9-(single|duo)-(formal|fun|corporate)$/;
     for (const tone of TONES) {
       const { promptVersion } = buildSummaryPrompt(conv(), tone);
       expect(promptVersion).toMatch(pattern);
-      expect(promptVersion).toBe(`podzap-summary/v8-single-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v9-single-${tone}`);
     }
   });
 
@@ -251,7 +251,7 @@ describe("buildSummaryPrompt — metadata", () => {
       const { promptVersion } = buildSummaryPrompt(conv(), tone, {
         voiceMode: "duo",
       });
-      expect(promptVersion).toBe(`podzap-summary/v8-duo-${tone}`);
+      expect(promptVersion).toBe(`podzap-summary/v9-duo-${tone}`);
     }
   });
 
@@ -290,6 +290,83 @@ describe("buildSummaryPrompt — metadata", () => {
     const { systemPrompt } = buildSummaryPrompt(conv(), "fun");
     expect(systemPrompt.toLowerCase()).toContain("dentro do próprio grupo");
     expect(systemPrompt).toContain("aqui");
+  });
+});
+
+describe("buildSummaryPrompt — templates (Fase B+C)", () => {
+  it("templateId='divertido' substitui o systemPrompt e usa voiceMode duo", () => {
+    const { systemPrompt, promptVersion } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "divertido",
+      voiceMode: "single", // ignorado — divertido força duo
+    });
+    // Esse texto literal só existe no template "divertido".
+    expect(systemPrompt).toContain("amigos no bar");
+    expect(systemPrompt).toContain("Até amanhã, galera!");
+    expect(promptVersion).toBe("podzap-summary/v9-divertido-duo");
+  });
+
+  it("substitui {{group_name}} / {{host1_name}} / {{host2_name}} pelo grupo + nomes", () => {
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "fofoca",
+      host1Name: "Camila",
+      host2Name: "Leonardo",
+    });
+    // Vars substituídas (literal, case-sensitive).
+    expect(systemPrompt).toContain("Camila:");
+    expect(systemPrompt).toContain("Leonardo:");
+    expect(systemPrompt).not.toContain("{{host1_name}}");
+    expect(systemPrompt).not.toContain("{{host2_name}}");
+    expect(systemPrompt).not.toContain("{{group_name}}");
+  });
+
+  it("user prompt incorpora os nomes customizados nas instruções de format DUO", () => {
+    const { userPrompt } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "divertido",
+      host1Name: "Maria",
+      host2Name: "João",
+    });
+    // O exemplo de saída agora referencia os hosts certos.
+    expect(userPrompt).toContain('"Maria: ');
+    expect(userPrompt).toContain('"João: ');
+    // O default Ana/Beto não deve sobrar no userPrompt quando hosts custom.
+    expect(userPrompt).not.toContain('"Ana: ');
+    expect(userPrompt).not.toContain('"Beto: ');
+  });
+
+  it("templateId ausente mantém comportamento legado (DUO_SYSTEM_PROMPT)", () => {
+    const { systemPrompt, promptVersion } = buildSummaryPrompt(conv(), "fun", {
+      voiceMode: "duo",
+    });
+    // Legacy path: tem o prompt rico de roteiro engineerado.
+    expect(systemPrompt).toContain("roteirista de um podcast em dupla");
+    expect(promptVersion).toBe("podzap-summary/v9-duo-fun");
+  });
+
+  it("legacy DUO_SYSTEM_PROMPT mantém Ana/Beto literal — quem quer customizar usa templateId='default-duo'", () => {
+    // Decisão de design: o systemPrompt legado em prompt.ts ainda referencia
+    // "Ana"/"Beto" hardcoded. O user prompt JÁ usa os nomes dinâmicos. Para
+    // ter consistência total nos hosts customizados, o caller deve passar
+    // templateId='default-duo' (que tem placeholders) em vez de só voiceMode.
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun", {
+      voiceMode: "duo",
+      host1Name: "Sofia",
+      host2Name: "Rafael",
+    });
+    expect(systemPrompt).toContain("Ana");
+    expect(systemPrompt).toContain("Beto");
+  });
+
+  it("templateId='default-duo' COM host customizado substitui Ana/Beto consistentemente", () => {
+    const { systemPrompt } = buildSummaryPrompt(conv(), "fun", {
+      templateId: "default-duo",
+      host1Name: "Sofia",
+      host2Name: "Rafael",
+    });
+    // O default-duo do catálogo tem {{host1_name}}/{{host2_name}}, então:
+    expect(systemPrompt).toContain("Sofia");
+    expect(systemPrompt).toContain("Rafael");
+    expect(systemPrompt).not.toContain("Ana (descontraída");
+    expect(systemPrompt).not.toContain("Beto (bem-humorado");
   });
 });
 

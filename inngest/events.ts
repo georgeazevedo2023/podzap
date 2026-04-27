@@ -94,10 +94,28 @@ export const summaryRequested = eventType("summary.requested", {
     tone?: "formal" | "fun" | "corporate";
     /**
      * Voice format to use downstream. 'single' = solo narrator (current
-     * default). 'duo' = Ana + Beto dialog; prompt generates `Ana: ...` /
-     * `Beto: ...` lines and TTS uses multiSpeakerVoiceConfig.
+     * default). 'duo' = host1 + host2 dialog; prompt generates
+     * `host1: ...` / `host2: ...` lines and TTS uses multiSpeakerVoiceConfig.
      */
     voiceMode?: "single" | "duo";
+    /**
+     * Template do catálogo (lib/summary/templates.ts) que define o
+     * estilo do podcast. Quando ausente, o gerador usa o caminho legado
+     * (system prompt engineered + tone overrides). Quando presente, força
+     * voiceMode pra o do template e renderiza com host1/host2 names.
+     */
+    templateId?:
+      | "default-duo"
+      | "default-solo"
+      | "divertido"
+      | "informativo"
+      | "fofoca"
+      | "esportivo"
+      | "rapido";
+    /** Nome do apresentador 1 (default "Ana"). */
+    host1Name?: string;
+    /** Nome do apresentador 2 (default "Beto"). */
+    host2Name?: string;
   }>(),
 });
 

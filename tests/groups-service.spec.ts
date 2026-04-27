@@ -53,6 +53,9 @@ type GroupRow = {
   default_tone: 'formal' | 'fun' | 'corporate';
   default_voice_mode: string;
   default_period: string;
+  prompt_template_id: string;
+  host1_name: string;
+  host2_name: string;
 };
 
 const db = {
@@ -432,6 +435,9 @@ function seedGroup(partial: Partial<GroupRow> = {}): GroupRow {
     default_tone: 'fun',
     default_voice_mode: 'duo',
     default_period: '24h',
+    prompt_template_id: 'default-duo',
+    host1_name: 'Ana',
+    host2_name: 'Beto',
     ...partial,
   };
   db.groups.push(row);
@@ -535,6 +541,65 @@ describe("getGroup", () => {
     const got = await service.getGroup(TENANT_A, row.id);
     expect(got!.defaultVoiceMode).toBe("duo");
     expect(got!.defaultPeriod).toBe("24h");
+  });
+
+  it("expõe prompt template + hosts customizados (Fase B+C)", async () => {
+    const row = seedGroup({
+      prompt_template_id: "fofoca",
+      host1_name: "Camila",
+      host2_name: "Leonardo",
+    });
+    const got = await service.getGroup(TENANT_A, row.id);
+    expect(got!.promptTemplateId).toBe("fofoca");
+    expect(got!.host1Name).toBe("Camila");
+    expect(got!.host2Name).toBe("Leonardo");
+  });
+
+  it("normaliza template_id desconhecido pra default-duo + hosts vazios pra Ana/Beto", async () => {
+    const row = seedGroup({
+      prompt_template_id: "obscuro" as unknown as string,
+      host1_name: "  ",
+      host2_name: "",
+    });
+    const got = await service.getGroup(TENANT_A, row.id);
+    expect(got!.promptTemplateId).toBe("default-duo");
+    expect(got!.host1Name).toBe("Ana");
+    expect(got!.host2Name).toBe("Beto");
+  });
+});
+
+describe("updateGroupSettings", () => {
+  it("atualiza só os campos passados (patch parcial)", async () => {
+    const row = seedGroup({
+      name: "Tech",
+      default_tone: "fun",
+      default_voice_mode: "duo",
+      prompt_template_id: "default-duo",
+      host1_name: "Ana",
+      host2_name: "Beto",
+    });
+    const updated = await service.updateGroupSettings(TENANT_A, row.id, {
+      promptTemplateId: "esportivo",
+      host1Name: "Galvão",
+    });
+    expect(updated.promptTemplateId).toBe("esportivo");
+    expect(updated.host1Name).toBe("Galvão");
+    // Campos não tocados preservam valores antigos.
+    expect(updated.host2Name).toBe("Beto");
+    expect(updated.defaultTone).toBe("fun");
+  });
+
+  it("rejeita updates de grupos de outro tenant com NOT_FOUND", async () => {
+    const row = seedGroup({ tenant_id: TENANT_B, name: "Other" });
+    await expect(
+      service.updateGroupSettings(TENANT_A, row.id, { host1Name: "X" }),
+    ).rejects.toMatchObject({ name: "GroupsError", code: "NOT_FOUND" });
+  });
+
+  it("retorna view atual quando o patch é vazio (no-op)", async () => {
+    const row = seedGroup({ host1_name: "Maria" });
+    const out = await service.updateGroupSettings(TENANT_A, row.id, {});
+    expect(out.host1Name).toBe("Maria");
   });
 });
 

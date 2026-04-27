@@ -276,6 +276,9 @@ function mergeGroupForEdit(
     defaultTone: 'fun',
     defaultVoiceMode: 'duo',
     defaultPeriod: '24h',
+    promptTemplateId: 'default-duo',
+    host1Name: 'Ana',
+    host2Name: 'Beto',
   };
   return [...monitored, placeholder];
 }

@@ -49,8 +49,22 @@ export type GenerateSummaryInput = {
   periodStart: Date;
   periodEnd: Date;
   tone?: SummaryTone;
-  /** 'single' narrator (default) or 'duo' Ana+Beto dialog. */
+  /** 'single' narrator (default) or 'duo' host1+host2 dialog. */
   voiceMode?: VoiceMode;
+  /**
+   * Template do catálogo (lib/summary/templates.ts). Quando set, o
+   * voiceMode é forçado pelo template (que sabe se é duo ou single).
+   */
+  templateId?:
+    | "default-duo"
+    | "default-solo"
+    | "divertido"
+    | "informativo"
+    | "fofoca"
+    | "esportivo"
+    | "rapido";
+  host1Name?: string;
+  host2Name?: string;
 };
 
 export type SummaryRecord = {
@@ -119,10 +133,19 @@ export async function generateSummary(
   }
 
   // ── Step 2: prompt bundle ──────────────────────────────────────────
+  // Quando o caller passa templateId, o template sobrescreve voiceMode
+  // pra evitar mismatch (ex.: template duo + voiceMode single quebraria
+  // os prefixos host1:/host2:). Os hosts são propagados pra que o
+  // userPrompt e o template usem os mesmos nomes consistentemente.
   const { systemPrompt, userPrompt, promptVersion } = buildSummaryPrompt(
     conv,
     tone,
-    { voiceMode },
+    {
+      voiceMode,
+      templateId: input.templateId,
+      host1Name: input.host1Name,
+      host2Name: input.host2Name,
+    },
   );
 
   // ── Step 3: Gemini call (with duration timing) ─────────────────────

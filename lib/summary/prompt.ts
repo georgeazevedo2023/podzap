@@ -16,6 +16,11 @@
  */
 
 import type { NormalizedConversation, Topic } from "@/lib/pipeline/normalize";
+import {
+  resolveTemplate,
+  renderTemplate,
+  type TemplateId,
+} from "@/lib/summary/templates";
 
 export type SummaryTone = "formal" | "fun" | "corporate";
 
@@ -31,7 +36,7 @@ export type BuiltPrompt = {
 export type BuildPromptOptions = {
   /** Truncation limit per topic. Default 20. */
   maxMessagesPerTopic?: number;
-  /** 'single' narrator (default) or 'duo' Ana+Beto dialog. */
+  /** 'single' narrator (default) or 'duo' host1+host2 dialog. */
   voiceMode?: VoiceMode;
   /**
    * Wall-clock when the summary is being generated (used to derive the
@@ -40,10 +45,25 @@ export type BuildPromptOptions = {
    * for determinism.
    */
   now?: Date;
+  /**
+   * Template do catálogo `lib/summary/templates.ts`. Quando fornecido,
+   * substitui o `buildSystemPrompt(tone, voiceMode)` pelo template
+   * renderizado com as variáveis (group_name, host1_name, host2_name).
+   * O `voiceMode` do template SOBRESCREVE `opts.voiceMode` quando o
+   * template tem voiceMode fixo (duo|single) pra evitar mismatch de
+   * prefixos `host1:` / `host2:` no output.
+   */
+  templateId?: TemplateId;
+  /** Nome do apresentador 1 (era hardcoded "Ana"). Default "Ana". */
+  host1Name?: string;
+  /** Nome do apresentador 2 (era hardcoded "Beto"). Default "Beto". */
+  host2Name?: string;
 };
 
 const DEFAULT_MAX_MESSAGES_PER_TOPIC = 20;
-const PROMPT_VERSION_BASE = "podzap-summary/v8";
+const PROMPT_VERSION_BASE = "podzap-summary/v9";
+const DEFAULT_HOST1_NAME = "Ana";
+const DEFAULT_HOST2_NAME = "Beto";
 
 /**
  * Voice mode downstream consumers (TTS) will use. Changes the SHAPE of the
@@ -282,6 +302,8 @@ function buildUserPrompt(
   maxMessagesPerTopic: number,
   voiceMode: VoiceMode,
   now: Date,
+  host1Name: string,
+  host2Name: string,
 ): string {
   const nowHour = hourInSaoPaulo(now);
   const greeting =
@@ -319,7 +341,7 @@ function buildUserPrompt(
           "  participantes).",
           "- Se 2+ tiverem o MESMO count, diga que estão empatados (ex.:",
           '  "Fernando e Léo, empatados no topo com 15 mensagens cada").',
-          "- NÃO leia como lista bullet — incorpore na conversa Ana↔Beto",
+          `- NÃO leia como lista bullet — incorpore na conversa ${host1Name}↔${host2Name}`,
           '  (ou na narrativa solo) com tom "locutor de futebol anunciando',
           '  os artilheiros do dia": animado, com energia.',
           "- Encaixe natural no fluxo: depois da saudação, faça uma",
@@ -347,11 +369,11 @@ function buildUserPrompt(
     .map((t, i) => renderTopic(t, i, maxMessagesPerTopic))
     .join("\n\n");
 
-  // Saída muda conforme o modo de voz: duo precisa de `Ana:` / `Beto:` em
-  // cada linha (TTS multi-speaker lê direto o prefixo). Solo é prosa.
+  // Saída muda conforme o modo de voz: duo precisa de `host1:` / `host2:`
+  // em cada linha (TTS multi-speaker lê direto o prefixo). Solo é prosa.
   const textExample =
     voiceMode === "duo"
-      ? '"Ana: boa noite, ouvintes do [grupo]!\\nBeto: noite, Ana. Dia agitado hoje…\\nAna: …\\nBeto: …"'
+      ? `"${host1Name}: boa noite, ouvintes do [grupo]!\\n${host2Name}: noite, ${host1Name}. Dia agitado hoje…\\n${host1Name}: …\\n${host2Name}: …"`
       : '"<texto narrativo completo, prosa corrida, sem prefixos de speaker>"';
 
   const formatHints =
@@ -359,7 +381,7 @@ function buildUserPrompt(
       ? [
           "",
           "IMPORTANTE pra DUO: o campo `text` deve ter APENAS linhas que",
-          'começam com "Ana: " ou "Beto: ". Cada linha = uma fala completa.',
+          `começam com "${host1Name}: " ou "${host2Name}: ". Cada linha = uma fala completa.`,
           "Sem marcação extra, sem aspas, sem markdown. Alternem naturalmente.",
         ].join("\n")
       : "";
@@ -425,16 +447,44 @@ export function buildSummaryPrompt(
 ): BuiltPrompt {
   const maxMessagesPerTopic =
     opts?.maxMessagesPerTopic ?? DEFAULT_MAX_MESSAGES_PER_TOPIC;
-  const voiceMode: VoiceMode = opts?.voiceMode ?? "single";
+  const host1Name = opts?.host1Name?.trim() || DEFAULT_HOST1_NAME;
+  const host2Name = opts?.host2Name?.trim() || DEFAULT_HOST2_NAME;
   const now = opts?.now ?? new Date();
 
-  const systemPrompt = buildSystemPrompt(tone, voiceMode);
-  const userPrompt = buildUserPrompt(conv, maxMessagesPerTopic, voiceMode, now);
+  // Template explícito: substitui o systemPrompt e força o voiceMode
+  // (quando o template tem um fixo). Ausência de templateId mantém o
+  // caminho legado (DUO/SOLO_SYSTEM_PROMPT por voiceMode + TONE_OVERRIDES).
+  const template = opts?.templateId ? resolveTemplate(opts.templateId) : null;
+
+  const voiceMode: VoiceMode = template
+    ? template.voiceMode === 'any'
+      ? opts?.voiceMode ?? 'single'
+      : template.voiceMode
+    : opts?.voiceMode ?? 'single';
+
+  const systemPrompt = template
+    ? renderTemplate(template.systemPrompt, {
+        group_name: conv.groupName,
+        host1_name: host1Name,
+        host2_name: host2Name,
+      })
+    : buildSystemPrompt(tone, voiceMode);
+
+  const userPrompt = buildUserPrompt(
+    conv,
+    maxMessagesPerTopic,
+    voiceMode,
+    now,
+    host1Name,
+    host2Name,
+  );
 
   return {
     systemPrompt,
     userPrompt,
-    promptVersion: `${PROMPT_VERSION_BASE}-${voiceMode}-${tone}`,
+    promptVersion: template
+      ? `${PROMPT_VERSION_BASE}-${template.id}-${voiceMode}`
+      : `${PROMPT_VERSION_BASE}-${voiceMode}-${tone}`,
     estimatedTokens: estimateTokens(systemPrompt, userPrompt),
   };
 }

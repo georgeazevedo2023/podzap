@@ -53,6 +53,19 @@ const GenerateBodySchema = z.object({
   period: z.enum(["24h", "7d"]).optional(),
   tone: z.enum(["formal", "fun", "corporate"]).optional(),
   voiceMode: z.enum(["single", "duo"]).optional(),
+  templateId: z
+    .enum([
+      "default-duo",
+      "default-solo",
+      "divertido",
+      "informativo",
+      "fofoca",
+      "esportivo",
+      "rapido",
+    ])
+    .optional(),
+  host1Name: z.string().min(1).max(60).optional(),
+  host2Name: z.string().min(1).max(60).optional(),
 });
 
 function periodToHours(p: "24h" | "7d"): number {
@@ -122,6 +135,9 @@ export async function POST(req: Request) {
 
   const tone = body.tone ?? group.defaultTone;
   const voiceMode = body.voiceMode ?? group.defaultVoiceMode;
+  const templateId = body.templateId ?? group.promptTemplateId;
+  const host1Name = body.host1Name ?? group.host1Name;
+  const host2Name = body.host2Name ?? group.host2Name;
 
   try {
     await inngest.send(
@@ -132,6 +148,9 @@ export async function POST(req: Request) {
         periodEnd,
         tone,
         voiceMode,
+        templateId,
+        host1Name,
+        host2Name,
       }),
     );
     return NextResponse.json(
