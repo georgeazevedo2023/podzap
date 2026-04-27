@@ -10,6 +10,7 @@ import { TopBar } from '@/components/shell/TopBar';
 import { Sticker } from '@/components/ui/Sticker';
 import { getCurrentUserAndTenant } from '@/lib/tenant';
 import { listGroups, type GroupView } from '@/lib/groups/service';
+import { listSchedules } from '@/lib/schedules/service';
 import { getCurrentInstance } from '@/lib/whatsapp/service';
 
 import { GroupsList } from './GroupsList';
@@ -52,24 +53,36 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
 
   // Also fetch the monitored count separately — the paged result gives us
   // only rows for this page, but the subtitle needs the full count.
-  const [instance, groupsPage, monitoredCountResult, totalCountResult] =
-    await Promise.all([
-      getCurrentInstance(tenant.id),
-      listGroups(tenant.id, {
-        page,
-        pageSize: PAGE_SIZE,
-        search,
-        monitoredOnly,
-        // Anexa contagem 24h + stats de podcasts por card (Fase D).
-        withRecentMessageCount: true,
-        withGroupStats: true,
-      }),
-      listGroups(tenant.id, { monitoredOnly: true, pageSize: 1 }),
-      // Total real (sem search nem filtro) — antes o subtitle usava
-      // groupsPage.total que reflete o resultado filtrado, causando
-      // "4 monitorados de 0" quando a busca não casava ninguém.
-      listGroups(tenant.id, { pageSize: 1 }),
-    ]);
+  const [
+    instance,
+    groupsPage,
+    monitoredCountResult,
+    totalCountResult,
+    schedules,
+  ] = await Promise.all([
+    getCurrentInstance(tenant.id),
+    listGroups(tenant.id, {
+      page,
+      pageSize: PAGE_SIZE,
+      search,
+      monitoredOnly,
+      // Anexa contagem 24h + stats de podcasts por card (Fase D).
+      withRecentMessageCount: true,
+      withGroupStats: true,
+    }),
+    listGroups(tenant.id, { monitoredOnly: true, pageSize: 1 }),
+    // Total real (sem search nem filtro) — antes o subtitle usava
+    // groupsPage.total que reflete o resultado filtrado, causando
+    // "4 monitorados de 0" quando a busca não casava ninguém.
+    listGroups(tenant.id, { pageSize: 1 }),
+    // IDs dos grupos com schedule ativo pra mostrar selo "⏰ ativo"
+    // no card sem N+1 fetches client-side.
+    listSchedules(tenant.id),
+  ]);
+
+  const groupsWithSchedule = new Set(
+    schedules.filter((s) => s.isActive).map((s) => s.groupId),
+  );
 
   const monitoredCount = monitoredCountResult.total;
   const totalCount = totalCountResult.total;
@@ -130,6 +143,7 @@ export default async function GroupsPage({ searchParams }: GroupsPageProps) {
             pageSize={groupsPage.pageSize}
             initialSearch={search}
             initialMonitoredOnly={monitoredOnly}
+            initialGroupsWithSchedule={Array.from(groupsWithSchedule)}
           />
         )}
       </div>

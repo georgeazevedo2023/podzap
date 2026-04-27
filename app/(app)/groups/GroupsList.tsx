@@ -8,6 +8,7 @@ import type { GroupView } from '@/lib/groups/service';
 import { DuplicateConfigModal } from './DuplicateConfigModal';
 import { EditGroupModal } from './EditGroupModal';
 import { GroupCard } from './GroupCard';
+import { ScheduleInlineModal } from './ScheduleInlineModal';
 
 /**
  * Mesma chave que `GenerateNowModal` e `GeneratingBanner` usam — manter em
@@ -27,6 +28,12 @@ export interface GroupsListProps {
   pageSize: number;
   initialSearch: string;
   initialMonitoredOnly: boolean;
+  /**
+   * Lista de groupIds que têm schedule ATIVO. Usado pra renderizar selo
+   * "⏰ ativo" no card sem N fetches client-side. Atualizado via
+   * router.refresh() após save/delete no ScheduleInlineModal.
+   */
+  initialGroupsWithSchedule: string[];
 }
 
 /**
@@ -46,6 +53,7 @@ export function GroupsList({
   pageSize,
   initialSearch,
   initialMonitoredOnly,
+  initialGroupsWithSchedule,
 }: GroupsListProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -57,7 +65,13 @@ export function GroupsList({
   const [generating, setGenerating] = useState<Set<string>>(() => new Set());
   const [editing, setEditing] = useState<GroupView | null>(null);
   const [duplicating, setDuplicating] = useState<GroupView | null>(null);
+  const [scheduling, setScheduling] = useState<GroupView | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const scheduledIds = useMemo(
+    () => new Set(initialGroupsWithSchedule),
+    [initialGroupsWithSchedule],
+  );
 
   // Re-seed local state when the server re-renders with new data (new page,
   // new filter, after router.refresh()). The identity change is the signal.
@@ -398,6 +412,8 @@ export function GroupsList({
                 }}
                 onEdit={(g) => setEditing(g)}
                 onDuplicate={(g) => setDuplicating(g)}
+                onSchedule={(g) => setScheduling(g)}
+                hasSchedule={scheduledIds.has(group.id)}
               />
             ))}
           </div>
@@ -424,6 +440,19 @@ export function GroupsList({
                 // Re-fetch da página pra refletir os settings novos nos
                 // cards target. router.refresh() reidrata o server
                 // component e o useEffect de seed se vira.
+                router.refresh();
+              }}
+            />
+          )}
+
+          {scheduling && (
+            <ScheduleInlineModal
+              group={scheduling}
+              open={true}
+              onClose={() => setScheduling(null)}
+              onSaved={() => {
+                // Refresh pra repuxar a lista de schedules e atualizar
+                // o selo ⏰ no card.
                 router.refresh();
               }}
             />

@@ -21,6 +21,10 @@ export interface GroupCardProps {
   onEdit?: (group: GroupView) => void;
   /** Callback quando user clica "📋 duplicar" — abre DuplicateConfigModal. */
   onDuplicate?: (group: GroupView) => void;
+  /** Callback quando user clica "⏰ agendar" — abre ScheduleInlineModal. */
+  onSchedule?: (group: GroupView) => void;
+  /** Indicação visual de "já tem agenda" pra esse grupo. */
+  hasSchedule?: boolean;
 }
 
 /**
@@ -47,6 +51,8 @@ export function GroupCard({
   isGenerating = false,
   onEdit,
   onDuplicate,
+  onSchedule,
+  hasSchedule = false,
 }: GroupCardProps) {
   const on = group.isMonitored;
   const recentCount = group.recentMessageCount ?? null;
@@ -99,6 +105,7 @@ export function GroupCard({
       target.closest('[data-edit-btn]') ||
       target.closest('[data-msgs-btn]') ||
       target.closest('[data-duplicate-btn]') ||
+      target.closest('[data-schedule-btn]') ||
       target.closest('[data-collapse-btn]') ||
       target.closest('[data-card-config]')
     ) {
@@ -201,6 +208,8 @@ export function GroupCard({
             onQuickGenerate={onQuickGenerate}
             onEdit={onEdit}
             onDuplicate={onDuplicate}
+            onSchedule={onSchedule}
+            hasSchedule={hasSchedule}
             templateLabel={template.label}
           />
 
@@ -354,6 +363,8 @@ function ActionsRow({
   onQuickGenerate,
   onEdit,
   onDuplicate,
+  onSchedule,
+  hasSchedule,
   templateLabel,
 }: {
   group: GroupView;
@@ -362,6 +373,8 @@ function ActionsRow({
   onQuickGenerate?: (g: GroupView) => void;
   onEdit?: (g: GroupView) => void;
   onDuplicate?: (g: GroupView) => void;
+  onSchedule?: (g: GroupView) => void;
+  hasSchedule: boolean;
   templateLabel: string;
 }) {
   return (
@@ -442,6 +455,31 @@ function ActionsRow({
           aria-label={`Editar configuração de ${group.name}`}
         >
           ✎ editar
+        </button>
+      )}
+
+      {onSchedule && (
+        <button
+          type="button"
+          data-schedule-btn
+          onClick={(e) => {
+            e.stopPropagation();
+            onSchedule(group);
+          }}
+          className="btn btn-ghost btn-tap"
+          style={{
+            fontSize: 12,
+            padding: '8px 14px',
+            color: hasSchedule ? 'var(--lime-500)' : undefined,
+          }}
+          aria-label={`Agendar geração automática de ${group.name}`}
+          title={
+            hasSchedule
+              ? 'já tem schedule ativo — clique pra editar'
+              : 'agendar geração diária automática'
+          }
+        >
+          {hasSchedule ? '⏰ ativo' : '⏰ agendar'}
         </button>
       )}
 
