@@ -63,6 +63,9 @@ const PatchSchema = z.object({
   voice2Id: z
     .enum(['Kore', 'Leda', 'Sadachbia', 'Aoede', 'Charon', 'Puck', 'Orus', 'Fenrir'])
     .optional(),
+  backgroundMusic: z
+    .enum(['none', 'default', 'chillout', 'upbeat', 'epic', 'lofi'])
+    .optional(),
 });
 
 export async function PATCH(

@@ -10,6 +10,7 @@ import {
   VOICES,
   type VoiceId,
 } from '@/lib/audios/voices';
+import { MUSIC_IDS, MUSIC_TRACKS, type MusicId } from '@/lib/audios/music';
 import type { GroupView } from '@/lib/groups/service';
 import type { SummaryTone } from '@/lib/summary/prompt';
 
@@ -61,6 +62,7 @@ export function EditGroupModal({
   );
   const [voice1, setVoice1] = useState<VoiceId>(group.voice1Id);
   const [voice2, setVoice2] = useState<VoiceId>(group.voice2Id);
+  const [music, setMusic] = useState<MusicId>(group.backgroundMusic);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +80,7 @@ export function EditGroupModal({
     if (host2.trim() !== group.host2Name) patch.host2Name = host2.trim();
     if (voice1 !== group.voice1Id) patch.voice1Id = voice1;
     if (voice2 !== group.voice2Id) patch.voice2Id = voice2;
+    if (music !== group.backgroundMusic) patch.backgroundMusic = music;
     if (templateId !== group.promptTemplateId)
       patch.promptTemplateId = templateId;
 
@@ -188,9 +191,11 @@ export function EditGroupModal({
             tone={tone}
             voiceMode={voiceMode}
             period={period}
+            music={music}
             onTone={setTone}
             onVoiceMode={setVoiceMode}
             onPeriod={setPeriod}
+            onMusic={setMusic}
             disabled={submitting}
           />
         )}
@@ -313,17 +318,21 @@ function GeralTab({
   tone,
   voiceMode,
   period,
+  music,
   onTone,
   onVoiceMode,
   onPeriod,
+  onMusic,
   disabled,
 }: {
   tone: SummaryTone;
   voiceMode: 'single' | 'duo';
   period: '24h' | '7d';
+  music: MusicId;
   onTone: (t: SummaryTone) => void;
   onVoiceMode: (v: 'single' | 'duo') => void;
   onPeriod: (p: '24h' | '7d') => void;
+  onMusic: (m: MusicId) => void;
   disabled: boolean;
 }) {
   return (
@@ -364,6 +373,107 @@ function GeralTab({
         ]}
         disabled={disabled}
       />
+
+      <MusicPicker
+        value={music}
+        onChange={onMusic}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+function MusicPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: MusicId;
+  onChange: (id: MusicId) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--text-dim)',
+        }}
+      >
+        música de fundo
+      </span>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+          gap: 8,
+        }}
+      >
+        {MUSIC_IDS.map((id) => {
+          const m = MUSIC_TRACKS[id];
+          const selected = value === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => !disabled && onChange(id)}
+              disabled={disabled}
+              title={m.description}
+              style={{
+                textAlign: 'left',
+                padding: 10,
+                border: selected
+                  ? '2.5px solid var(--yellow-500)'
+                  : '2px solid var(--stroke)',
+                borderRadius: 'var(--radius-md)',
+                background: selected
+                  ? 'rgba(255, 200, 40, 0.12)'
+                  : 'var(--surface)',
+                color: 'var(--text)',
+                cursor: disabled ? 'wait' : 'pointer',
+                boxShadow: selected
+                  ? '2px 2px 0 var(--yellow-500)'
+                  : '1px 1px 0 var(--stroke)',
+                fontFamily: 'var(--font-body)',
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start',
+                minWidth: 0,
+              }}
+            >
+              <span style={{ fontSize: 18, flexShrink: 0 }}>{m.emoji}</span>
+              <span
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  minWidth: 0,
+                }}
+              >
+                <strong style={{ fontSize: 12 }}>{m.label}</strong>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: 'var(--text-dim)',
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {m.description}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
+        💡 tracks novas (chillout/upbeat/epic/lofi) precisam dos arquivos
+        em <code>assets/</code> — antes disso o sistema cai no padrão.
+      </span>
     </div>
   );
 }

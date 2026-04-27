@@ -59,6 +59,7 @@ type GroupRow = {
   prompt_override: string | null;
   voice1_id: string;
   voice2_id: string;
+  background_music: string;
 };
 
 const db = {
@@ -454,6 +455,7 @@ function seedGroup(partial: Partial<GroupRow> = {}): GroupRow {
     prompt_override: null,
     voice1_id: 'Kore',
     voice2_id: 'Charon',
+    background_music: 'default',
     ...partial,
   };
   db.groups.push(row);
@@ -650,6 +652,27 @@ describe("updateGroupSettings", () => {
     const got = await service.getGroup(TENANT_A, row.id);
     expect(got!.voice1Id).toBe("Kore");
     expect(got!.voice2Id).toBe("Charon");
+  });
+
+  it("backgroundMusic é exposto e atualizável (Pacote 5)", async () => {
+    const row = seedGroup({ background_music: "default" });
+    const updated = await service.updateGroupSettings(TENANT_A, row.id, {
+      backgroundMusic: "lofi",
+    });
+    expect(updated.backgroundMusic).toBe("lofi");
+
+    const cleared = await service.updateGroupSettings(TENANT_A, row.id, {
+      backgroundMusic: "none",
+    });
+    expect(cleared.backgroundMusic).toBe("none");
+  });
+
+  it("backgroundMusic desconhecido cai pro 'default'", async () => {
+    const row = seedGroup({
+      background_music: "FakeTrack" as unknown as string,
+    });
+    const got = await service.getGroup(TENANT_A, row.id);
+    expect(got!.backgroundMusic).toBe("default");
   });
 });
 

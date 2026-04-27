@@ -149,6 +149,7 @@ export type Database = {
       }
       groups: {
         Row: {
+          background_music: string
           created_at: string
           default_period: string
           default_tone: Database["public"]["Enums"]["summary_tone"]
@@ -170,6 +171,7 @@ export type Database = {
           voice2_id: string
         }
         Insert: {
+          background_music?: string
           created_at?: string
           default_period?: string
           default_tone?: Database["public"]["Enums"]["summary_tone"]
@@ -191,6 +193,7 @@ export type Database = {
           voice2_id?: string
         }
         Update: {
+          background_music?: string
           created_at?: string
           default_period?: string
           default_tone?: Database["public"]["Enums"]["summary_tone"]

@@ -282,6 +282,7 @@ function mergeGroupForEdit(
     promptOverride: null,
     voice1Id: 'Kore',
     voice2Id: 'Charon',
+    backgroundMusic: 'default',
   };
   return [...monitored, placeholder];
 }

@@ -29,6 +29,7 @@ import type { Group } from "@/lib/uazapi/types";
 import type { SummaryTone } from "@/lib/summary/prompt";
 import type { TemplateId } from "@/lib/summary/templates";
 import type { VoiceId } from "@/lib/audios/voices";
+import type { MusicId } from "@/lib/audios/music";
 
 export type GroupVoiceMode = "single" | "duo";
 export type GroupPeriod = "24h" | "7d";
@@ -77,6 +78,8 @@ export type GroupView = {
    */
   voice1Id: VoiceId;
   voice2Id: VoiceId;
+  /** Track de fundo (Pacote 5). 'none' desativa música. */
+  backgroundMusic: MusicId;
   /**
    * Contagem de mensagens capturadas nas últimas 24h. Só é populada em
    * `listGroups({ withRecentMessageCount: true })` pra evitar N queries
@@ -139,6 +142,7 @@ function toView(row: GroupRow): GroupView {
     promptOverride: row.prompt_override?.trim() || null,
     voice1Id: normalizeVoiceId(row.voice1_id, "Kore"),
     voice2Id: normalizeVoiceId(row.voice2_id, "Charon"),
+    backgroundMusic: normalizeMusicId(row.background_music),
   };
 }
 
@@ -182,6 +186,20 @@ function normalizeVoiceId(
 ): VoiceId {
   if (v && (VALID_VOICE_IDS as string[]).includes(v)) return v as VoiceId;
   return fallback;
+}
+
+const VALID_MUSIC_IDS: MusicId[] = [
+  "none",
+  "default",
+  "chillout",
+  "upbeat",
+  "epic",
+  "lofi",
+];
+
+function normalizeMusicId(v: string | null | undefined): MusicId {
+  if (v && (VALID_MUSIC_IDS as string[]).includes(v)) return v as MusicId;
+  return "default";
 }
 
 /**
@@ -630,6 +648,7 @@ export type UpdateGroupSettingsPatch = {
   promptOverride?: string | null;
   voice1Id?: VoiceId;
   voice2Id?: VoiceId;
+  backgroundMusic?: MusicId;
 };
 
 export async function updateGroupSettings(
@@ -657,6 +676,8 @@ export async function updateGroupSettings(
   }
   if (patch.voice1Id !== undefined) dbPatch.voice1_id = patch.voice1Id;
   if (patch.voice2Id !== undefined) dbPatch.voice2_id = patch.voice2Id;
+  if (patch.backgroundMusic !== undefined)
+    dbPatch.background_music = patch.backgroundMusic;
 
   if (Object.keys(dbPatch).length === 0) {
     // Nada a atualizar — retorna a view atual em vez de fazer roundtrip
@@ -760,6 +781,7 @@ export async function duplicateGroupConfig(
     prompt_override: source.promptOverride,
     voice1_id: source.voice1Id,
     voice2_id: source.voice2Id,
+    background_music: source.backgroundMusic,
   };
 
   const { error: upErr } = await supabase

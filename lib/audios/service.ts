@@ -19,23 +19,15 @@
  *     which costs money and is rarely what we want.
  */
 
-import path from "node:path";
+import { existsSync } from "node:fs";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAudio } from "@/lib/ai/gemini-tts";
 import { trackAiCall } from "@/lib/ai-tracking/service";
 import { mixWithBackgroundMusic, MixError } from "@/lib/audios/mix";
+import { resolveMusic } from "@/lib/audios/music";
 
 const AUDIOS_BUCKET = "audios";
-
-// Trilha de fundo do podcast. Mora em `assets/` no root do repo e vai no
-// imagem Docker (COPY . . no builder stage). 3s de intro + loop durante a
-// voz + fade out 1s — ver `lib/audios/mix.ts`.
-const BACKGROUND_MUSIC_PATH = path.join(
-  process.cwd(),
-  "assets",
-  "podcast-music.mp3",
-);
 
 export type AudioView = {
   id: string;
@@ -188,6 +180,7 @@ type GroupVoiceLookupRow = {
   host2_name: string;
   voice1_id: string;
   voice2_id: string;
+  background_music: string;
 };
 
 /**
@@ -268,27 +261,35 @@ export async function createAudioForSummary(
   // Read-only, best-effort: se a query falhar OU o grupo não tiver as
   // colunas (rows pré-migration), cai no default (Ana=Kore, Beto=Charon)
   // — gemini-tts.ts trata `speakers: undefined` como esse legado.
+  // Busca config do grupo (host names + voice ids + music id) UMA vez
+  // só. Usado em duo pra speakers customizados (Pacote 4) E em qualquer
+  // modo pra escolher a track de fundo (Pacote 5).
   let speakers: Array<{ speaker: string; voiceName: string }> | undefined;
-  if (mode === "duo") {
+  let musicId = "default";
+  {
     const { data: groupCfg, error: groupErr } = await admin
       .from("groups")
-      .select("host1_name, host2_name, voice1_id, voice2_id")
+      .select(
+        "host1_name, host2_name, voice1_id, voice2_id, background_music",
+      )
       .eq("tenant_id", tenantId)
       .eq("id", summaryRow.group_id)
       .maybeSingle();
     if (!groupErr && groupCfg) {
       const cfg = groupCfg as GroupVoiceLookupRow;
-      const h1 = cfg.host1_name?.trim() || "Ana";
-      const h2 = cfg.host2_name?.trim() || "Beto";
-      const v1 = cfg.voice1_id || "Kore";
-      const v2 = cfg.voice2_id || "Charon";
-      speakers = [
-        { speaker: h1, voiceName: v1 },
-        { speaker: h2, voiceName: v2 },
-      ];
+      if (mode === "duo") {
+        const h1 = cfg.host1_name?.trim() || "Ana";
+        const h2 = cfg.host2_name?.trim() || "Beto";
+        const v1 = cfg.voice1_id || "Kore";
+        const v2 = cfg.voice2_id || "Charon";
+        speakers = [
+          { speaker: h1, voiceName: v1 },
+          { speaker: h2, voiceName: v2 },
+        ];
+      }
+      musicId = cfg.background_music ?? "default";
     }
-    // Se groupErr OU groupCfg null, deixa speakers undefined → TTS usa
-    // DUO_SPEAKERS legado. NÃO bloqueia entrega.
+    // Se groupErr OU groupCfg null, defaults legados (Ana/Beto + default).
   }
 
   let ttsResult;
@@ -311,25 +312,44 @@ export async function createAudioForSummary(
   }
   const durationMs = Date.now() - startedAt;
 
-  // ── 3b. Mixa voz + música de fundo (best-effort) ──────────────────────
-  // Se ffmpeg não estiver disponível ou falhar, caímos pra voz pura. A
-  // música é enhancement, não requisito — não vale travar a entrega
-  // porque o binário sumiu do container.
+  // ── 3b. Mixa voz + música de fundo (best-effort, Pacote 5) ───────────
+  // - Se musicId = 'none': pula mixing, áudio sai voz pura.
+  // - Se musicId tem arquivo mas o file não existe (track ainda não foi
+  //   subida pro repo), faz fallback pro 'default' antes de tentar mixar.
+  // - Se ffmpeg/mixer falhar, cai pra voz pura — música é enhancement.
   let finalAudio = ttsResult.audio;
   let finalDurationSeconds = ttsResult.durationSeconds;
-  try {
-    const mixed = await mixWithBackgroundMusic(ttsResult.audio, {
-      musicPath: BACKGROUND_MUSIC_PATH,
-    });
-    finalAudio = mixed.mixed;
-    finalDurationSeconds = mixed.durationSeconds;
-  } catch (err) {
-    const code = err instanceof MixError ? err.code : "UNKNOWN";
-    const msg = err instanceof Error ? err.message : String(err);
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[audios] background music mix failed (${code}), falling back to voice-only: ${msg}`,
-    );
+  const music = resolveMusic(musicId);
+  if (music.id !== "none" && music.filePath) {
+    let musicPath = music.filePath;
+    if (!existsSync(musicPath)) {
+      const fallback = resolveMusic("default");
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[audios] music file '${music.id}' not found at ${musicPath}, falling back to default`,
+      );
+      if (fallback.filePath && existsSync(fallback.filePath)) {
+        musicPath = fallback.filePath;
+      } else {
+        musicPath = "";
+      }
+    }
+    if (musicPath) {
+      try {
+        const mixed = await mixWithBackgroundMusic(ttsResult.audio, {
+          musicPath,
+        });
+        finalAudio = mixed.mixed;
+        finalDurationSeconds = mixed.durationSeconds;
+      } catch (err) {
+        const code = err instanceof MixError ? err.code : "UNKNOWN";
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[audios] background music mix failed (${code}), falling back to voice-only: ${msg}`,
+        );
+      }
+    }
   }
 
   // ── 4. Upload to Storage ──────────────────────────────────────────────

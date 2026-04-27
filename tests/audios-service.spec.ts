@@ -44,15 +44,27 @@ type AudioRow = {
 type SummaryRow = {
   id: string;
   tenant_id: string;
+  group_id: string;
   text: string;
   status: "pending_review" | "approved" | "rejected";
   prompt_version: string | null;
   voice_mode: "single" | "duo";
 };
 
+type GroupConfigRow = {
+  id: string;
+  tenant_id: string;
+  host1_name: string;
+  host2_name: string;
+  voice1_id: string;
+  voice2_id: string;
+  background_music: string;
+};
+
 const db = {
   audios: [] as AudioRow[],
   summaries: [] as SummaryRow[],
+  groups: [] as GroupConfigRow[],
 };
 
 type StorageObject = {
@@ -225,7 +237,11 @@ vi.mock("@/lib/ai-tracking/service", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => {
-      if (table !== "audios" && table !== "summaries") {
+      if (
+        table !== "audios" &&
+        table !== "summaries" &&
+        table !== "groups"
+      ) {
         throw new Error(`Unexpected table in mock: ${table}`);
       }
       return makeBuilder(table as keyof typeof db);
@@ -293,6 +309,7 @@ function seedSummary(partial: Partial<SummaryRow> = {}): SummaryRow {
   const row: SummaryRow = {
     id: randomUUID(),
     tenant_id: TENANT_A,
+    group_id: randomUUID(),
     text: "Hello world, this is the approved summary.",
     status: "approved",
     prompt_version: "v1",
@@ -300,6 +317,17 @@ function seedSummary(partial: Partial<SummaryRow> = {}): SummaryRow {
     ...partial,
   };
   db.summaries.push(row);
+  // Seed companion group config row pra o JOIN do Pacote 4/5 não
+  // explodir. Defaults legados (Ana/Beto + Kore/Charon + default music).
+  db.groups.push({
+    id: row.group_id,
+    tenant_id: row.tenant_id,
+    host1_name: "Ana",
+    host2_name: "Beto",
+    voice1_id: "Kore",
+    voice2_id: "Charon",
+    background_music: "default",
+  });
   return row;
 }
 
