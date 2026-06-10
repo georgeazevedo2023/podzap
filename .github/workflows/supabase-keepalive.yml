@@ -1,0 +1,51 @@
+# Keep-alive do Supabase free tier: projetos free são pausados após
+# 7 dias sem requests no API gateway. Hoje quem mantém o projeto vivo
+# é o tick do n8n (via app em prod) — mas se a VPS Hetzner ou o stack
+# do Portainer ficarem fora por uma semana, o Supabase pausa o projeto.
+#
+# Este workflow é a redundância: 2x por dia faz um GET autenticado
+# (anon key + RLS — retorna [] sem dados) num path de tabela do REST.
+# Qualquer request 200 no gateway zera o relógio de inatividade.
+#
+# Se o ping falhar, o job falha -> GitHub manda e-mail pro dono do repo,
+# o que também serve de alerta de que o Supabase está fora ou a key mudou.
+#
+# Atenção: o GitHub desativa schedules em repos sem atividade por 60 dias.
+# Commits regulares mantêm; se o repo hibernar, reativar na aba Actions.
+name: supabase-keepalive
+
+on:
+  schedule:
+    # 2x por dia (05:37 e 17:37 UTC). Minuto fora da hora cheia de
+    # propósito: crons em :00 disputam fila no GitHub e podem atrasar/pular.
+    - cron: '37 5,17 * * *'
+  # Permite disparar manualmente pela UI do GitHub Actions
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: https://vqrqygyfsrjpzkaxjleo.supabase.co
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Secret NEXT_PUBLIC_SUPABASE_ANON_KEY não configurado."
+            exit 1
+          fi
+          # /rest/v1/messages com anon key: RLS bloqueia os dados (retorna []),
+          # mas o request conta como atividade no gateway. Não usar /rest/v1/
+          # raiz — OpenAPI está desabilitado no projeto e responde 401.
+          status=$(curl -s -o /dev/null -w "%{http_code}" -m 30 \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/messages?select=id&limit=1")
+          echo "Supabase respondeu HTTP $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::Keep-alive falhou (HTTP $status) — projeto pode estar pausado ou key inválida."
+            exit 1
+          fi
