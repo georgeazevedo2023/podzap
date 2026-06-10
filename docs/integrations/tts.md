@@ -1,16 +1,16 @@
 # TTS (Fase 9) — Geração de áudio
 
-Referência completa do pipeline que transforma um `summary` aprovado em um arquivo de áudio WAV narrado por Gemini TTS, salvo no Storage e exposto via signed URL.
+Referência completa do pipeline que transforma um `summary` aprovado em um arquivo de áudio OGG/Opus narrado por Gemini TTS, salvo no Storage e exposto via signed URL.
 
 ---
 
 ## Overview
 
-Depois que um reviewer aprova um resumo em `/approval/[id]`, o endpoint `POST /api/summaries/[id]/approve` emite o evento Inngest `summary.approved`. O worker `generate-tts` consome o evento, orquestra a chamada ao **Gemini 2.5 Flash Preview TTS**, embrulha o PCM retornado em um container WAV inline, faz upload do arquivo no bucket privado `audios` e insere a row correspondente em `public.audios`. Toda chamada à API Gemini é contabilizada em `ai_calls` via `trackAiCall` (best-effort, nunca bloqueia o caminho principal).
+Depois que um reviewer aprova um resumo em `/approval/[id]`, o endpoint `POST /api/summaries/[id]/approve` emite o evento Inngest `summary.approved`. O worker `generate-tts` consome o evento, orquestra a chamada ao **Gemini 2.5 Flash Preview TTS**, embrulha o PCM retornado em um container WAV inline, mixa a música de fundo (best-effort), comprime pra **OGG/Opus 32 kbps** via ffmpeg (best-effort, fallback WAV), faz upload do arquivo no bucket privado `audios` e insere a row correspondente em `public.audios`. Toda chamada à API Gemini é contabilizada em `ai_calls` via `trackAiCall` (best-effort, nunca bloqueia o caminho principal).
 
 - Model default: `gemini-2.5-flash-preview-tts` (override: `GEMINI_TTS_MODEL`)
-- Formato de saída: WAV (24 kHz · mono · PCM 16-bit), com header RIFF montado em memória
-- Storage: bucket `audios` (privado), path `<tenantId>/<yyyy>/<summaryId>.wav`
+- Formato de saída: OGG/Opus 32 kbps mono (~12x menor que o WAV intermediário; codec nativo do PTT WhatsApp). Fallback se ffmpeg falhar: WAV 24 kHz mono PCM 16-bit
+- Storage: bucket `audios` (privado), path `<tenantId>/<yyyy>/<summaryId>.ogg` (`.wav` no fallback)
 - Retries: 2 (Inngest), `ALREADY_EXISTS` tratado como sucesso-idempotente
 - Signed URL: `GET /api/audios/[summaryId]/signed-url`
 
@@ -61,7 +61,7 @@ Depois que um reviewer aprova um resumo em `/approval/[id]`, o endpoint `POST /a
 Bucket: **`audios`** (separado do `media`, que guarda mídia original das mensagens).
 
 - **Privacidade**: privado. Sem URLs públicas; acesso exclusivamente via signed URLs geradas pelo backend.
-- **Path**: `<tenant_id>/<yyyy>/<summary_id>.wav` (UTC year). Exemplo: `3f2a…/2026/9b1c….wav`.
+- **Path**: `<tenant_id>/<yyyy>/<summary_id>.ogg` (UTC year; `.wav` se o transcode falhou). Exemplo: `3f2a…/2026/9b1c….ogg`.
 - **RLS**: análoga ao bucket `media` — policies usam `current_tenant_ids()` para restringir leitura/escrita à pasta do tenant. Admin/service-role client (único caller em `lib/audios/service.ts`) bypassa RLS por construção.
 - **Upsert**: `upsert: false`. O service bloqueia reprocessamento via `ALREADY_EXISTS`; se o insert da row falhar após o upload, o objeto órfão é removido em best-effort.
 
@@ -162,7 +162,7 @@ RIFF<size>WAVEfmt <16><1><channels><sampleRate><byteRate><blockAlign><bits>data<
 - `TtsResult.durationSeconds` é computado a partir do comprimento do PCM: `samples / SAMPLE_RATE_HZ`.
 - `TtsResult.mimeType = 'audio/wav'`.
 
-**Compressão para MP3 é pós-MVP.** Um arquivo típico de 3–5 min de narração ocupa ~8–14 MB em WAV 24 kHz mono. Para reduzir custo de banda em entrega (Fase 10+), um step adicional pode rodar `ffmpeg -i … -b:a 64k out.mp3`; adicionar `ffmpeg` ao `Dockerfile` do container (apt-get install) ou usar uma imagem base com ffmpeg já instalado.
+**Compressão OGG/Opus (jun/2026).** O WAV é só formato intermediário: depois do mix, `lib/audios/mix.ts::transcodeToOpusOgg` comprime pra OGG/Opus 32 kbps mono via ffmpeg (já presente na imagem Docker pro mixer). Um episódio de 3–5 min cai de ~8–14 MB pra ~0,7–1,3 MB — essencial pro plano free do Supabase (storage 1 GB / egress 5 GB/mês) e formato nativo do PTT WhatsApp (UAZAPI envia sem retranscodar). Falha do transcode (ex.: dev sem ffmpeg) → fallback sobe o WAV original com `contentType: audio/wav` e path `.wav`; o pipeline nunca trava. Acervo legado de WAVs foi migrado por `scripts/convert-audios-to-ogg.mjs` (re-rodável; `--delete-orphans` limpa .wav órfãos).
 
 ---
 

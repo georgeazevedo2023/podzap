@@ -1,5 +1,6 @@
 /**
- * Mixa voz + música de fundo em um único WAV via ffmpeg.
+ * Pós-processamento de áudio via ffmpeg: mix de voz + música de fundo
+ * e compressão final WAV → OGG/Opus.
  *
  * Layout do áudio final:
  *   [0s .. introSeconds)          música no volume cheio
@@ -138,7 +139,8 @@ function runFfmpeg(args: string[]): Promise<void> {
 /**
  * Mixa voz (WAV PCM 24kHz mono — o que Gemini TTS produz) com a trilha
  * loopada, aplicando intro + ducking + fade out. Retorna WAV mono 24kHz
- * 16-bit PCM (mesmo formato da entrada — sobe no Storage como `audio/wav`).
+ * 16-bit PCM (mesmo formato da entrada — a compressão pra OGG/Opus é o
+ * passo seguinte, via `transcodeToOpusOgg`).
  */
 export async function mixWithBackgroundMusic(
   voiceWav: Buffer,
@@ -208,6 +210,46 @@ export async function mixWithBackgroundMusic(
     await runFfmpeg(args);
     const mixed = await readFile(outPath);
     return { mixed, durationSeconds: totalDuration };
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => {
+      /* ignore cleanup errors */
+    });
+  }
+}
+
+/** Bitrate alvo do Opus. 32 kbps mono cobre bem voz + trilha duckada. */
+const OPUS_BITRATE = '32k';
+
+/**
+ * Comprime o áudio final (WAV PCM 24kHz mono) pra OGG/Opus 32 kbps mono.
+ *
+ * WAV 24kHz mono ≈ 2,9 MB/min; Opus 32k ≈ 0,24 MB/min (~12x menor).
+ * Crítico pro plano free do Supabase (storage 1 GB, egress 5 GB/mês),
+ * e é o codec nativo de voice notes (PTT) do WhatsApp — a UAZAPI passa
+ * o arquivo adiante sem precisar transcodar.
+ *
+ * Mesmo contrato de falha do mixer: se o ffmpeg faltar ou quebrar, o
+ * caller faz fallback pro WAV original — compressão é enhancement,
+ * nunca trava o pipeline.
+ */
+export async function transcodeToOpusOgg(audioWav: Buffer): Promise<Buffer> {
+  const workDir = await mkdtemp(path.join(tmpdir(), 'podzap-opus-'));
+  const inPath = path.join(workDir, 'in.wav');
+  const outPath = path.join(workDir, 'out.ogg');
+
+  try {
+    await writeFile(inPath, audioWav);
+    await runFfmpeg([
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-y',
+      '-i', inPath,
+      '-c:a', 'libopus',
+      '-b:a', OPUS_BITRATE,
+      '-ac', '1',
+      outPath,
+    ]);
+    return await readFile(outPath);
   } finally {
     await rm(workDir, { recursive: true, force: true }).catch(() => {
       /* ignore cleanup errors */

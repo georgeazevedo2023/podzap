@@ -292,7 +292,7 @@ Flipa `pending_review → rejected`. Reason obrigatório, persistido em `rejecte
 
 ## GET /api/summaries/[id]/audio/signed-url
 
-Retorna URL assinada (1h de validade) para o WAV gerado pelo TTS. UI faz polling após approve até flipar de `404` para `200`.
+Retorna URL assinada (1h de validade) para o OGG/Opus gerado pelo TTS. UI faz polling após approve até flipar de `404` para `200`.
 
 ### Request
 ```http
@@ -303,12 +303,12 @@ Cookie: sb-access-token=...
 ### Response — 200 OK
 ```json
 {
-  "url": "https://supabase.co/storage/v1/sign/audios/a1b2c3d4/2026/8b2c5a7f.wav?token=...",
+  "url": "https://supabase.co/storage/v1/sign/audios/a1b2c3d4/2026/8b2c5a7f.ogg?token=...",
   "expiresIn": 3600,
   "audio": {
     "id": "f1a2b3c4-...",
     "summaryId": "8b2c5a7f-...",
-    "storagePath": "a1b2c3d4/2026/8b2c5a7f.wav",
+    "storagePath": "a1b2c3d4/2026/8b2c5a7f.ogg",
     "durationSeconds": 127,
     "deliveredToWhatsapp": true
   }
@@ -338,7 +338,7 @@ Lista áudios gerados para o tenant, mais novos primeiro.
     {
       "id": "f1a2b3c4-...",
       "summaryId": "8b2c5a7f-...",
-      "storagePath": "a1b2c3d4/2026/8b2c5a7f.wav",
+      "storagePath": "a1b2c3d4/2026/8b2c5a7f.ogg",
       "durationSeconds": 127,
       "deliveredToWhatsapp": true,
       "deliveredAt": "2026-04-23T10:34:08-03:00",

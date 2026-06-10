@@ -14,7 +14,7 @@ Schema canônico em `lib/supabase/types.ts` (autogerado via `scripts/gen-types.m
 | `messages` | Mensagens capturadas via webhook | `type ∈ {text, audio, image, video, other}`, `media_url`, `media_storage_path`, `media_download_status`, `raw_payload` (body HTTP cru) |
 | `transcripts` | Texto de áudio (Groq) ou descrição de imagem (Gemini Vision) | `message_id` (FK), `text`, `language`, `confidence` |
 | `summaries` | Resumo gerado pelo LLM | `status ∈ {pending_review, approved, rejected}`, `voice_mode ∈ {single, duo}`, `caption`, `prompt_version`, `period_start`, `period_end` |
-| `audios` | WAV final (podcast) | `storage_path`, `delivered_to_whatsapp`, `delivered_at`, `uazapi_delivered_message_id` (distingue podcast vs áudio do owner) |
+| `audios` | OGG/Opus final (podcast; `.wav` só em fallback de transcode) | `storage_path`, `delivered_to_whatsapp`, `delivered_at`, `uazapi_delivered_message_id` (distingue podcast vs áudio do owner) |
 | `schedules` | Agendamento por grupo | UNIQUE `group_id`, `frequency ∈ {daily, weekly, custom}`, `time_of_day`, `day_of_week`, `approval_mode ∈ {optional, required}` (CHECK 0011 baniu `auto`), `voice`, `tone` |
 | `ai_calls` | Custo tracking por chamada | `provider`, `model`, `tokens`, `cost_cents`, `duration_ms`, `summary_id` |
 

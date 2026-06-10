@@ -234,6 +234,18 @@ vi.mock("@/lib/ai-tracking/service", () => ({
   trackAiCall: vi.fn(async () => ({ id: "tracked" })),
 }));
 
+// Mix + transcode mockados pra não depender do binário ffmpeg no runner.
+// `MixError` continua sendo a classe real — o service discrimina com
+// instanceof nos dois fallbacks best-effort.
+vi.mock("@/lib/audios/mix", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/audios/mix")>();
+  return {
+    ...actual,
+    mixWithBackgroundMusic: vi.fn(),
+    transcodeToOpusOgg: vi.fn(),
+  };
+});
+
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     from: (table: string) => {
@@ -280,11 +292,15 @@ vi.mock("@/lib/supabase/admin", () => ({
 let service: typeof import("../lib/audios/service");
 let ttsModule: typeof import("../lib/ai/gemini-tts");
 let trackingModule: typeof import("../lib/ai-tracking/service");
+let mixModule: typeof import("../lib/audios/mix");
+
+const FAKE_OGG = Buffer.from("FAKEOGGDATA");
 
 beforeAll(async () => {
   service = await import("../lib/audios/service");
   ttsModule = await import("../lib/ai/gemini-tts");
   trackingModule = await import("../lib/ai-tracking/service");
+  mixModule = await import("../lib/audios/mix");
 });
 
 beforeEach(() => {
@@ -292,6 +308,14 @@ beforeEach(() => {
   vi.mocked(ttsModule.generateAudio).mockReset();
   vi.mocked(trackingModule.trackAiCall).mockReset();
   vi.mocked(trackingModule.trackAiCall).mockResolvedValue({ id: "tracked" });
+  // Defaults: mix indisponível (fallback voz pura, como dev sem trilha) e
+  // transcode OK (caminho feliz sobe .ogg). Testes específicos sobrescrevem.
+  vi.mocked(mixModule.mixWithBackgroundMusic).mockReset();
+  vi.mocked(mixModule.mixWithBackgroundMusic).mockRejectedValue(
+    new mixModule.MixError("FFMPEG_NOT_FOUND", "mock: ffmpeg indisponível"),
+  );
+  vi.mocked(mixModule.transcodeToOpusOgg).mockReset();
+  vi.mocked(mixModule.transcodeToOpusOgg).mockResolvedValue(FAKE_OGG);
 });
 
 afterEach(() => {
@@ -441,14 +465,15 @@ describe("createAudioForSummary", () => {
       mode: "single",
     });
 
-    // Storage upload happened.
+    // Storage upload happened — comprimido pra OGG/Opus.
+    expect(mixModule.transcodeToOpusOgg).toHaveBeenCalledWith(fakeWav);
     expect(storageState.uploaded).toHaveLength(1);
     const uploaded = storageState.uploaded[0];
     expect(uploaded.path).toBe(
-      `${TENANT_A}/${new Date().getUTCFullYear()}/${summary.id}.wav`,
+      `${TENANT_A}/${new Date().getUTCFullYear()}/${summary.id}.ogg`,
     );
-    expect(uploaded.contentType).toBe("audio/wav");
-    expect(uploaded.bytes).toBe(fakeWav.byteLength);
+    expect(uploaded.contentType).toBe("audio/ogg");
+    expect(uploaded.bytes).toBe(FAKE_OGG.byteLength);
 
     // DB row inserted.
     expect(db.audios).toHaveLength(1);
@@ -456,7 +481,7 @@ describe("createAudioForSummary", () => {
     expect(persisted.tenant_id).toBe(TENANT_A);
     expect(persisted.summary_id).toBe(summary.id);
     expect(persisted.storage_path).toBe(uploaded.path);
-    expect(persisted.size_bytes).toBe(fakeWav.byteLength);
+    expect(persisted.size_bytes).toBe(FAKE_OGG.byteLength);
     expect(persisted.duration_seconds).toBe(4);
     expect(persisted.model).toBe("gemini-2.5-flash-preview-tts");
     expect(persisted.voice).toBe("female");
@@ -534,6 +559,56 @@ describe("createAudioForSummary", () => {
     expect(storageState.uploaded).toHaveLength(0);
     // The original row is still there; no new row appended.
     expect(db.audios).toHaveLength(1);
+  });
+
+  it("falls back to WAV upload when the opus transcode fails", async () => {
+    const summary = seedSummary({ status: "approved" });
+    const fakeWav = Buffer.from("FAKEWAVDATA");
+    vi.mocked(ttsModule.generateAudio).mockResolvedValue({
+      audio: fakeWav,
+      mimeType: "audio/wav",
+      durationSeconds: 4.2,
+      model: "gemini-2.5-flash-preview-tts",
+    });
+    vi.mocked(mixModule.transcodeToOpusOgg).mockRejectedValue(
+      new mixModule.MixError("FFMPEG_NOT_FOUND", "mock: sem ffmpeg"),
+    );
+
+    await service.createAudioForSummary(TENANT_A, summary.id);
+
+    expect(storageState.uploaded).toHaveLength(1);
+    const uploaded = storageState.uploaded[0];
+    expect(uploaded.path).toBe(
+      `${TENANT_A}/${new Date().getUTCFullYear()}/${summary.id}.wav`,
+    );
+    expect(uploaded.contentType).toBe("audio/wav");
+    expect(uploaded.bytes).toBe(fakeWav.byteLength);
+    expect(db.audios[0].size_bytes).toBe(fakeWav.byteLength);
+  });
+
+  it("transcodes the MIXED audio when background music succeeds", async () => {
+    const summary = seedSummary({ status: "approved" });
+    const fakeWav = Buffer.from("FAKEWAVDATA");
+    const fakeMixed = Buffer.from("FAKEMIXEDWAV");
+    vi.mocked(ttsModule.generateAudio).mockResolvedValue({
+      audio: fakeWav,
+      mimeType: "audio/wav",
+      durationSeconds: 4.2,
+      model: "gemini-2.5-flash-preview-tts",
+    });
+    vi.mocked(mixModule.mixWithBackgroundMusic).mockResolvedValue({
+      mixed: fakeMixed,
+      durationSeconds: 8.2,
+    });
+
+    await service.createAudioForSummary(TENANT_A, summary.id);
+
+    // O transcode recebe o áudio JÁ mixado, não a voz crua.
+    expect(mixModule.transcodeToOpusOgg).toHaveBeenCalledWith(fakeMixed);
+    const uploaded = storageState.uploaded[0];
+    expect(uploaded.contentType).toBe("audio/ogg");
+    expect(uploaded.bytes).toBe(FAKE_OGG.byteLength);
+    expect(db.audios[0].duration_seconds).toBe(8);
   });
 
   it("wraps Gemini failures as TTS_ERROR and does NOT upload or insert", async () => {

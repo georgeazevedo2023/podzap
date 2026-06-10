@@ -8,6 +8,11 @@ import { resolve } from "node:path";
  * we wire it up here.
  */
 export default defineConfig({
+  test: {
+    // `npm run build` local copia tests/ pra .next/standalone — sem este
+    // exclude o vitest roda as cópias stale junto e elas falham.
+    exclude: ["**/node_modules/**", "**/.next/**", "**/e2e/**"],
+  },
   resolve: {
     alias: {
       "@": resolve(__dirname, "./"),

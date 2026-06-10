@@ -8,7 +8,7 @@
 
 ## Overview
 
-O worker `deliver-to-whatsapp` consome o evento `audio.created` (emitido pelo worker `generate-tts` da Fase 9 após persistir o WAV no bucket `audios`), baixa o blob do Storage, decripta o token UAZAPI da instância e chama `POST /send/media` (tipo `audio`, modo PTT) apontando para o `uazapi_group_jid` do grupo de origem do resumo. Em caso de sucesso, grava `delivered_to_whatsapp=true` + `delivered_at=now()` na row `audios`.
+O worker `deliver-to-whatsapp` consome o evento `audio.created` (emitido pelo worker `generate-tts` da Fase 9 após persistir o OGG/Opus no bucket `audios`), baixa o blob do Storage, decripta o token UAZAPI da instância e chama `POST /send/media` (tipo `audio`, modo PTT) apontando para o `uazapi_group_jid` do grupo de origem do resumo. Em caso de sucesso, grava `delivered_to_whatsapp=true` + `delivered_at=now()` na row `audios`.
 
 Rota síncrona `POST /api/audios/[id]/redeliver` expõe o mesmo pipeline para retries manuais (botão "Reenviar" no card do `/podcasts`).
 
@@ -20,7 +20,7 @@ Rota síncrona `POST /api/audios/[id]/redeliver` expõe o mesmo pipeline para re
 summary.approved                  (Fase 8 → Fase 9)
        │
        ▼
-generate-tts worker               (Fase 9: cria audios row + WAV no Storage)
+generate-tts worker               (Fase 9: cria audios row + OGG no Storage)
        │  emit audio.created { audioId, tenantId, summaryId }
        ▼
 ┌────────────────────────────────────────────────────┐
@@ -35,7 +35,7 @@ generate-tts worker               (Fase 9: cria audios row + WAV no Storage)
 │    1. loadContext()        audio + summary + group │
 │       └─ short-circuit se delivered_to_whatsapp    │
 │    2. getCurrentInstance() NO_INSTANCE / !connected│
-│    3. downloadAudio()      Supabase Storage (WAV)  │
+│    3. downloadAudio()      Supabase Storage (OGG)  │
 │    4. loadInstanceToken()  decrypt AES-256-GCM     │
 │    5. UazapiClient.sendAudio(token, jid, buf, cap) │
 │    6. markDelivered()      flips row + delivered_at│
@@ -125,7 +125,7 @@ Não existe fila externa para retry de longo prazo; resumos muito antigos com fa
 | **UAZAPI rate limit** (~10 msgs/min por instância) | `UazapiClient` interno tem token bucket; retries do Inngest têm backoff | Em volume alto, fila externa (BullMQ/Upstash) com shaping por instância |
 | **Instância desconectada no meio do voo** | `getCurrentInstance` valida `status === 'connected'` antes do `sendAudio`; `INSTANCE_NOT_CONNECTED` retoma no retry | Race entre checagem e chamada: se desconectar entre (2) e (5), vira `UAZAPI_ERROR` e retry resolve |
 | **Grupo removido / bot expulso** | UAZAPI devolve erro → `UAZAPI_ERROR` → 3 retries falham → row fica não-entregue; botão "Reenviar" disponível | Mapear erro específico "group_not_found" → `NOT_FOUND` definitivo (não retentar) |
-| **Buffer size limit UAZAPI** | WAV 24 kHz mono de um resumo de 3-5 min fica em ~5-8 MB; UAZAPI aceita até ~16 MB em `/send/media` | Fallback documentado no plano: upload pra URL pública + `sendAudio` por URL. Não implementado |
+| **Buffer size limit UAZAPI** | OGG/Opus 32k de um resumo de 3-5 min fica em ~0,7-1,3 MB; UAZAPI aceita até ~16 MB em `/send/media` — folga de ~10x desde a compressão (jun/2026) | Fallback documentado no plano: upload pra URL pública + `sendAudio` por URL. Não implementado |
 | **Entrega duplicada em replay** | Não há deduplicação UAZAPI-side; se `sendAudio` retornar sucesso e `markDelivered` falhar, o próximo retry envia de novo | Aceito no MVP — probabilidade baixa. Pós-MVP: client-side msg id + `INSERT ... ON CONFLICT` num log de deliveries |
 | **TTL do signed URL vs. entrega** | Worker usa download direto via admin client (não signed URL), imune a expiração | n/a |
 | **PII na legenda** | Texto do resumo inteiro vai pra UAZAPI e, por transitividade, pro log deles | Toggle por tenant (ver "Caption") resolve quando um cliente pedir |

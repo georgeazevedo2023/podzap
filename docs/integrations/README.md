@@ -13,7 +13,7 @@ Cada doc cobre **um** subsistema externo: API, shape, fluxo, casos de erro. Atua
 | [`inngest.md`](inngest.md) | Setup dev/prod, eventos canônicos, troubleshooting; n8n híbrido pra crons |
 | [`pipeline.md`](pipeline.md) | Filter + cluster + normalize (Fase 6) — rule-based, sem AI |
 | [`summary-generation.md`](summary-generation.md) | Gemini 2.5 Pro: prompt versioning, structured output, anti-hallucination |
-| [`tts.md`](tts.md) | Gemini 2.5 Flash TTS — vozes Kore/Charon, WAV output |
+| [`tts.md`](tts.md) | Gemini 2.5 Flash TTS — vozes Kore/Charon, output OGG/Opus 32k |
 | [`approval.md`](approval.md) | Estado-máquina pending → approved/rejected, regenerate |
 | [`delivery.md`](delivery.md) | UAZAPI `/send/media` PTT, retry, dropdown destinos |
 | [`scheduling.md`](scheduling.md) | Cron via n8n → `runSchedulesHandler`, dedup por janela |

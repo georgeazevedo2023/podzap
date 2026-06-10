@@ -22,7 +22,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateAudio } from "@/lib/ai/gemini-tts";
 import { trackAiCall } from "@/lib/ai-tracking/service";
-import { mixWithBackgroundMusic, MixError } from "@/lib/audios/mix";
+import {
+  mixWithBackgroundMusic,
+  transcodeToOpusOgg,
+  MixError,
+} from "@/lib/audios/mix";
 import { resolveMusicAsync } from "@/lib/audios/music-resolver";
 
 const AUDIOS_BUCKET = "audios";
@@ -187,8 +191,9 @@ type GroupVoiceLookupRow = {
  *   1. Load summary (must exist, must belong to tenant, must be approved).
  *   2. Bail if an audio already exists (ALREADY_EXISTS — caller decides
  *      whether to retry or report success).
- *   3. Call Gemini TTS.
- *   4. Upload the resulting WAV to `<tenantId>/<yyyy>/<summaryId>.wav`.
+ *   3. Call Gemini TTS (+ mix de música e compressão OGG/Opus, ambos
+ *      best-effort com fallback).
+ *   4. Upload to `<tenantId>/<yyyy>/<summaryId>.ogg` (`.wav` no fallback).
  *   5. Insert the `audios` row.
  *   6. Best-effort `trackAiCall` for billing/observability.
  *
@@ -336,14 +341,34 @@ export async function createAudioForSummary(
     }
   }
 
+  // ── 3c. Comprime WAV → OGG/Opus 32k (best-effort) ────────────────────
+  // ~12x menor que o WAV — necessário pra caber no plano free do Supabase
+  // (storage 1 GB / egress 5 GB) e formato nativo do PTT do WhatsApp.
+  // Falha (ffmpeg ausente em dev, etc.) → sobe o WAV original, mesmo
+  // contrato best-effort do mix acima.
+  let contentType = ttsResult.mimeType;
+  let fileExt = "wav";
+  try {
+    finalAudio = await transcodeToOpusOgg(finalAudio);
+    contentType = "audio/ogg";
+    fileExt = "ogg";
+  } catch (err) {
+    const code = err instanceof MixError ? err.code : "UNKNOWN";
+    const msg = err instanceof Error ? err.message : String(err);
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[audios] opus transcode failed (${code}), falling back to WAV: ${msg}`,
+    );
+  }
+
   // ── 4. Upload to Storage ──────────────────────────────────────────────
   const now = new Date();
   const yyyy = String(now.getUTCFullYear());
-  const storagePath = `${tenantId}/${yyyy}/${summaryId}.wav`;
+  const storagePath = `${tenantId}/${yyyy}/${summaryId}.${fileExt}`;
   const { error: uploadErr } = await admin.storage
     .from(AUDIOS_BUCKET)
     .upload(storagePath, finalAudio, {
-      contentType: ttsResult.mimeType,
+      contentType,
       upsert: false,
     });
   if (uploadErr) {
