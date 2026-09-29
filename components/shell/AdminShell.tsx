@@ -32,10 +32,10 @@ export function AdminShell({ children, ...sidebarProps }: AdminShellProps) {
   return (
     <div
       data-theme="dark"
+      className="app-shell-root"
       style={{
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100dvh',
         background: 'var(--bg)',
         color: 'var(--text)',
       }}

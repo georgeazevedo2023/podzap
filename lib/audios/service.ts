@@ -435,3 +435,72 @@ export async function createAudioForSummary(
 
   return rowToView(inserted as AudioRow);
 }
+
+/**
+ * Baixa os bytes do áudio de um summary direto do Storage (bucket
+ * privado). Usado pelo download em MP3 — a rota transcoda em cima disso.
+ */
+export async function downloadAudioBytes(
+  tenantId: string,
+  summaryId: string,
+): Promise<{ audio: AudioView; bytes: Buffer }> {
+  const audio = await getAudioBySummary(tenantId, summaryId);
+  if (!audio) {
+    throw new AudiosError(
+      "NOT_FOUND",
+      `Audio not found for summary ${summaryId}`,
+    );
+  }
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage
+    .from(AUDIOS_BUCKET)
+    .download(audio.storagePath);
+  if (error || !data) {
+    throw new AudiosError(
+      "DB_ERROR",
+      `Storage download failed for ${audio.storagePath}: ${error?.message ?? "empty"}`,
+      error,
+    );
+  }
+  return { audio, bytes: Buffer.from(await data.arrayBuffer()) };
+}
+
+/**
+ * Remove o áudio de um summary (objeto no Storage + row em `audios`) pra
+ * que o worker TTS possa gerar de novo. Idempotente: sem áudio, no-op.
+ * Storage primeiro — se o delete da row falhar depois, o pior caso é um
+ * row apontando pra objeto inexistente, que o /podcasts já trata como
+ * "indisponível" e a próxima tentativa limpa.
+ */
+export async function deleteAudioForSummary(
+  tenantId: string,
+  summaryId: string,
+): Promise<void> {
+  const audio = await getAudioBySummary(tenantId, summaryId);
+  if (!audio) return;
+
+  const admin = createAdminClient();
+  const { error: storageErr } = await admin.storage
+    .from(AUDIOS_BUCKET)
+    .remove([audio.storagePath]);
+  if (storageErr) {
+    throw new AudiosError(
+      "DB_ERROR",
+      `Storage remove failed for ${audio.storagePath}: ${storageErr.message}`,
+      storageErr,
+    );
+  }
+
+  const { error } = await admin
+    .from("audios")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("id", audio.id);
+  if (error) {
+    throw new AudiosError(
+      "DB_ERROR",
+      `Failed to delete audio row ${audio.id}: ${error.message}`,
+      error,
+    );
+  }
+}

@@ -265,8 +265,15 @@ body {
 /* Desktop app-shell mode: locks body so only inner <main> scrolls. Activated
    by [data-shell="fixed"] which the (app)/(admin) layouts apply at md+ via
    inline style. Keeps the legacy "no body scroll" desktop UX intact. */
+/* Container raiz do AppShell/AdminShell. No mobile cresce com o conteúdo
+   (body rola). No desktop precisa de altura FIXA = viewport: com só
+   min-height o <main> crescia junto com o conteúdo, nunca virava viewport
+   de scroll, e com o body travado nada rolava. */
+.app-shell-root { min-height: 100dvh; }
+
 @media (min-width: 48rem) {
   body[data-shell="fixed"] { overflow: hidden; }
+  .app-shell-root { height: 100dvh; }
   /* No bottom nav on desktop — reclaim the reserved space. */
   :root { --bottom-nav-h: 0px; }
 }

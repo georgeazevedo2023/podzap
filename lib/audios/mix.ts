@@ -256,3 +256,36 @@ export async function transcodeToOpusOgg(audioWav: Buffer): Promise<Buffer> {
     });
   }
 }
+
+/** MP3 mono 64 kbps — voz + música ficam bem e o arquivo é ~0,5 MB/min. */
+const MP3_BITRATE = '64k';
+
+/**
+ * Transcoda qualquer áudio que o ffmpeg leia (OGG/Opus do Storage, WAV
+ * legado) pra MP3. Usado pelo botão "baixar mp3" do /podcasts — o acervo
+ * fica em OGG (menor, nativo do PTT) e o MP3 é gerado sob demanda.
+ */
+export async function transcodeToMp3(input: Buffer): Promise<Buffer> {
+  const workDir = await mkdtemp(path.join(tmpdir(), 'podzap-mp3-'));
+  const inPath = path.join(workDir, 'in');
+  const outPath = path.join(workDir, 'out.mp3');
+
+  try {
+    await writeFile(inPath, input);
+    await runFfmpeg([
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-y',
+      '-i', inPath,
+      '-c:a', 'libmp3lame',
+      '-b:a', MP3_BITRATE,
+      '-ac', '1',
+      outPath,
+    ]);
+    return await readFile(outPath);
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => {
+      /* ignore cleanup errors */
+    });
+  }
+}

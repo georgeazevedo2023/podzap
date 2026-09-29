@@ -433,3 +433,59 @@ export async function updateSummaryText(
   }
   return reloadView(tenantId, summaryId);
 }
+
+/**
+ * Revisa o texto de um summary JÁ APROVADO (editor do /podcasts). O
+ * clique em "salvar e gerar áudio" é a nova aprovação humana do texto —
+ * o caller apaga o áudio antigo e reemite `summary.approved` pro TTS.
+ * NÃO envia nada ao grupo: entrega continua manual via SendToMenu.
+ */
+export async function reviseApprovedSummaryText(
+  tenantId: string,
+  summaryId: string,
+  text: string,
+): Promise<SummaryView> {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    throw new SummariesError(
+      "VALIDATION_ERROR",
+      "summary text cannot be empty",
+    );
+  }
+  if (text.length >= MAX_SUMMARY_TEXT_LEN) {
+    throw new SummariesError(
+      "VALIDATION_ERROR",
+      `summary text exceeds maximum length of ${MAX_SUMMARY_TEXT_LEN} characters`,
+    );
+  }
+
+  const current = await loadStatus(tenantId, summaryId);
+  if (current === null) {
+    throw new SummariesError(
+      "NOT_FOUND",
+      `Summary ${summaryId} not found for tenant ${tenantId}`,
+    );
+  }
+  if (current !== "approved") {
+    throw new SummariesError(
+      "INVALID_STATE",
+      `only approved summaries can be revised; current state: ${current}`,
+    );
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("summaries")
+    .update({ text: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", summaryId)
+    .eq("tenant_id", tenantId);
+
+  if (error) {
+    throw new SummariesError(
+      "DB_ERROR",
+      `Failed to revise summary ${summaryId} text: ${error.message}`,
+      error,
+    );
+  }
+  return reloadView(tenantId, summaryId);
+}

@@ -11,8 +11,8 @@
  *
  * All data is fetched server-side so the browser never needs service-role
  * credentials; signed URLs are short-lived (1h) per
- * `lib/media/signedUrl.ts`. No client interactivity beyond `<details>` for
- * the transcript expand/collapse and the browser's native audio controls.
+ * `lib/media/signedUrl.ts`. Client islands: `EpisodeTranscript` (expandir + editar/regerar
+ * áudio), `DeliveryControls` e o player. Download MP3 é um link simples.
  */
 
 import { redirect } from 'next/navigation';
@@ -28,6 +28,7 @@ import { CopyableCaption } from '@/components/ui/CopyableCaption';
 import { PodcastPlayer } from '@/components/ui/PodcastPlayer';
 
 import { DeliveryControls } from './DeliveryControls';
+import { EpisodeTranscript } from './EpisodeTranscript';
 import { PodcastsHero } from './PodcastsHero';
 
 /** Upper bound on episodes shown. Matches `listSummaries` cap (100). */
@@ -303,40 +304,22 @@ function EpisodeCard({ episode }: { episode: Episode }) {
         />
       ) : null}
 
-      <details
-        style={{
-          border: '2px solid var(--stroke)',
-          borderRadius: 'var(--r-md)',
-          background: 'var(--bg-1)',
-          padding: '10px 14px',
-        }}
-      >
-        <summary
-          style={{
-            cursor: 'pointer',
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            color: 'var(--text-dim)',
-            userSelect: 'none',
-          }}
+      {audio && audioUrl ? (
+        <a
+          className="btn btn-ghost btn-xs"
+          href={`/api/summaries/${summary.id}/audio/mp3`}
+          download
+          style={{ alignSelf: 'flex-start', textDecoration: 'none' }}
         >
-          📝 transcrição
-        </summary>
-        <p
-          style={{
-            margin: '10px 0 0',
-            fontSize: 13,
-            lineHeight: 1.5,
-            color: 'var(--text)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {summary.text}
-        </p>
-      </details>
+          ⬇️ baixar mp3
+        </a>
+      ) : null}
+
+      <EpisodeTranscript
+        summaryId={summary.id}
+        text={summary.text}
+        hasAudio={audio !== null}
+      />
     </article>
   );
 }

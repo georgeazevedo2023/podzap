@@ -50,13 +50,12 @@ export function AppShell({ children, ...sidebarProps }: AppShellProps) {
   return (
     <div
       data-theme="dark"
+      // .app-shell-root (globals.css): min-height 100dvh no mobile, height
+      // 100dvh no desktop pra <main> virar o viewport de scroll.
+      className="app-shell-root"
       style={{
         display: 'flex',
         flexDirection: 'column',
-        // 100dvh > 100vh on mobile: dvh excludes the iOS dynamic toolbar so
-        // the bottom nav doesn't get hidden behind the address bar collapse.
-        // Falls back to 100vh on browsers without dvh support.
-        minHeight: '100dvh',
         background: 'var(--bg)',
         color: 'var(--text)',
       }}
