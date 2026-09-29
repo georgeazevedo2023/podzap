@@ -68,7 +68,7 @@ Invocar via `/podzap-<name>` ou descrever a ação que o trigger casa.
 | Portainer | https://app.wsmart.com.br · Stack `podzap` |
 | Supabase project | `vqrqygyfsrjpzkaxjleo` |
 | n8n | https://fluxwebhook.wsmart.com.br |
-| Redeploy webhook | `POST https://app.wsmart.com.br/api/webhooks/85b67741-...` |
+| Redeploy webhook | `POST https://app.wsmart.com.br/api/webhooks/093911b0-...` |
 
 Detalhe completo + procedimento de redeploy + env vars completas: [`@docs/deploy/README.md`](docs/deploy/README.md).
 

@@ -12,7 +12,7 @@ Self-hosted via Hetzner + Portainer. **NÃO usamos Vercel.**
 - **Portainer:** https://app.wsmart.com.br
 - **Stack name:** `podzap` (service: `podzap_podzap`)
 - **Image:** `ghcr.io/georgeazevedo2023/podzap:latest` (CI publica em cada merge na `main`)
-- **Redeploy webhook (re-pull):** `POST https://app.wsmart.com.br/api/webhooks/85b67741-...` (fluxo: CI verde → webhook → re-pull + restart container, ~30-60s)
+- **Redeploy webhook (re-pull):** `POST https://app.wsmart.com.br/api/webhooks/093911b0-...` (fluxo: CI verde → webhook → re-pull + restart container, ~30-60s)
 
 ## Fluxo CI → deploy
 

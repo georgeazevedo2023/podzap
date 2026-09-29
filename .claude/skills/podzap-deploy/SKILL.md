@@ -41,7 +41,7 @@ Se CI falhar — **NÃO** disparar webhook. Investigar: `gh run view <run-id> --
 
 ```bash
 curl -sS -o /dev/null -w "HTTP %{http_code} (%{time_total}s)\n" \
-  -X POST https://app.wsmart.com.br/api/webhooks/85b67741-3a79-4707-9c1a-696e52aec652
+  -X POST https://app.wsmart.com.br/api/webhooks/093911b0-0fa9-4aa0-aeff-7357f373add9
 ```
 
 Esperado: **HTTP 204** (sem body — Portainer aceitou e vai re-pull + recreate).
