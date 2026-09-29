@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { loginAction } from './actions';
+import { PasswordInput } from './password-input';
 
 type LoginSearchParams = {
   message?: string | string[];
@@ -193,14 +194,7 @@ export default async function LoginPage({
           >
             Senha
           </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            required
-            minLength={6}
-            autoComplete="current-password"
-            placeholder="••••••••"
+          <PasswordInput
             style={{
               fontFamily: 'var(--font-body)',
               fontSize: 15,
