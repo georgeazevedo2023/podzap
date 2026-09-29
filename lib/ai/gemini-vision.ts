@@ -1,7 +1,7 @@
 /**
  * Gemini 2.5 Flash — image understanding / OCR wrapper.
  *
- * Required env: GEMINI_API_KEY, GEMINI_VISION_MODEL (defaults to gemini-2.5-flash)
+ * Required env: GEMINI_API_KEY, GEMINI_VISION_MODEL (defaults to gemini-3.8-flash)
  * Package: @google/genai ^1.48.x  (NOTE: replaces legacy @google/generative-ai)
  */
 
@@ -83,7 +83,7 @@ export async function describeImage(
   image: DescribeImageInput,
   prompt?: string,
 ): Promise<DescribeImageResult> {
-  const model = process.env.GEMINI_VISION_MODEL ?? 'gemini-2.5-flash';
+  const model = process.env.GEMINI_VISION_MODEL ?? 'gemini-3.8-flash';
   const client = getClient();
   const imagePart = await toImagePart(image);
   const textPart = { text: prompt ?? DEFAULT_PROMPT };

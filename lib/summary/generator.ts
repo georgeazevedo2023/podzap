@@ -165,7 +165,7 @@ export async function generateSummary(
     // Track the failed call for cost/latency visibility. `model` may be
     // unknown (we failed before resolving it); use the env default so
     // the row is still queryable.
-    const modelName = process.env.GEMINI_LLM_MODEL ?? "gemini-2.5-pro";
+    const modelName = process.env.GEMINI_LLM_MODEL ?? "gemini-3.8-flash";
     await trackAiCall({
       tenantId: input.tenantId,
       provider: "gemini",

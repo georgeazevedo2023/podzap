@@ -1,7 +1,7 @@
 /**
  * Gemini 2.5 Pro — podcast-style summary generator.
  *
- * Required env: GEMINI_API_KEY, GEMINI_LLM_MODEL (defaults to gemini-2.5-pro)
+ * Required env: GEMINI_API_KEY, GEMINI_LLM_MODEL (defaults to gemini-3.8-flash)
  * Package: @google/genai ^1.48.x
  */
 
@@ -170,7 +170,7 @@ async function callGeminiJson(input: {
   userPrompt: string;
   promptVersion: string;
 }): Promise<SummaryResult> {
-  const model = process.env.GEMINI_LLM_MODEL ?? 'gemini-2.5-pro';
+  const model = process.env.GEMINI_LLM_MODEL ?? 'gemini-3.8-flash';
   const client = getClient();
 
   try {

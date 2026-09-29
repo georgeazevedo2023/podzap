@@ -18,7 +18,7 @@ Environment variables (declared in `.env.local`):
 | `GEMINI_API_KEY`        | Google AI Studio key (Gemini Developer)   |
 | `GEMINI_VISION_MODEL`   | Defaults to `gemini-2.5-flash`            |
 | `GEMINI_LLM_MODEL`      | Defaults to `gemini-2.5-pro`              |
-| `GEMINI_TTS_MODEL`      | Defaults to `gemini-2.5-flash-preview-tts`|
+| `GEMINI_TTS_MODEL`      | Defaults to `gemini-3.8-flash-tts`|
 
 ---
 

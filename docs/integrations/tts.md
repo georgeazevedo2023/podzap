@@ -6,9 +6,10 @@ Referência completa do pipeline que transforma um `summary` aprovado em um arqu
 
 ## Overview
 
-Depois que um reviewer aprova um resumo em `/approval/[id]`, o endpoint `POST /api/summaries/[id]/approve` emite o evento Inngest `summary.approved`. O worker `generate-tts` consome o evento, orquestra a chamada ao **Gemini 2.5 Flash Preview TTS**, embrulha o PCM retornado em um container WAV inline, mixa a música de fundo (best-effort), comprime pra **OGG/Opus 32 kbps** via ffmpeg (best-effort, fallback WAV), faz upload do arquivo no bucket privado `audios` e insere a row correspondente em `public.audios`. Toda chamada à API Gemini é contabilizada em `ai_calls` via `trackAiCall` (best-effort, nunca bloqueia o caminho principal).
+Depois que um reviewer aprova um resumo em `/approval/[id]`, o endpoint `POST /api/summaries/[id]/approve` emite o evento Inngest `summary.approved`. O worker `generate-tts` consome o evento, orquestra a chamada ao **Gemini 3.8 Flash TTS**, normaliza o retorno em WAV, mixa a música de fundo (best-effort), comprime pra **OGG/Opus 32 kbps** via ffmpeg (best-effort, fallback WAV), faz upload do arquivo no bucket privado `audios` e insere a row correspondente em `public.audios`. Toda chamada à API Gemini é contabilizada em `ai_calls` via `trackAiCall` (best-effort, nunca bloqueia o caminho principal).
 
-- Model default: `gemini-2.5-flash-preview-tts` (override: `GEMINI_TTS_MODEL`)
+- Model default: `gemini-3.8-flash-tts` (override: `GEMINI_TTS_MODEL`)
+- **Gemini 3.8 (desde 2026-09-29):** vai pela **Interactions API** (`POST /v1beta/interactions`), não `generateContent`. O `text` é transcrição literal — `lib/ai/gemini-tts.ts` quebra o roteiro duo em turnos (`parseDuoTurns`), tira as cues `(rindo)`/`(animada)` do texto e manda como `speech_metadata.style` por turno, com `speaker` explícito. Resposta já vem WAV (RIFF); `splitWav` extrai o PCM. Limite de entrada: 8.192 tokens. Modelos `gemini-2.5-*` continuam no caminho legado. Guia: https://aistudio.google.com/learn/gemini-3-8-flash-tts-developer-guide
 - Formato de saída: OGG/Opus 32 kbps mono (~12x menor que o WAV intermediário; codec nativo do PTT WhatsApp). Fallback se ffmpeg falhar: WAV 24 kHz mono PCM 16-bit
 - Storage: bucket `audios` (privado), path `<tenantId>/<yyyy>/<summaryId>.ogg` (`.wav` no fallback)
 - Retries: 2 (Inngest), `ALREADY_EXISTS` tratado como sucesso-idempotente
